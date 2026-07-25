@@ -13,6 +13,7 @@ import { useServerAction } from "@/hooks/use-server-action";
 import type { DatasetSummary } from "@/application/datasets/dataset-queries";
 import { cn } from "@/lib/utils";
 import { formatCount } from "@/shared/format";
+import { datasetsQueryKey } from "@/features/datasets/queries";
 
 export function DatasetTable({ datasets }: { datasets: DatasetSummary[] }) {
   const [query, setQuery] = useState("");
@@ -25,6 +26,7 @@ export function DatasetTable({ datasets }: { datasets: DatasetSummary[] }) {
   async function sync(dataset: DatasetSummary) {
     await run(dataset.id, () => runSync({ datasetId: dataset.id, force: true }), {
       errorFallback: "Sync failed",
+      invalidateKeys: [datasetsQueryKey, ["leads"]],
       onSuccess: (outcome) => {
         toast[outcome.status === "failed" ? "error" : "success"](
           `${dataset.label}: ${outcome.status} — ${outcome.itemsNew} new item(s), ${outcome.leadsCreated} lead(s)`,
@@ -36,6 +38,7 @@ export function DatasetTable({ datasets }: { datasets: DatasetSummary[] }) {
 
   async function changeStatus(dataset: DatasetSummary, status: "active" | "paused" | "archived") {
     await run(dataset.id, () => setDatasetStatus({ datasetId: dataset.id, status }), {
+      invalidateKeys: [datasetsQueryKey, ["leads"]],
       onSuccess: () => toast.success(`${dataset.label} is now ${status}`),
     });
   }

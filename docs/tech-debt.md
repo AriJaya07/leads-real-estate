@@ -1,5 +1,20 @@
 # Known Tech Debt
 
+## React Query staleness on background (non-actor) changes to leads/datasets
+
+`revalidateTag(tag, "max")` from `/api/cron/sync` and the Apify webhook invalidates the
+RSC tag cache in the background, which is correct for that cache — nobody's actively
+waiting on a cron-triggered write. But a browser tab with `/leads` or the topbar
+already open won't see that change until React Query's own `staleTime` (30s, see
+`shared/query-client.ts`/`components/providers/query-provider.tsx`) elapses and a
+refetch is triggered (window refocus, remount, or the next explicit
+`invalidateQueries` call from a user-initiated mutation). This is an accepted
+convergence lag, not a bug — the same trade-off the tag cache already made explicitly
+for background revalidation — but it's worth knowing if a "why didn't the new lead
+show up immediately" question comes up: it will, within 30s, without a manual refresh.
+If that lag ever needs to shrink for a live-updating surface, the fix is a shorter
+`staleTime` on `leadsQueryKey`/`datasetsQueryKey` specifically, not a global one.
+
 ## `/pipeline`, `/intelligence`, `/admin/sync` are placeholders, not 404s
 
 They used to be dead nav links (404 on click) — now they're real pages with an honest
@@ -119,13 +134,14 @@ change rather than a rewrite, but nothing is plugged into it today. Fine for a
 single-instance Vercel deployment; revisit if the team wants managed error tracking
 instead of relying on Vercel's own log output.
 
-## `login_attempts` grows forever
+## ~~`login_attempts` grows forever~~ — fixed
 
 `application/auth/login-attempts.ts` records every sign-in attempt (success or
 failure) to throttle brute-forcing (`domain/auth/rate-limit.ts`,
-`LOGIN_MAX_FAILED_ATTEMPTS = 5` within a 15-minute window). Nothing prunes old rows.
-Fine at this app's login volume; if it ever matters, a periodic delete of rows older
-than a day or two is all that's needed — there's no cron for that today.
+`LOGIN_MAX_FAILED_ATTEMPTS = 5` within a 15-minute window). `GET /api/cron/retention`
+(daily) now prunes both `login_attempts` and `sync_events` past their retention window
+via `application/maintenance/prune-old-rows.ts` — `sync_runs` and `lead_events` are
+deliberately excluded (audit trail, not append-only noise).
 
 ## The product-level gap: buyer-side data collection
 

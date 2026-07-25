@@ -1,9 +1,12 @@
 # API Patterns
 
-DreamRue has no public REST API. There are two kinds of server entry points: **server
-actions** (all user-facing mutations, called directly from client components) and a
-small set of **route handlers** (`app/api/**`) for cron ticks and the Apify webhook. Both
-are documented here.
+DreamRue has no public REST API. There are three kinds of server entry points: **server
+actions** (all user-facing mutations, called directly from client components), a small
+set of **system route handlers** (`app/api/**`) for cron ticks and the Apify webhook,
+and a small set of **internal read route handlers** that exist only to back the leads
+search/filter surface's React Query hooks (see
+[architecture.md](architecture.md)'s "Search, filtering, and client-side data
+fetching"). All three are documented here.
 
 ## Server actions
 
@@ -84,13 +87,16 @@ async function contact() {
 
 ## Route handlers (`app/api/**`)
 
-Four exist, and each is a system-to-system endpoint, not a public API:
+### System routes
+
+Each of these is a system-to-system endpoint, not a public API:
 
 | Route | Method | Auth | Purpose |
 | --- | --- | --- | --- |
 | `/api/cron/discover` | GET | `Authorization: Bearer $CRON_SECRET` | Runs `discoverAllSources()` |
 | `/api/cron/sync` | GET | `Authorization: Bearer $CRON_SECRET` | Runs `syncDataset()` for datasets whose adaptive interval is due |
 | `/api/cron/fx` | GET | `Authorization: Bearer $CRON_SECRET` | Runs `refreshFxRates()` once daily |
+| `/api/cron/retention` | GET | `Authorization: Bearer $CRON_SECRET` | Prunes append-only tables past their retention window |
 | `/api/webhooks/apify` | POST | `x-webhook-secret` or `Authorization: Bearer $APIFY_WEBHOOK_SECRET` | Accelerates a sync for one dataset; falls back to full discovery if the dataset is unknown |
 
 Pattern for a new one, if you ever add one:
@@ -122,6 +128,37 @@ export async function GET(request: Request) {
 - Return a small JSON summary (`{ ok, processed, outcomes }`), not the full internal
   state — these responses are consumed by Vercel's cron log and by curl during manual
   testing (see the README's manual-trigger snippet), not by a UI.
+
+### Internal read routes
+
+| Route | Method | Auth | Backs |
+| --- | --- | --- | --- |
+| `/api/leads` | GET | session cookie (`currentUser()`) | `useLeadsQuery` |
+| `/api/leads/facets` | GET | session cookie | `useLeadFacetsQuery` |
+| `/api/leads/stats` | GET | session cookie | `useLeadStatsQuery` |
+| `/api/datasets` | GET | session cookie | `useDatasetsQuery` |
+
+These four exist for exactly one reason: `features/leads/queries.ts` and
+`features/datasets/queries.ts` run in the browser and need something to `fetch()` — a
+Server Component can call `queryLeads()`/`listDatasets()` directly, but a client
+component can't. Each route is a thin wrapper — auth check, call the same
+`*-queries.ts` function the server-rendered first paint used, return JSON:
+
+```ts
+export async function GET(request: Request) {
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const filters = parseLeadFilters(new URL(request.url).searchParams);
+  const page = await queryLeads(filters);
+  return NextResponse.json({ page });
+}
+```
+
+Deliberately **not** gated on `mustChangePassword` — these are read-only, and blocking
+reads while a temporary password is pending has no security rationale (contrast with
+server actions, where `authActionClient` blocks writes for exactly that flag). Deliberately
+**not** a generic `/api/v1/*` REST surface either: if a real second consumer shows up
+(mobile app, partner integration), design that surface then — don't retrofit these.
 
 ## Error handling conventions
 

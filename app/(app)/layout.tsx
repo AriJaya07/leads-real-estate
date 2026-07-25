@@ -1,9 +1,12 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { currentUser } from "@/application/auth/current-user";
 import { AppSidebar } from "@/features/shell/components/app-sidebar";
 import { AppTopbar } from "@/features/shell/components/app-topbar";
 import { listDatasets } from "@/application/datasets/dataset-queries";
+import { datasetsQueryKey } from "@/features/datasets/query-keys";
+import { getQueryClient } from "@/shared/query-client";
 
 async function DatasetSwitcherSlot({
   userEmail,
@@ -12,18 +15,16 @@ async function DatasetSwitcherSlot({
   userEmail: string;
   role: "admin" | "agent";
 }) {
-  const datasets = await listDatasets();
+  const queryClient = getQueryClient();
+  await queryClient.prefetchQuery({
+    queryKey: datasetsQueryKey,
+    queryFn: () => listDatasets(),
+  });
+
   return (
-    <AppTopbar
-      userEmail={userEmail}
-      role={role}
-      datasets={datasets.map((d) => ({
-        id: d.id,
-        label: d.label,
-        leadCount: d.leadCount,
-        health: d.health,
-      }))}
-    />
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <AppTopbar userEmail={userEmail} role={role} />
+    </HydrationBoundary>
   );
 }
 

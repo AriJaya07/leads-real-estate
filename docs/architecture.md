@@ -180,6 +180,71 @@ while aggregates rebuild in the background. Tag vocabulary is centralized in
 [application/cache-tags.ts](../application/cache-tags.ts) and is per-dataset, so syncing
 one dataset never invalidates another's cached aggregates.
 
+## Search, filtering, and client-side data fetching
+
+The lead inbox (`/leads`) and the topbar dataset switcher are the app's one genuinely
+client-driven surface: search text, facet filters, sort, pagination, and dataset scope
+all change far more often than a page navigation, and none of those changes should
+force a full RSC round-trip. This is the one place the app layers a second cache
+(TanStack React Query) on top of Next's Cache Components tag cache — deliberately, and
+only here; every other page still reads directly from a `*-queries.ts` repository at
+render time (see "The golden path" below).
+
+**First paint is still server-rendered.** `app/(app)/leads/page.tsx` and
+`app/(app)/layout.tsx` prefetch through the same `*-queries.ts` functions the rest of
+the app uses (`queryLeads`, `getLeadStats`, `getLeadFacets`, `listDatasets`), via a
+per-request `QueryClient` ([shared/query-client.ts](../shared/query-client.ts)), then
+hand the result to the client with `dehydrate`/`<HydrationBoundary>`. There is no
+client-side loading spinner on first load — the client component's `useQuery` call
+resolves instantly from the hydrated cache with the same query key the server used.
+
+**After first paint, filter/sort/page/dataset changes never re-hit the Server
+Component.** `LeadInbox`, `LeadStatsRow`, and `AppTopbar` are self-sufficient client
+components ([features/leads/queries.ts](../features/leads/queries.ts),
+[features/datasets/queries.ts](../features/datasets/queries.ts)) that read filters from
+the URL and fetch through thin auth-gated Route Handlers (`/api/leads`,
+`/api/leads/facets`, `/api/leads/stats`, `/api/datasets`) instead. The URL itself is
+kept in sync via shallow routing —
+[hooks/use-url-filters.ts](../hooks/use-url-filters.ts) calls
+`window.history.pushState` directly rather than `router.push`, so a filter change never
+triggers Next's own RSC navigation (which would re-fetch on the server *and* the client
+re-fetch through React Query — see Next's own guidance on SPAs with React Query in
+`node_modules/next/dist/docs/`). `useSearchParams()` still reflects the change because
+Next patches `history` globally.
+
+**Query keys are typed `LeadFilters` objects, not raw query strings**
+([application/leads/filters.schema.ts](../application/leads/filters.schema.ts)'s
+`parseLeadFilters`/`serializeLeadFilters` is the one serialization boundary, covered by
+its own test file) — chosen over stringly-typed keys specifically because the filtering
+system had to be reliable and easy to maintain, not just quick to wire up.
+
+**Facets and stats are keyed on `datasetId` alone, not the full filter set.** This is
+the concrete optimization over the old RSC version, which re-ran every query (list,
+facets, stats) on every filter change: changing sort, page, or search text now only
+refetches the list. `useLeadsQuery` uses `placeholderData: keepPreviousData` so
+paginating never flashes to a blank/loading state — the previous page stays on screen,
+dimmed, until the next one resolves.
+
+**Query-key functions live in directive-free modules**
+([features/leads/query-keys.ts](../features/leads/query-keys.ts),
+[features/datasets/query-keys.ts](../features/datasets/query-keys.ts)), separate from
+the `"use client"` hook files that also export them for convenience. A Server Component
+can't call a function exported from a `"use client"` module — it becomes a client
+reference — which is why the prefetching pages import keys from the plain module, not
+from `features/leads/queries.ts` directly.
+
+**Every mutation that affects a leads/datasets view invalidates both caches.** A server
+action already calls `updateTag`/`revalidateTag` for the RSC tag cache; that has no way
+to reach the separate client-side React Query cache. `hooks/use-server-action.ts`'s
+`run()` accepts an `invalidateKeys` option that calls `queryClient.invalidateQueries()`
+alongside its existing `router.refresh()` — see `dataset-table.tsx`,
+`discovery-button.tsx`. Mutations outside that hook (`lead-detail-sheet.tsx`,
+`lead-inbox.tsx`'s contact actions) call `queryClient.invalidateQueries({ queryKey:
+["leads"] })` directly; a partial key match invalidates the list, facets, and stats
+queries in one call since they all share the `"leads"` prefix. Skipping this half is
+what "the switcher still shows a dataset as paused after reactivating it" bugs are made
+of.
+
 ## Data-quality and observability additions
 
 Two small subsystems sit alongside the core pipeline without changing its shape:

@@ -1,6 +1,5 @@
 "use client";
 
-import { useQueryState } from "nuqs";
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, Layers, LogOut, User as UserIcon } from "lucide-react";
 import {
@@ -18,33 +17,32 @@ import { MobileNav } from "./mobile-nav";
 import { cn } from "@/lib/utils";
 import { formatCount } from "@/shared/format";
 import { signOut } from "@/application/auth/login.actions";
-
-export interface DatasetOption {
-  id: string;
-  label: string;
-  leadCount: number;
-  health: string;
-}
+import { useUrlFilters } from "@/hooks/use-url-filters";
+import { useDatasetsQuery } from "@/features/datasets/queries";
 
 /**
  * The global dataset scope. This is what replaces switching APIFY_DATASET_ID:
  * every page reacts to it, and it lives in the URL so a filtered view is
  * shareable.
+ *
+ * Self-sufficient like LeadInbox/LeadStatsRow: fetches through
+ * `useDatasetsQuery`, hydrated on first paint by the server prefetch in
+ * app/(app)/layout.tsx, and switches scope via shallow routing so choosing a
+ * dataset never forces a full RSC re-navigation of the shell.
  */
 export function AppTopbar({
-  datasets,
   userEmail,
   role,
 }: {
-  datasets: DatasetOption[];
   userEmail: string;
   role: "admin" | "agent";
 }) {
   const router = useRouter();
-  const [datasetId, setDatasetId] = useQueryState("datasetId", {
-    history: "push",
-    shallow: false,
-  });
+  const { searchParams, setParams } = useUrlFilters();
+  const { data: datasets = [] } = useDatasetsQuery();
+  const datasetId = searchParams.get("datasetId");
+  const setDatasetId = (id: string | null) =>
+    setParams((next) => (id ? next.set("datasetId", id) : next.delete("datasetId")));
 
   const active = datasets.find((d) => d.id === datasetId);
   const totalLeads = datasets.reduce((sum, d) => sum + d.leadCount, 0);
@@ -72,7 +70,7 @@ export function AppTopbar({
           <DropdownMenuGroup>
             <DropdownMenuLabel>Dataset scope</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => void setDatasetId(null)}>
+            <DropdownMenuItem onClick={() => setDatasetId(null)}>
               <Check className={cn("size-3.5", datasetId ? "opacity-0" : "opacity-100")} />
               <span className="flex-1">All datasets</span>
               <span className="text-muted-foreground font-mono text-xs tabular-nums">
@@ -81,7 +79,7 @@ export function AppTopbar({
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {datasets.map((dataset) => (
-              <DropdownMenuItem key={dataset.id} onClick={() => void setDatasetId(dataset.id)}>
+              <DropdownMenuItem key={dataset.id} onClick={() => setDatasetId(dataset.id)}>
                 <Check
                   className={cn("size-3.5", datasetId === dataset.id ? "opacity-100" : "opacity-0")}
                 />

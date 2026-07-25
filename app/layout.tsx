@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist_Mono, Poppins } from "next/font/google";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { QueryProvider } from "@/components/providers/query-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -36,14 +37,16 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     >
       <body className="flex min-h-full flex-col">
         <ThemeProvider>
-          <a
-            href="#main-content"
-            className="bg-background text-foreground focus-visible:ring-ring sr-only rounded-md border px-4 py-2 text-sm font-medium focus-visible:not-sr-only focus-visible:fixed focus-visible:top-3 focus-visible:left-3 focus-visible:z-50 focus-visible:ring-3"
-          >
-            Skip to content
-          </a>
-          <NuqsAdapter>{children}</NuqsAdapter>
-          <Toaster />
+          <QueryProvider>
+            <a
+              href="#main-content"
+              className="bg-background text-foreground focus-visible:ring-ring sr-only rounded-md border px-4 py-2 text-sm font-medium focus-visible:not-sr-only focus-visible:fixed focus-visible:top-3 focus-visible:left-3 focus-visible:z-50 focus-visible:ring-3"
+            >
+              Skip to content
+            </a>
+            <NuqsAdapter>{children}</NuqsAdapter>
+            <Toaster />
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

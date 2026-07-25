@@ -16,11 +16,13 @@ import type { FacetDescriptor } from "@/application/leads/facets";
 export function LeadFilterBar({
   facets,
   activeCount,
+  isFetching,
 }: {
   facets: FacetDescriptor[];
   activeCount: number;
+  isFetching: boolean;
 }) {
-  const { searchParams: params, pending, setParams: update } = useUrlFilters();
+  const { searchParams: params, setParams: update } = useUrlFilters();
   const view = params.get("view") === "cards" ? "cards" : "table";
 
   function toggleMulti(key: string, value: string) {
@@ -92,7 +94,7 @@ export function LeadFilterBar({
           </Button>
         )}
 
-        {pending && (
+        {isFetching && (
           <span className="text-muted-foreground text-xs" role="status" aria-live="polite">
             Updating…
           </span>
@@ -122,7 +124,7 @@ export function LeadFilterBar({
         </div>
       </div>
 
-      <div className={cn("flex flex-col gap-2", pending && "opacity-60")}>
+      <div className={cn("flex flex-col gap-2", isFetching && "opacity-60")}>
         {enumFacets.map((facet) => (
           <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
             <span className="text-muted-foreground inline-flex w-28 shrink-0 items-center gap-1 text-xs font-medium">

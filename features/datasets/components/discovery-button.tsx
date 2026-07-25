@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { runDiscovery } from "@/application/datasets/dataset.actions";
 import { useServerAction } from "@/hooks/use-server-action";
+import { datasetsQueryKey } from "@/features/datasets/queries";
 
 export function DiscoveryButton() {
   const { busyId, run } = useServerAction();
@@ -12,6 +13,7 @@ export function DiscoveryButton() {
   async function discover() {
     await run("discovery", () => runDiscovery(), {
       errorFallback: "Discovery failed",
+      invalidateKeys: [datasetsQueryKey],
       onSuccess: (data) => {
         toast.success(
           data.added > 0

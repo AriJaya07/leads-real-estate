@@ -149,16 +149,30 @@ conventions.
   this pairing rather than dropping a new table into an existing unrelated feature
   folder (see `docs/tech-debt.md`'s git history for why — `features/admin/` used to be
   exactly that catch-all, before dataset/team management were split out to match).
-- `hooks/` — cross-feature client hooks. `useUrlFilters` (searchParams-as-state, used by
-  any component that filters/paginates via the URL) and `useServerAction` (busy-state +
-  error-toast + `router.refresh()` around a `next-safe-action` call, used by any admin
-  table). Pull a new hook out here the second a pattern shows up in two components, not
-  after the third or fourth copy accumulates.
+- `hooks/` — cross-feature client hooks. `useUrlFilters` (searchParams-as-state via
+  shallow routing — `window.history.pushState`, not `router.push`, so a filter change
+  never forces a full RSC re-navigation) and `useServerAction` (busy-state +
+  error-toast + `router.refresh()` around a `next-safe-action` call, with an optional
+  `invalidateKeys` for callers that also read through React Query — see below). Pull a
+  new hook out here the second a pattern shows up in two components, not after the
+  third or fourth copy accumulates.
 - Client components (`"use client"`) call server actions directly and `router.refresh()`
   afterward rather than managing local mutation state — see `LeadInbox` in
   `features/leads/components/lead-inbox.tsx` for the pattern (log the action, refresh,
   *then* do the side effect like opening a WhatsApp link — the metric must not depend on
   whether the tab opens).
+- **React Query is scoped to the leads/datasets search-and-filter surface only** — see
+  [architecture.md](architecture.md)'s "Search, filtering, and client-side data
+  fetching". Don't reach for it on a page that just reads once per navigation; a Server
+  Component calling its `*-queries.ts` function directly is still the default. Where it
+  is used: query-key functions live in a directive-free `features/<name>/query-keys.ts`
+  (not the `"use client"` `queries.ts` that also re-exports them), because a Server
+  Component can't call a function exported from a `"use client"` module. Every mutation
+  that touches a React-Query-cached view must invalidate both the RSC tag cache
+  (`updateTag`/`revalidateTag`, already required — see "Cache invalidation" in
+  architecture.md) and the query cache (`queryClient.invalidateQueries`, via
+  `useServerAction`'s `invalidateKeys` or a direct `useQueryClient()` call) — skipping
+  the second half is a silent-staleness bug, not a missing nice-to-have.
 - Formatting numbers/dates for display goes through `shared/format.ts`, which pins
   `Intl.NumberFormat` to `en-US` explicitly. A bare `toLocaleString()` uses the runtime
   locale, which differs between SSR and the browser and produces a hydration mismatch —

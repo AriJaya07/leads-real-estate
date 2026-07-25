@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -37,6 +38,7 @@ export function LeadDetailSheet({
 
 function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [notes, setNotes] = useState(lead.notes);
   const [saving, setSaving] = useState(false);
 
@@ -44,6 +46,7 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
     setSaving(true);
     await setLeadStatus({ leadId: lead.id, status });
     setSaving(false);
+    void queryClient.invalidateQueries({ queryKey: ["leads"] });
     router.refresh();
   }
 
@@ -52,6 +55,7 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
     setSaving(true);
     await saveLeadNotes({ leadId: lead.id, notes });
     setSaving(false);
+    void queryClient.invalidateQueries({ queryKey: ["leads"] });
     router.refresh();
   }
 

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 /** Shape `next-safe-action`'s client hooks/direct calls resolve to. */
@@ -15,6 +16,14 @@ interface RunOptions<T> {
   onSuccess?: (data: T) => void;
   /** Shown when the action errored and didn't supply its own `serverError` message. */
   errorFallback?: string;
+  /**
+   * React Query cache(s) this mutation also affects, invalidated in addition to
+   * (not instead of) `router.refresh()` — the server action already calls
+   * `updateTag`/`revalidateTag` for the RSC cache, but that has no way to reach
+   * the separate client-side React Query cache the leads/datasets views read
+   * from. Partial keys match by prefix (`["leads"]` covers list/facets/stats).
+   */
+  invalidateKeys?: readonly QueryKey[];
 }
 
 /**
@@ -25,6 +34,7 @@ interface RunOptions<T> {
  */
 export function useServerAction() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -43,6 +53,9 @@ export function useServerAction() {
     }
 
     options.onSuccess?.(result.data);
+    for (const queryKey of options.invalidateKeys ?? []) {
+      void queryClient.invalidateQueries({ queryKey });
+    }
     startTransition(() => router.refresh());
     return result.data;
   }
