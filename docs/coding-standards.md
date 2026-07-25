@@ -20,6 +20,14 @@ codebase, so don't "fix" them back to the old API:
 - **`after()` from `next/server`** is used in the Apify webhook route to ack
   immediately and do the sync in the background, since Apify retries on slow webhook
   responses. See `app/api/webhooks/apify/route.ts`.
+- **`"use cache"` + `cacheTag`/`cacheLife`** (both from `next/cache`) mark a read
+  function as cacheable — see `getLeadStats`/`getLeadFacets`/`listDatasets` in
+  architecture.md's Performance section. Reach for it when a read function's argument
+  space is small/bounded (a `datasetId`, nothing, an id) and matches an existing
+  `updateTag`/`revalidateTag` call site — the caching is pointless without a real
+  invalidation trigger. Don't reach for it on a read whose argument space is
+  effectively unbounded (`queryLeads`'s full `LeadFilters`) — the cache would rarely
+  hit and isn't worth the complexity.
 
 If you hit an API that doesn't behave like you expect from training data, assume the
 docs bundle is right and your memory is stale, not the other way around.

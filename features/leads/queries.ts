@@ -48,6 +48,11 @@ export function useLeadFacetsQuery(datasetId: string | undefined, initialData?: 
         (body) => body.facets,
       );
     },
+    // Longer than the client default (30s): the server side of this same
+    // query is now `"use cache"`-backed with a 1-minute revalidate window
+    // (application/leads/facets.ts), so refetching more often than that just
+    // re-requests the same cached server response.
+    staleTime: 60_000,
     initialData,
   });
 }
@@ -62,6 +67,7 @@ export function useLeadStatsQuery(datasetId: string | undefined, initialData?: L
         (body) => body.stats,
       );
     },
+    staleTime: 60_000,
     initialData,
   });
 }

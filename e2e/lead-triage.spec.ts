@@ -57,4 +57,21 @@ test.describe("lead triage", () => {
 
     expect(errors).toEqual([]);
   });
+
+  test("clicking a row opens the lazy-loaded lead detail sheet", async ({ page }) => {
+    // LeadDetailSheet is a next/dynamic(..., { ssr: false }) import (see
+    // lead-inbox.tsx) — this proves the chunk actually loads and renders,
+    // not just that the static parts of the page do.
+    await loginAsAdmin(page);
+    await page.goto("/leads");
+
+    const row = page.getByRole("row", { name: new RegExp(E2E_LEAD_AUTHOR) });
+    await row.click();
+
+    await expect(page.getByRole("heading", { name: "Status" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "converted" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Close" }).click();
+    await expect(page.getByRole("heading", { name: "Status" })).toBeHidden();
+  });
 });

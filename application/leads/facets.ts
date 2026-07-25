@@ -1,7 +1,9 @@
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { db, schema } from "@/infrastructure/db/client";
+import { leadsTag } from "@/application/cache-tags";
 import { FACETABLE_MAX_CARDINALITY } from "@/shared/constants";
 
 /**
@@ -58,7 +60,15 @@ async function arrayFacet(
   };
 }
 
+/**
+ * Cached like `getLeadStats` and for the same reason: keyed on `datasetId`
+ * alone, bounded key space, same `leadsTag()` invalidation lifecycle.
+ */
 export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor[]> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag(leadsTag());
+
   const scope = and(
     eq(schema.leads.isSpam, false),
     isNull(schema.leads.canonicalLeadId),
@@ -163,6 +173,10 @@ export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor
  * filter as soon as it appears in enough records.
  */
 export async function getDynamicAttributeFacets(datasetId: string): Promise<FacetDescriptor[]> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag(leadsTag());
+
   const catalog = await db()
     .select()
     .from(schema.fieldCatalog)

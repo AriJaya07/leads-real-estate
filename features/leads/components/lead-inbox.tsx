@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, ExternalLink, MessageCircle, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,6 @@ import { RelativeTime } from "@/components/common/relative-time";
 import { IntentBadge } from "@/components/common/intent-badge";
 import { ScoreBadge, ScoreReasons } from "@/components/common/score-badge";
 import { LeadFilterBar } from "./lead-filter-bar";
-import { LeadDetailSheet } from "./lead-detail-sheet";
 import { markContacted } from "@/application/leads/lead.actions";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { useLeadFacetsQuery, useLeadsQuery } from "@/features/leads/queries";
@@ -20,6 +20,18 @@ import { parseLeadFilters, type LeadFilters } from "@/application/leads/filters.
 import type { LeadListItem } from "@/application/leads/lead-queries";
 import { cn } from "@/lib/utils";
 import { formatCompact, formatCount } from "@/shared/format";
+
+/**
+ * Code-split: renders `null` until a lead is selected, so its JS (a large
+ * Sheet, status buttons, notes textarea) has no reason to ship in the same
+ * chunk as the list that's needed for every /leads visit. `ssr: false`
+ * because it's always closed on first paint — no server-rendered markup to
+ * lose.
+ */
+const LeadDetailSheet = dynamic(
+  () => import("./lead-detail-sheet").then((mod) => mod.LeadDetailSheet),
+  { ssr: false },
+);
 
 function budgetLabel(lead: LeadListItem): string {
   if (lead.budgetMin === null && lead.budgetMax === null) return "—";
@@ -41,7 +53,14 @@ function countActiveFilters(filters: LeadFilters): number {
 
 type ContactChannel = "whatsapp" | "phone" | "post";
 
-function ContactActions({
+/**
+ * Memoized: `page.items` keeps a stable reference between renders that don't
+ * change the underlying query result (e.g. `isFetching`/`selected` toggling
+ * elsewhere in `LeadInbox`), so as long as `lead` and the callbacks stay
+ * referentially stable, every row can skip re-rendering on those changes —
+ * see `contact`'s `useCallback` in `LeadInbox` for the callback half of that.
+ */
+const ContactActions = memo(function ContactActions({
   lead,
   onContact,
 }: {
@@ -89,14 +108,18 @@ function ContactActions({
       )}
     </div>
   );
-}
+});
 
 /**
  * Used both as the forced mobile layout (a fixed-column table can't fit a
  * narrow viewport) and as the explicit "cards" view at any width — `filters.view`
  * already had a `"cards"` option in the schema with nothing rendering it.
+ *
+ * Memoized for the same reason as `ContactActions`: `onSelect` is `setSelected`
+ * (a stable `useState` dispatch) and `onContact` is `contact`, stabilized via
+ * `useCallback` below, so a row only re-renders when its own `lead` changes.
  */
-function LeadCard({
+const LeadCard = memo(function LeadCard({
   lead,
   onSelect,
   onContact,
@@ -165,7 +188,72 @@ function LeadCard({
       </div>
     </div>
   );
-}
+});
+
+/** Desktop table row. Memoized for the same reason as `LeadCard`. */
+const LeadRow = memo(function LeadRow({
+  lead,
+  onSelect,
+  onContact,
+}: {
+  lead: LeadListItem;
+  onSelect: (lead: LeadListItem) => void;
+  onContact: (lead: LeadListItem, channel: ContactChannel) => void;
+}) {
+  return (
+    <tr
+      className={cn(
+        "border-border hover:bg-accent/40 cursor-pointer border-t align-top transition-colors",
+        lead.status !== "new" && "opacity-70",
+      )}
+      onClick={() => onSelect(lead)}
+    >
+      <td className="px-3 py-3">
+        <div className="flex flex-col gap-1">
+          <ScoreBadge score={lead.intentScore} />
+          <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
+            q{lead.qualityScore}
+          </span>
+        </div>
+      </td>
+
+      <td className="px-3 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <IntentBadge intent={lead.intent} />
+          <span className="font-medium">{lead.authorName ?? "Unknown"}</span>
+          {lead.duplicateCount > 0 && (
+            <span className="text-muted-foreground text-xs">+{lead.duplicateCount} similar</span>
+          )}
+          {lead.status !== "new" && (
+            <span className="bg-muted rounded px-1.5 py-0.5 text-[11px]">
+              {lead.status.replace(/_/g, " ")}
+            </span>
+          )}
+        </div>
+        <p className="text-muted-foreground mt-1 line-clamp-2 max-w-xl text-sm">
+          {lead.listingTitle ? `${lead.listingTitle} — ` : ""}
+          {lead.body || "(no text)"}
+        </p>
+        <ScoreReasons reasons={lead.scoreReasons} className="mt-1.5" />
+      </td>
+
+      <td className="text-muted-foreground px-3 py-3 text-xs">
+        {lead.propertyTypes.length ? lead.propertyTypes.join(", ") : "—"}
+      </td>
+      <td className="text-muted-foreground px-3 py-3 text-xs">
+        {lead.locations.length ? lead.locations.join(", ") : "—"}
+      </td>
+      <td className="px-3 py-3 font-mono text-xs tabular-nums">{budgetLabel(lead)}</td>
+      <td className="text-muted-foreground px-3 py-3 text-xs">
+        <RelativeTime value={lead.postedAt} />
+      </td>
+
+      <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
+        <ContactActions lead={lead} onContact={onContact} />
+      </td>
+    </tr>
+  );
+});
 
 /**
  * Self-sufficient: derives `filters` from the URL itself (no props from the
@@ -193,18 +281,26 @@ export function LeadInbox() {
   } = useLeadsQuery(filters);
   const { data: facets = [] } = useLeadFacetsQuery(filters.datasetId);
 
-  /** Logs the touch first, then opens the channel — the metric must not depend on the tab opening. */
-  async function contact(lead: LeadListItem, channel: ContactChannel) {
-    await markContacted({ leadId: lead.id, channel });
-    void queryClient.invalidateQueries({ queryKey: ["leads"] });
-    router.refresh();
+  /**
+   * Logs the touch first, then opens the channel — the metric must not depend
+   * on the tab opening. `useCallback`'d (stable deps: `queryClient`/`router`
+   * are themselves stable) so it doesn't defeat `LeadCard`/`LeadRow`'s memo on
+   * every `LeadInbox` render.
+   */
+  const contact = useCallback(
+    async (lead: LeadListItem, channel: ContactChannel) => {
+      await markContacted({ leadId: lead.id, channel });
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      router.refresh();
 
-    if (channel === "whatsapp" && lead.contact.whatsapp) {
-      window.open(`https://wa.me/${lead.contact.whatsapp.replace(/\D/g, "")}`, "_blank", "noopener");
-    } else if (channel === "post" && lead.externalUrl) {
-      window.open(lead.externalUrl, "_blank", "noopener");
-    }
-  }
+      if (channel === "whatsapp" && lead.contact.whatsapp) {
+        window.open(`https://wa.me/${lead.contact.whatsapp.replace(/\D/g, "")}`, "_blank", "noopener");
+      } else if (channel === "post" && lead.externalUrl) {
+        window.open(lead.externalUrl, "_blank", "noopener");
+      }
+    },
+    [queryClient, router],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -266,60 +362,7 @@ export function LeadInbox() {
                   </thead>
                   <tbody>
                     {page.items.map((lead) => (
-                      <tr
-                        key={lead.id}
-                        className={cn(
-                          "border-border hover:bg-accent/40 cursor-pointer border-t align-top transition-colors",
-                          lead.status !== "new" && "opacity-70",
-                        )}
-                        onClick={() => setSelected(lead)}
-                      >
-                        <td className="px-3 py-3">
-                          <div className="flex flex-col gap-1">
-                            <ScoreBadge score={lead.intentScore} />
-                            <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
-                              q{lead.qualityScore}
-                            </span>
-                          </div>
-                        </td>
-
-                        <td className="px-3 py-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <IntentBadge intent={lead.intent} />
-                            <span className="font-medium">{lead.authorName ?? "Unknown"}</span>
-                            {lead.duplicateCount > 0 && (
-                              <span className="text-muted-foreground text-xs">
-                                +{lead.duplicateCount} similar
-                              </span>
-                            )}
-                            {lead.status !== "new" && (
-                              <span className="bg-muted rounded px-1.5 py-0.5 text-[11px]">
-                                {lead.status.replace(/_/g, " ")}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-muted-foreground mt-1 line-clamp-2 max-w-xl text-sm">
-                            {lead.listingTitle ? `${lead.listingTitle} — ` : ""}
-                            {lead.body || "(no text)"}
-                          </p>
-                          <ScoreReasons reasons={lead.scoreReasons} className="mt-1.5" />
-                        </td>
-
-                        <td className="text-muted-foreground px-3 py-3 text-xs">
-                          {lead.propertyTypes.length ? lead.propertyTypes.join(", ") : "—"}
-                        </td>
-                        <td className="text-muted-foreground px-3 py-3 text-xs">
-                          {lead.locations.length ? lead.locations.join(", ") : "—"}
-                        </td>
-                        <td className="px-3 py-3 font-mono text-xs tabular-nums">{budgetLabel(lead)}</td>
-                        <td className="text-muted-foreground px-3 py-3 text-xs">
-                          <RelativeTime value={lead.postedAt} />
-                        </td>
-
-                        <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
-                          <ContactActions lead={lead} onContact={contact} />
-                        </td>
-                      </tr>
+                      <LeadRow key={lead.id} lead={lead} onSelect={setSelected} onContact={contact} />
                     ))}
                   </tbody>
                 </table>

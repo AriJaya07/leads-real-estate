@@ -1,6 +1,8 @@
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
 import { desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
+import { datasetsRegistryTag, leadsTag } from "@/application/cache-tags";
 
 export interface DatasetSummary {
   id: string;
@@ -25,7 +27,19 @@ function label(name: string | null, title: string | null, externalId: string): s
   return title ?? name ?? `Unnamed (${externalId.slice(0, 8)})`;
 }
 
+/**
+ * Cached: this backs the topbar switcher and `/admin/datasets`, both read far
+ * more often than a dataset actually changes. `updateTag(datasetsRegistryTag())`
+ * (dataset.actions.ts) gives an admin's own change read-your-own-writes
+ * immediacy regardless of this cache; `leadsTag()` is the backstop for
+ * `leadCount`/`buyerCount` drifting from routine cron syncs, which only
+ * revalidate `leadsTag()` in the background — see api-patterns.md.
+ */
 export async function listDatasets(): Promise<DatasetSummary[]> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag(datasetsRegistryTag(), leadsTag());
+
   const rows = await db()
     .select({
       id: schema.datasets.id,

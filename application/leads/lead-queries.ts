@@ -1,7 +1,9 @@
 import "server-only";
+import { cacheLife, cacheTag } from "next/cache";
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
 import { priorityScore } from "@/domain/lead/ranking";
+import { leadsTag } from "@/application/cache-tags";
 import type { LeadFilters } from "./filters.schema";
 import { textArray, validIntents, validStatuses } from "./sql-helpers";
 import { prioritySortExpression } from "./priority-sql";
@@ -258,8 +260,18 @@ export interface LeadStats {
 /**
  * Headline numbers for the inbox. `medianTimeToFirstTouch` is the north-star
  * metric — everything else is context for it.
+ *
+ * Cached (unlike `queryLeads`): keyed only on `datasetId`, so the cache key
+ * space is bounded (one entry per dataset + "all"), versus the list's
+ * unbounded filter/search/sort/page combinations where a cache would rarely
+ * hit. `leadsTag()` is invalidated immediately by every lead mutation
+ * (`lead.actions.ts`) and in the background by every sync.
  */
 export async function getLeadStats(datasetId?: string): Promise<LeadStats> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag(leadsTag());
+
   const scope = datasetId ? eq(schema.leads.datasetId, datasetId) : undefined;
   const base = and(eq(schema.leads.isSpam, false), isNull(schema.leads.canonicalLeadId), scope);
 

@@ -22,6 +22,10 @@ export function useDatasetsQuery(initialData?: DatasetSummary[]) {
       const body = (await response.json()) as { datasets: DatasetSummary[] };
       return body.datasets;
     },
+    // Matches `listDatasets`'s server-side "use cache" revalidate window
+    // (application/datasets/dataset-queries.ts) — no point polling the client
+    // cache faster than the server data underneath it actually changes.
+    staleTime: 60_000,
     initialData,
   });
 }

@@ -245,6 +245,83 @@ queries in one call since they all share the `"leads"` prefix. Skipping this hal
 what "the switcher still shows a dataset as paused after reactivating it" bugs are made
 of.
 
+## Performance
+
+**Server-side caching was tag vocabulary without a cache, until now.**
+`application/cache-tags.ts` and every `updateTag`/`revalidateTag` call already existed
+(prior round), but nothing had ever opted into Cache Components' `"use cache"` — so
+every `/leads` load and every `/leads`-adjacent read route hit Postgres fresh, tags or
+not. Four read functions are now actually cached, each `"use cache"` + `cacheLife`
++ `cacheTag`, keyed on their own (small, bounded) arguments:
+
+| Function | Tag(s) | Why this tag |
+| --- | --- | --- |
+| `listDatasets` (`application/datasets/dataset-queries.ts`) | `datasetsRegistryTag()`, `leadsTag()` | Registry tag for admin dataset actions (read-your-own-writes via `updateTag`); `leadsTag()` too because `leadCount`/`buyerCount` are computed live from `leads` and only cron sync's background `revalidateTag(leadsTag(), "max")` touches those numbers between admin actions |
+| `getLeadStats` (`application/leads/lead-queries.ts`) | `leadsTag()` | Same tag every lead mutation (`lead.actions.ts`) already invalidates |
+| `getLeadFacets` / `getDynamicAttributeFacets` (`application/leads/facets.ts`) | `leadsTag()` | Facet counts derive from the same lead rows the stats row does — same invalidation lifecycle, see tech-debt.md on why the narrower `facetsTag()` isn't used yet |
+
+All four use the `"minutes"` profile (`stale` 5m client / `revalidate` 1m server /
+`expire` 1h) — short enough that a background cron change surfaces within a minute even
+if nothing explicitly invalidates it, long enough that repeated navigations and
+`router.refresh()` calls (every mutation triggers one) hit the cache instead of
+Postgres. `updateTag()` bypasses all of this for the actor's own change regardless —
+cache duration only governs *other* users/tabs.
+
+**Deliberately not cached: `queryLeads`.** Its argument is the full `LeadFilters`
+object — free-text search, arbitrary filter/sort/page combinations — so the cache key
+space is effectively unbounded and a cache would rarely hit. The primary list is also
+the surface where staleness matters most (agents want live top-of-funnel leads). Live
+DB read stays the right choice here.
+
+**Rendering: `LeadInbox`'s rows are memoized.** `LeadCard` (mobile/cards view) and
+`LeadRow` (desktop table, extracted from an inline `.map()` for this) are wrapped in
+`React.memo`, and the `contact` handler passed down to both is `useCallback`'d. Without
+this, every row's render function re-ran whenever `LeadInbox` re-rendered for a reason
+that had nothing to do with that row's data — `isFetching`/`isPlaceholderData` toggling
+is applied to a *wrapper* `<div>`, not threaded into row props, so the resulting JSX per
+row was usually identical; memoizing turns that into a bailout instead of a full
+re-render. `DatasetTable`/`TeamTable` have a smaller version of the same shape but were
+left un-memoized — see tech-debt.md for why.
+
+**Code splitting: `LeadDetailSheet` is `next/dynamic`, not a static import.** It renders
+`null` until a lead is selected but was previously bundled into `/leads`'s initial chunk
+regardless. `dynamic(() => import(...), { ssr: false })` — `ssr: false` because it's
+always closed on first paint, so there's no server-rendered markup to lose by skipping
+SSR for it. Covered by `e2e/lead-triage.spec.ts`'s "clicking a row opens the
+lazy-loaded lead detail sheet", specifically so a chunk-loading regression here would
+fail a test rather than only show up as a silent bundle-size regression.
+
+**Bundle size: four unused shadcn primitives and their dependencies were removed**
+(`components/ui/carousel.tsx`, `command.tsx`, `calendar.tsx`, `form.tsx`, and
+`embla-carousel-react`, `cmdk`, `react-day-picker`, `react-hook-form`,
+`@hookform/resolvers`, `@radix-ui/react-label`, `@radix-ui/react-slot`). Nothing
+imported them — this app's forms are plain controlled inputs + server actions
+(`hooks/useServerAction`), not `react-hook-form`, and its primitives are `@base-ui/react`
+(the `base-nova` shadcn style), not Radix. They cost nothing in any shipped bundle
+already (route-based code splitting only includes what's actually imported), but they
+were a landmine: importing `@/components/ui/form` would have silently pulled
+`react-hook-form` into a real page's bundle the moment anyone reached for the familiar
+shadcn form pattern instead of the pattern this codebase actually uses.
+
+**React Query `staleTime` is differentiated per query, not one blanket value.** The
+`QueryClient` default (`shared/query-client.ts`) stays 30s for the leads list; facets,
+stats, and datasets set `staleTime: 60_000` explicitly at the `useQuery` call site,
+matched to those same reads' server-side `cacheLife("minutes")` 1-minute revalidate
+window — see the caching table above. No point refetching the client cache faster than
+the server data underneath it actually changes.
+
+**Navigation, images, Core Web Vitals: already correct, audited this round with no
+code change needed.** Sidebar/nav links (`features/shell/components/nav-content.tsx`)
+are plain `next/link` with default (automatic, viewport-triggered) prefetch — no
+`prefetch={false}` anywhere suppressing it. Every dynamic app route already renders as
+a Partial Prerender (`◐` in `next build`'s route table) via `cacheComponents`, so every
+page already gets an instant static-shell paint on navigation without needing
+per-route `loading.tsx` files. The one image in the app (`lead-detail-sheet.tsx`'s post
+photos) deliberately stays a plain `<img>`, not `next/image` — see the comment there:
+these are signed, expiring CDN URLs, and the optimizer would cache a URL that later
+403s. `next.config.ts`'s `images.formats`/`remotePatterns` already cover every image
+host actually in use.
+
 ## Data-quality and observability additions
 
 Two small subsystems sit alongside the core pipeline without changing its shape:

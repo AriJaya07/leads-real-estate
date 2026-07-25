@@ -5,15 +5,45 @@
 `revalidateTag(tag, "max")` from `/api/cron/sync` and the Apify webhook invalidates the
 RSC tag cache in the background, which is correct for that cache — nobody's actively
 waiting on a cron-triggered write. But a browser tab with `/leads` or the topbar
-already open won't see that change until React Query's own `staleTime` (30s, see
-`shared/query-client.ts`/`components/providers/query-provider.tsx`) elapses and a
+already open won't see that change until React Query's own `staleTime` elapses and a
 refetch is triggered (window refocus, remount, or the next explicit
-`invalidateQueries` call from a user-initiated mutation). This is an accepted
-convergence lag, not a bug — the same trade-off the tag cache already made explicitly
-for background revalidation — but it's worth knowing if a "why didn't the new lead
-show up immediately" question comes up: it will, within 30s, without a manual refresh.
-If that lag ever needs to shrink for a live-updating surface, the fix is a shorter
-`staleTime` on `leadsQueryKey`/`datasetsQueryKey` specifically, not a global one.
+`invalidateQueries` call from a user-initiated mutation): 30s for the leads list
+(`shared/query-client.ts`'s default), 60s for facets/stats/datasets
+(`features/leads/queries.ts`, `features/datasets/queries.ts` set this explicitly —
+matched to those same functions' server-side `"use cache"` 1-minute `revalidate`
+window, see architecture.md's Performance section, so the client isn't polling faster
+than the data underneath it actually changes). This is an accepted convergence lag,
+not a bug — the same trade-off the tag cache already made explicitly for background
+revalidation. If that lag ever needs to shrink for a live-updating surface, the fix is
+a shorter `staleTime` on the specific query (and a shorter `cacheLife` on its
+server-side counterpart), not a global one.
+
+## Admin table row memoization (`DatasetTable`, `TeamTable`) not applied
+
+`LeadInbox`'s row components (`LeadCard`, `LeadRow`) are `React.memo`'d because
+`isFetching`/`isPlaceholderData` toggling is a *wrapper*-level state change — every row
+was re-rendering for a prop set that hadn't actually changed. `DatasetTable` has a
+similar shape (`busyId` state, one row's `disabled={busyId === dataset.id}` flips while
+every other row's `disabled` prop evaluates to the same `false` before and after), so
+the same fix would save the same kind of wasted re-render. Left as-is because dataset
+and team lists are small (tens of rows, not a paginated hundreds-deep list like leads)
+and the win is marginal at that size — worth doing if either table's row count grows
+enough to matter; the recipe is `features/leads/components/lead-inbox.tsx`'s `LeadRow`.
+`TeamTable` doesn't have this issue at all — its `busy` flag legitimately changes every
+row's `disabled` prop simultaneously, so memoizing its rows wouldn't skip any work.
+
+## `facetsTag()` (`application/cache-tags.ts`) is defined but unused
+
+`getLeadFacets`/`getDynamicAttributeFacets` (application/leads/facets.ts) are cached
+with `"use cache"` tagged `leadsTag()`, not the narrower `facetsTag(datasetId)` that
+already existed in the tag vocabulary. Reason: no mutation site knows a lead's
+`datasetId` without an extra lookup (`lead.actions.ts`'s `invalidate(leadId)` only has
+the lead id), so wiring the narrower tag would mean adding a dataset lookup to every
+lead mutation for a cache-precision win that isn't needed yet — invalidating all facets
+on any lead change (the `leadsTag()` behavior) is already correct, just slightly
+broader than strictly necessary. Revisit if per-dataset facet invalidation ever needs
+to be more surgical (e.g. once there are enough datasets that a global facets
+invalidation becomes a measurable cost).
 
 ## `/pipeline`, `/intelligence`, `/admin/sync` are placeholders, not 404s
 
