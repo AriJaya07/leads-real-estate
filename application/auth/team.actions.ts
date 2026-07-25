@@ -6,6 +6,7 @@ import { db, schema } from "@/infrastructure/db/client";
 import { adminActionClient } from "@/application/safe-action";
 import { ActionError } from "@/application/safe-action";
 import { generateTemporaryPassword, hashPassword } from "@/infrastructure/auth/password";
+import { bumpSessionVersion } from "./session-version";
 
 /**
  * Account management without an email provider. An admin creates the account and
@@ -64,6 +65,11 @@ export const resetTeamMemberPassword = adminActionClient
       .returning({ email: schema.users.email });
 
     if (!updated) throw new ActionError("User not found.");
+
+    // Whatever session that account was using — on whatever device — is dead
+    // the moment an admin decides its credential needs resetting.
+    await bumpSessionVersion(parsedInput.userId);
+
     return { email: updated.email, temporaryPassword };
   });
 

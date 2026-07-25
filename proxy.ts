@@ -33,5 +33,6 @@ export const config = {
     "/intelligence/:path*",
     "/reports/:path*",
     "/admin/:path*",
+    "/account/:path*",
   ],
 };

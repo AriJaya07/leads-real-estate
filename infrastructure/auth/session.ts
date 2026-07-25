@@ -8,6 +8,8 @@ export interface SessionPayload {
   userId: string;
   email: string;
   role: "admin" | "agent";
+  /** Compared against `users.sessionVersion` on every request — see application/auth/current-user.ts. */
+  sessionVersion: number;
 }
 
 function secretKey(): Uint8Array {
@@ -25,9 +27,15 @@ export async function signSession(payload: SessionPayload): Promise<string> {
 export async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
-    if (typeof payload.userId !== "string" || typeof payload.email !== "string") return null;
+    if (
+      typeof payload.userId !== "string" ||
+      typeof payload.email !== "string" ||
+      typeof payload.sessionVersion !== "number"
+    ) {
+      return null;
+    }
     const role = payload.role === "admin" ? "admin" : "agent";
-    return { userId: payload.userId, email: payload.email, role };
+    return { userId: payload.userId, email: payload.email, role, sessionVersion: payload.sessionVersion };
   } catch {
     return null;
   }

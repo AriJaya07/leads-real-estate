@@ -2,7 +2,6 @@
 
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { redirect } from "next/navigation";
 import { db, schema } from "@/infrastructure/db/client";
 import { allowedEmails } from "@/shared/config/env";
 import {
@@ -12,8 +11,13 @@ import {
   verifyPassword,
 } from "@/infrastructure/auth/password";
 import { clearSessionCookie, setSessionCookie, signSession } from "@/infrastructure/auth/session";
-import { ActionError, actionClient, authActionClient } from "@/application/safe-action";
+import {
+  ActionError,
+  actionClient,
+  authActionClientAllowPendingPasswordChange,
+} from "@/application/safe-action";
 import { countRecentFailedAttempts, recordLoginAttempt } from "./login-attempts";
+import { bumpSessionVersion } from "./session-version";
 import { isLoginRateLimited } from "@/domain/auth/rate-limit";
 
 const credentialsSchema = z.object({
@@ -24,9 +28,19 @@ const credentialsSchema = z.object({
 /** Deliberately identical for "no such user" and "wrong password". */
 const INVALID_CREDENTIALS = "Email or password is incorrect.";
 
-async function startSession(user: { id: string; email: string; role: "admin" | "agent" }) {
+async function startSession(user: {
+  id: string;
+  email: string;
+  role: "admin" | "agent";
+  sessionVersion: number;
+}) {
   await db().update(schema.users).set({ lastSeenAt: new Date() }).where(eq(schema.users.id, user.id));
-  const token = await signSession({ userId: user.id, email: user.email, role: user.role });
+  const token = await signSession({
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    sessionVersion: user.sessionVersion,
+  });
   await setSessionCookie(token);
 }
 
@@ -104,8 +118,16 @@ export const signIn = actionClient.inputSchema(credentialsSchema).action(async (
   return { bootstrapped: false, mustChangePassword: user.mustChangePassword };
 });
 
-/** Self-service change. Requires the current password even when signed in. */
-export const changePassword = authActionClient
+/**
+ * Self-service change. Requires the current password even when signed in.
+ *
+ * Bumps `sessionVersion` so every *other* session for this account (a stolen
+ * cookie, a forgotten logged-in device) is revoked on its next request — then
+ * immediately re-issues a fresh session for the device that just proved it
+ * knows the current password, so the person changing their own password isn't
+ * logged out by their own action.
+ */
+export const changePassword = authActionClientAllowPendingPasswordChange
   .inputSchema(
     z.object({
       currentPassword: z.string().min(1),
@@ -134,10 +156,28 @@ export const changePassword = authActionClient
       })
       .where(eq(schema.users.id, ctx.user.userId));
 
+    const sessionVersion = await bumpSessionVersion(ctx.user.userId);
+    await startSession({ id: ctx.user.userId, email: ctx.user.email, role: ctx.user.role, sessionVersion });
+
     return { ok: true };
   });
 
-export async function signOut(): Promise<void> {
+/** Revokes every session for this account, including the one making the call. */
+export const signOutEverywhere = authActionClientAllowPendingPasswordChange.action(async ({ ctx }) => {
+  await bumpSessionVersion(ctx.user.userId);
   await clearSessionCookie();
-  redirect("/login");
-}
+  return { ok: true };
+});
+
+/**
+ * Plain `actionClient`, not `authActionClient` — signing out must work even
+ * from a stale/already-invalid session. Deliberately doesn't call `redirect()`
+ * itself: a Server Action reference invoked directly from a client `onClick`
+ * (as opposed to bound to a `<form action={...}>`) doesn't resolve an internal
+ * `redirect()` the same way — the client is expected to navigate after the
+ * promise resolves, same as `signOutEverywhere` above.
+ */
+export const signOut = actionClient.action(async () => {
+  await clearSessionCookie();
+  return { ok: true };
+});

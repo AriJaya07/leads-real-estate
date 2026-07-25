@@ -25,6 +25,16 @@ export const E2E_LEAD_AUTHOR = "E2E Test Buyer";
 export const E2E_THROTTLE_EMAIL = "e2e-throttle@dreamrue.test";
 export const E2E_THROTTLE_PASSWORD = "e2e-throttle-password-123";
 
+/** Seeded with mustChangePassword=true, mirroring an admin-issued temporary password. */
+export const E2E_TEMP_PASSWORD_EMAIL = "e2e-temp-password@dreamrue.test";
+export const E2E_TEMP_PASSWORD_TEMP = "e2e-temporary-password-123";
+export const E2E_TEMP_PASSWORD_NEW = "e2e-brand-new-password-456";
+
+/** Dedicated account for the session-revocation spec, unshared for the same reason as E2E_THROTTLE_EMAIL. */
+export const E2E_REVOCATION_EMAIL = "e2e-revocation@dreamrue.test";
+export const E2E_REVOCATION_PASSWORD = "e2e-revocation-password-123";
+export const E2E_REVOCATION_NEW_PASSWORD = "e2e-revocation-new-password-456";
+
 // Mirrors infrastructure/auth/password.ts's format/params exactly, so the real
 // `verifyPassword` (used by the login page under test) accepts this hash.
 const scrypt = promisify(scryptCallback) as (
@@ -80,6 +90,21 @@ export default async function globalSetup(): Promise<void> {
         name: "E2E Throttle Target",
         role: "agent",
         passwordHash: await hashPassword(E2E_THROTTLE_PASSWORD),
+        passwordSetAt: new Date(),
+      },
+      {
+        email: E2E_TEMP_PASSWORD_EMAIL,
+        name: "E2E Temp Password",
+        role: "agent",
+        passwordHash: await hashPassword(E2E_TEMP_PASSWORD_TEMP),
+        passwordSetAt: new Date(),
+        mustChangePassword: true,
+      },
+      {
+        email: E2E_REVOCATION_EMAIL,
+        name: "E2E Revocation Target",
+        role: "agent",
+        passwordHash: await hashPassword(E2E_REVOCATION_PASSWORD),
         passwordSetAt: new Date(),
       },
     ]);

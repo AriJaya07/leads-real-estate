@@ -30,6 +30,14 @@ shapes from training data — see [docs/coding-standards.md](docs/coding-standar
   pipeline code, stop and reconsider — see [docs/domain.md](docs/domain.md).
 - **Never mix `reach`/engagement into `intentScore` or `priorityScore`.** This was
   reverted from an earlier design on purpose. Keep them as separate fields/axes.
+- **Never rely on the shared `(app)` layout as a protected page's only auth check.**
+  Every page calls `requireUser()`/`requireAdmin()` itself. Next layouts don't re-run on
+  client-side navigation between siblings, so a layout-only check is unreliable past the
+  first hard load — see [docs/architecture.md](docs/architecture.md)'s Auth model.
+- **Never use `DropdownMenuLabel` outside a `DropdownMenuGroup`.** Base UI's
+  `Menu.GroupLabel` throws at open time, not build time, if it isn't wrapped in
+  `Menu.Group` — this broke a production dropdown silently. Open any new dropdown menu
+  in a real browser before considering it done.
 - **Never compare secrets with `===`.** Use `secretsMatch()`
   (`application/http/verify-secret.ts`) for cron/webhook secrets, the existing
   `verifyPassword`/`timingSafeEqual` path for passwords. Constant-time everywhere a

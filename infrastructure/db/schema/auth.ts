@@ -1,4 +1,4 @@
-import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { userRoleEnum } from "./enums";
 
 export const users = pgTable(
@@ -13,6 +13,14 @@ export const users = pgTable(
     passwordSetAt: timestamp("password_set_at", { withTimezone: true }),
     /** Forces a change on next sign-in after an admin-issued temporary password. */
     mustChangePassword: boolean("must_change_password").notNull().default(false),
+    /**
+     * Embedded in every session JWT at sign-in; `currentUser()` rejects a token
+     * whose embedded version doesn't match this column. Bumped on password
+     * change/reset and "sign out everywhere" — this is what makes a session
+     * revocable at all, since the JWT itself is otherwise stateless and valid
+     * until its own expiry regardless of what happens to the account afterward.
+     */
+    sessionVersion: integer("session_version").notNull().default(1),
     /** Agents opted out of the round-robin get no new assignments. */
     acceptsAssignments: boolean("accepts_assignments").notNull().default(true),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),

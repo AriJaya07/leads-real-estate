@@ -1,10 +1,12 @@
 "use client";
 
 import { useQueryState } from "nuqs";
-import { Check, ChevronDown, Layers } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, ChevronDown, Layers, LogOut, User as UserIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -14,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./theme-toggle";
 import { cn } from "@/lib/utils";
 import { formatCount } from "@/shared/format";
+import { signOut } from "@/application/auth/login.actions";
 
 export interface DatasetOption {
   id: string;
@@ -27,7 +30,8 @@ export interface DatasetOption {
  * every page reacts to it, and it lives in the URL so a filtered view is
  * shareable.
  */
-export function AppTopbar({ datasets }: { datasets: DatasetOption[] }) {
+export function AppTopbar({ datasets, userEmail }: { datasets: DatasetOption[]; userEmail: string }) {
+  const router = useRouter();
   const [datasetId, setDatasetId] = useQueryState("datasetId", {
     history: "push",
     shallow: false,
@@ -52,32 +56,61 @@ export function AppTopbar({ datasets }: { datasets: DatasetOption[] }) {
           }
         />
         <DropdownMenuContent align="start" className="w-80">
-          <DropdownMenuLabel>Dataset scope</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => void setDatasetId(null)}>
-            <Check className={cn("size-3.5", datasetId ? "opacity-0" : "opacity-100")} />
-            <span className="flex-1">All datasets</span>
-            <span className="text-muted-foreground font-mono text-xs tabular-nums">
-              {formatCount(totalLeads)}
-            </span>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          {datasets.map((dataset) => (
-            <DropdownMenuItem key={dataset.id} onClick={() => void setDatasetId(dataset.id)}>
-              <Check
-                className={cn("size-3.5", datasetId === dataset.id ? "opacity-100" : "opacity-0")}
-              />
-              <span className="flex-1 truncate">{dataset.label}</span>
+          {/* Base UI requires GroupLabel to be inside a Group — a bare Label
+              throws at open time (Base UI error #31), not at build time. */}
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Dataset scope</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => void setDatasetId(null)}>
+              <Check className={cn("size-3.5", datasetId ? "opacity-0" : "opacity-100")} />
+              <span className="flex-1">All datasets</span>
               <span className="text-muted-foreground font-mono text-xs tabular-nums">
-                {formatCount(dataset.leadCount)}
+                {formatCount(totalLeads)}
               </span>
             </DropdownMenuItem>
-          ))}
+            <DropdownMenuSeparator />
+            {datasets.map((dataset) => (
+              <DropdownMenuItem key={dataset.id} onClick={() => void setDatasetId(dataset.id)}>
+                <Check
+                  className={cn("size-3.5", datasetId === dataset.id ? "opacity-100" : "opacity-0")}
+                />
+                <span className="flex-1 truncate">{dataset.label}</span>
+                <span className="text-muted-foreground font-mono text-xs tabular-nums">
+                  {formatCount(dataset.leadCount)}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
 
       <div className="flex-1" />
       <ThemeToggle />
+
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button variant="ghost" size="icon" aria-label="Account">
+              <UserIcon className="size-4" aria-hidden />
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="truncate font-normal">{userEmail}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push("/account")}>Account</DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                void signOut().then(() => router.push("/login"));
+              }}
+            >
+              <LogOut className="size-3.5" aria-hidden />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
   );
 }

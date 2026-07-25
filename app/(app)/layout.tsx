@@ -1,13 +1,15 @@
 import { Suspense } from "react";
-import { requireUser } from "@/application/auth/current-user";
+import { redirect } from "next/navigation";
+import { currentUser } from "@/application/auth/current-user";
 import { AppSidebar } from "@/features/shell/components/app-sidebar";
 import { AppTopbar } from "@/features/shell/components/app-topbar";
 import { listDatasets } from "@/application/datasets/dataset-queries";
 
-async function DatasetSwitcherSlot() {
+async function DatasetSwitcherSlot({ userEmail }: { userEmail: string }) {
   const datasets = await listDatasets();
   return (
     <AppTopbar
+      userEmail={userEmail}
       datasets={datasets.map((d) => ({
         id: d.id,
         label: d.label,
@@ -22,16 +24,25 @@ async function DatasetSwitcherSlot() {
  * The shell reads the session, which is per-request data. Under Cache
  * Components that has to sit inside a Suspense boundary, otherwise it blocks
  * the whole route from prerendering and every page waits on the auth check.
+ *
+ * Deliberately `currentUser()` here, not `requireUser()` — this layout also
+ * wraps `/account`, and `requireUser()` redirects to `/account` whenever
+ * `mustChangePassword` is set, which would loop forever on that exact route.
+ * The chrome itself isn't sensitive; the real per-page gate (`requireUser()`/
+ * `requireAdmin()`) still runs in every page's own Server Component, which is
+ * what actually enforces the redirect (see the comment on `requireUser()` for
+ * why that has to live at the page, not here).
  */
 async function AuthedShell({ children }: { children: React.ReactNode }) {
-  const user = await requireUser();
+  const user = await currentUser();
+  if (!user) redirect("/login");
 
   return (
     <div className="bg-background flex min-h-dvh">
       <AppSidebar role={user.role} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Suspense fallback={<div className="border-border h-14 border-b" />}>
-          <DatasetSwitcherSlot />
+          <DatasetSwitcherSlot userEmail={user.email} />
         </Suspense>
         <main className="min-w-0 flex-1">{children}</main>
       </div>

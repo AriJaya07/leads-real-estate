@@ -163,6 +163,19 @@ conventions.
   `Intl.NumberFormat` to `en-US` explicitly. A bare `toLocaleString()` uses the runtime
   locale, which differs between SSR and the browser and produces a hydration mismatch —
   don't reintroduce that.
+- **`DropdownMenuLabel` (Base UI's `Menu.GroupLabel`) must be wrapped in
+  `DropdownMenuGroup` (`Menu.Group`).** Used bare, it throws at *open* time, not build
+  time — TypeScript won't catch it, and neither will a test that never actually clicks
+  the trigger. This broke the dataset-scope dropdown in production for an unknown
+  period before an e2e test that opened it caught it. If you add a dropdown with a
+  label, open it in a real browser (or an e2e test) before considering it done —
+  `npm run typecheck`/`npm run lint` passing is not evidence a Base UI menu actually
+  renders.
+- Every protected page calls `requireUser()`/`requireAdmin()` itself, even though the
+  shared `(app)` layout also checks auth — see
+  [docs/architecture.md](architecture.md)'s Auth model section for why the layout alone
+  isn't sufficient (it doesn't re-run on client-side navigation between siblings).
+  Forgetting this on a new page silently relies on the layout's weaker guarantee.
 
 ## Logging
 

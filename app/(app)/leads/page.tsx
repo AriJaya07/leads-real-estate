@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { requireUser } from "@/application/auth/current-user";
 import { leadFiltersSchema } from "@/application/leads/filters.schema";
 import { queryLeads, getLeadStats } from "@/application/leads/lead-queries";
 import { getDynamicAttributeFacets, getLeadFacets } from "@/application/leads/facets";
@@ -44,7 +45,12 @@ async function Inbox({ searchParams }: { searchParams: SearchParams }) {
   return <LeadInbox page={page} filters={filters} facets={[...facets, ...dynamicFacets]} />;
 }
 
-export default function LeadsPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function LeadsPage({ searchParams }: { searchParams: SearchParams }) {
+  // The shared (app) layout only checks "is anyone signed in" (see its comment
+  // on why the mustChangePassword gate can't live there) — this page is the
+  // actual DAL enforcement point for both.
+  await requireUser();
+
   return (
     <div className="flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader

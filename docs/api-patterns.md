@@ -7,13 +7,22 @@ are documented here.
 
 ## Server actions
 
-Built on `next-safe-action` (see `application/safe-action.ts`). Three clients:
+Built on `next-safe-action` (see `application/safe-action.ts`). Four clients:
 
 ```ts
 export const actionClient = createSafeActionClient({ handleServerError(error) { ... } });
-export const authActionClient = actionClient.use(/* re-verify session */);
+export const authActionClient = actionClient.use(/* re-verify session; block if mustChangePassword */);
 export const adminActionClient = authActionClient.use(/* require role === "admin" */);
+export const authActionClientAllowPendingPasswordChange = actionClient.use(/* re-verify session only */);
 ```
+
+`authActionClient` blocks while `mustChangePassword` is set — a temporary password must
+be changed before anything else, and this is what closes that gap for a server action
+called directly, not just page navigation (see
+[docs/architecture.md](architecture.md)'s Auth model section). The fourth client exists
+for exactly one reason: `changePassword` (and `signOutEverywhere`) must work *while*
+that flag is set, since resolving it is the whole point. Don't reach for the fourth
+client for anything else — it's a narrow, deliberate exception, not a weaker default.
 
 ### Writing a new action
 

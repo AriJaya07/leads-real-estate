@@ -35,4 +35,26 @@ test.describe("lead triage", () => {
     await expect(page).toHaveURL(/status=new/);
     await expect(page).toHaveURL(/sort=priority/);
   });
+
+  test("the dataset-scope dropdown opens and filters without crashing", async ({ page }) => {
+    // Regression: Base UI's Menu.GroupLabel throws at open time (not build
+    // time) when used outside a Menu.Group — this dropdown had exactly that
+    // bug and nothing had ever opened it in a test, so it shipped broken.
+    await loginAsAdmin(page);
+    await page.goto("/leads");
+
+    await page.getByRole("button", { name: /All datasets/ }).click();
+    await expect(page.getByText("Dataset scope")).toBeVisible();
+
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    const option = page.getByRole("menuitem").filter({ hasNotText: "All datasets" }).first();
+    if (await option.count()) {
+      await option.click();
+      await expect(page).toHaveURL(/datasetId=/);
+    }
+
+    expect(errors).toEqual([]);
+  });
 });

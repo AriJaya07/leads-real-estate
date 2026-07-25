@@ -143,6 +143,34 @@ Cron/webhook routes carry their own bearer secret instead
 excluded from the proxy matcher. No email provider is involved in sign-in; the first
 account to sign in on a fresh instance claims admin.
 
+**Sessions are revocable, not just verifiable.** A JWT is otherwise stateless and stays
+valid until its own expiry (14 days) no matter what happens to the account afterward —
+`users.sessionVersion` closes that gap. It's embedded in the JWT at sign-in and compared
+against the live DB value on every `currentUser()` call
+(`domain/auth/session-version.ts::isSessionRevoked`); a mismatch is treated as signed
+out. It's bumped by `changePassword` (self-service — then immediately re-issues a fresh
+session for the *same* device, so the person changing their own password isn't logged
+out by their own action, while every other session for the account dies on its next
+request), by an admin's `resetTeamMemberPassword`, and by `signOutEverywhere`.
+
+**A temporary password blocks everything else until it's changed.** `users.mustChangePassword`
+gates at two independent layers, per Next's own guidance that a client-side redirect
+alone isn't a security boundary: `requireUser()` redirects to `/account`, and
+`authActionClient` separately rejects every action except `changePassword` while the
+flag is set. Both layers matter — closing only one leaves the other reachable directly.
+
+**Every protected page calls `requireUser()`/`requireAdmin()` itself — the shared
+`(app)` layout deliberately does not enforce beyond "is anyone signed in."** Next.js
+layouts don't re-render on client-side navigation between sibling pages, so a check
+placed only in the layout is unreliable past the first hard load; each page's own
+Server Component render doesn't have that problem. This also avoids a redirect loop:
+the layout wraps `/account` too, and `requireUser()`'s own mustChangePassword redirect
+*targets* `/account` — enforcing it in the shared shell would loop forever on that exact
+route. See the comment on `requireUser()` and on `AuthedShell` in
+[app/(app)/layout.tsx](../app/(app)/layout.tsx) for the full reasoning. If you add a new
+protected page, give it its own `requireUser()`/`requireAdmin()` call — don't assume the
+layout covers it.
+
 ## Cache invalidation
 
 `updateTag` is used where a user must see the effect of their own action immediately
