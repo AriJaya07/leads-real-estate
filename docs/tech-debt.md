@@ -57,6 +57,19 @@ is a product decision (per-dataset detail view vs. a cross-dataset activity feed
 would need a new "recent runs across all datasets" query) more than missing plumbing —
 that's why this round left it as a placeholder rather than guessing the IA.
 
+## Five server actions exist with no UI wired to them yet
+
+`assignLead`, `toggleBookmark` (`application/leads/lead.actions.ts`), `configureSync`,
+`acceptSchemaVersion`, `approveMappingProfile` (`application/datasets/dataset.actions.ts`)
+are fully implemented, validated, tagged for cache invalidation, and unreachable from
+any page today — same shape as the `getDatasetDetail`/`getSyncEvents` situation above.
+Each corresponds to a real schema column or workflow already in the domain model
+(`lead_states.assignedTo`/`bookmarked`, `datasets.autoSyncEnabled`/`syncIntervalSeconds`,
+`dataset_versions.acceptedAt`, `mapping_profiles.approvedAt`) — this is backend capacity
+ahead of UI, not orphaned code, and the fix when the UI exists is "wire a button to the
+existing action," not "write the action." Kept (not deleted) for the same reason as
+`getDatasetDetail`/`getSyncEvents`.
+
 ## ~~Duplicated ranking formula (SQL vs. TypeScript)~~ — fixed
 
 `domain/lead/ranking.ts` now exports its weights (`BUYER_INTENT_WEIGHT`,

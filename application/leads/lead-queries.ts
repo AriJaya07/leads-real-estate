@@ -304,38 +304,3 @@ export async function getLeadStats(datasetId?: string): Promise<LeadStats> {
       row.medianTtft === null ? null : Math.round(Number(row.medianTtft)),
   };
 }
-
-export async function getLeadById(leadId: string) {
-  const [row] = await db()
-    .select({
-      lead: schema.leads,
-      state: schema.leadStates,
-      datasetName: schema.datasets.title,
-    })
-    .from(schema.leads)
-    .leftJoin(schema.leadStates, eq(schema.leadStates.leadId, schema.leads.id))
-    .leftJoin(schema.datasets, eq(schema.datasets.id, schema.leads.datasetId))
-    .where(eq(schema.leads.id, leadId))
-    .limit(1);
-
-  if (!row) return null;
-
-  const duplicates = await db()
-    .select({
-      id: schema.leads.id,
-      postedAt: schema.leads.postedAt,
-      externalUrl: schema.leads.externalUrl,
-      authorName: schema.leads.authorName,
-    })
-    .from(schema.leads)
-    .where(eq(schema.leads.canonicalLeadId, leadId));
-
-  const events = await db()
-    .select()
-    .from(schema.leadEvents)
-    .where(eq(schema.leadEvents.leadId, leadId))
-    .orderBy(desc(schema.leadEvents.at))
-    .limit(50);
-
-  return { ...row, duplicates, events };
-}

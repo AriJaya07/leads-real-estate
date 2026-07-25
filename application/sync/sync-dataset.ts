@@ -25,7 +25,7 @@ import { processRawRecords } from "@/application/leads/process-records";
 import { SyncLogger } from "./sync-logger";
 import { dispatchAlertsForLeads } from "@/application/alerting/dispatch";
 
-export interface SyncCursor {
+interface SyncCursor {
   lastOffset?: number;
   lastItemCount?: number;
   lastSyncedAt?: string;

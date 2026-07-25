@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/common/spinner";
 import { signIn } from "@/application/auth/login.actions";
 
 export function LoginForm({ isFirstRun }: { isFirstRun: boolean }) {
@@ -80,7 +80,7 @@ export function LoginForm({ isFirstRun }: { isFirstRun: boolean }) {
       </div>
 
       <Button type="submit" disabled={pending}>
-        {pending && <Loader2 className="size-4 animate-spin" aria-hidden />}
+        {pending && <Spinner className="size-4" />}
         {isFirstRun ? "Create admin account" : "Sign in"}
       </Button>
 

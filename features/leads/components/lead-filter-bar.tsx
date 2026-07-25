@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useUrlFilters } from "@/hooks/use-url-filters";
+import { triageFilters } from "@/application/leads/filters.schema";
 import type { FacetDescriptor } from "@/application/leads/facets";
 
 /**
@@ -66,9 +67,13 @@ export function LeadFilterBar({
           size="sm"
           onClick={() =>
             update((next) => {
-              next.set("intent", "buyer");
-              next.set("status", "new");
-              next.set("sort", "priority");
+              // `triageFilters()` is the single definition of what "triage mode"
+              // means (application/leads/filters.schema.ts) — looping over it
+              // here instead of hardcoding the fields keeps this button correct
+              // if that definition ever changes.
+              for (const [key, value] of Object.entries(triageFilters())) {
+                next.set(key, Array.isArray(value) ? value.join(",") : String(value));
+              }
             })
           }
         >

@@ -42,7 +42,7 @@ function matchesFilters(dataset: RemoteDataset, config: SourceConfig): boolean {
  * upstream shows up here on the next discovery pass, with no human action and no
  * deploy.
  */
-export async function discoverDatasets(sourceId: string): Promise<DiscoveryResult> {
+async function discoverDatasets(sourceId: string): Promise<DiscoveryResult> {
   const result: DiscoveryResult = { sourceId, seen: 0, added: 0, updated: 0, missing: 0, errors: [] };
 
   const [source] = await db()

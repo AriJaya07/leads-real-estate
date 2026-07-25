@@ -1,10 +1,8 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { DatasetSummary } from "@/application/datasets/dataset-queries";
 import { datasetsQueryKey } from "./query-keys";
-
-export { datasetsQueryKey };
 
 /**
  * Backs the topbar's dataset switcher. Datasets change rarely (a discovery
@@ -28,16 +26,4 @@ export function useDatasetsQuery(initialData?: DatasetSummary[]) {
     staleTime: 60_000,
     initialData,
   });
-}
-
-/**
- * Server actions that change dataset state already call `updateTag`/
- * `revalidateTag` for the *server-rendered* cache — this is the client-side
- * half of the same invalidation, for the React Query cache the topbar reads
- * from. Skipping this half is what "the switcher shows a dataset as paused
- * that was just reactivated" bugs are made of.
- */
-export function useInvalidateDatasets() {
-  const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: datasetsQueryKey });
 }

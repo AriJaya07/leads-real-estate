@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, KeyRound, Loader2, Trash2, UserPlus } from "lucide-react";
+import { Copy, KeyRound, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RelativeTime } from "@/components/common/relative-time";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/common/empty-state";
+import { DataTable, DataTableHead } from "@/components/common/data-table";
+import { Spinner } from "@/components/common/spinner";
 import {
   createTeamMember,
   removeTeamMember,
@@ -167,11 +169,7 @@ export function TeamTable({
           </select>
         </div>
         <Button type="submit" disabled={busy}>
-          {busy ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          ) : (
-            <UserPlus className="size-3.5" aria-hidden />
-          )}
+          {busy ? <Spinner className="size-3.5" /> : <UserPlus className="size-3.5" aria-hidden />}
           Add member
         </Button>
       </form>
@@ -182,17 +180,14 @@ export function TeamTable({
           description="Add the first teammate above — they&rsquo;ll get a temporary password to sign in with."
         />
       ) : (
-        <div className="border-border overflow-x-auto rounded-xl border">
-          <table className="w-full min-w-[720px] text-sm">
-            <thead className="bg-muted/50 text-muted-foreground">
-              <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-left [&>th]:font-medium">
-                <th>Member</th>
-                <th className="w-28">Role</th>
-                <th className="w-36">Last seen</th>
-                <th className="w-44">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+        <DataTable minWidth="min-w-[720px]">
+          <DataTableHead>
+            <th>Member</th>
+            <th className="w-28">Role</th>
+            <th className="w-36">Last seen</th>
+            <th className="w-44">Actions</th>
+          </DataTableHead>
+          <tbody>
               {members.map((member) => (
                 <tr key={member.id} className="border-border border-t">
                   <td className="px-3 py-2.5">
@@ -247,9 +242,8 @@ export function TeamTable({
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
+          </tbody>
+        </DataTable>
       )}
     </div>
   );

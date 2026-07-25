@@ -7,8 +7,6 @@ import type { LeadPage, LeadStats } from "@/application/leads/lead-queries";
 import type { FacetDescriptor } from "@/application/leads/facets";
 import { leadFacetsQueryKey, leadStatsQueryKey, leadsQueryKey } from "./query-keys";
 
-export { leadFacetsQueryKey, leadStatsQueryKey, leadsQueryKey };
-
 async function fetchJson<T>(url: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`Request to ${url} failed: ${response.status}`);

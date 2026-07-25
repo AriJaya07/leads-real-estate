@@ -22,7 +22,3 @@ const nullNotifier: Notifier = {
 export function getNotifier(channel: string): Notifier {
   return notifiers.get(channel) ?? nullNotifier;
 }
-
-export function availableChannels(): string[] {
-  return [...notifiers.keys()];
-}

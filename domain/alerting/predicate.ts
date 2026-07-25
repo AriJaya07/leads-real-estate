@@ -7,7 +7,7 @@
  * that can run code is a rule engine that can be exploited.
  */
 
-export type ComparisonOp =
+type ComparisonOp =
   | "eq"
   | "neq"
   | "gt"
@@ -21,34 +21,34 @@ export type ComparisonOp =
   | "exists"
   | "within";
 
-export interface Comparison {
+interface Comparison {
   field: string;
   op: ComparisonOp;
   value?: unknown;
 }
 
-export interface AllOf {
+interface AllOf {
   all: Predicate[];
 }
-export interface AnyOf {
+interface AnyOf {
   any: Predicate[];
 }
-export interface NotOf {
+interface NotOf {
   not: Predicate;
 }
 
 export type Predicate = Comparison | AllOf | AnyOf | NotOf;
 
-export function isAllOf(p: Predicate): p is AllOf {
+function isAllOf(p: Predicate): p is AllOf {
   return "all" in p;
 }
-export function isAnyOf(p: Predicate): p is AnyOf {
+function isAnyOf(p: Predicate): p is AnyOf {
   return "any" in p;
 }
-export function isNotOf(p: Predicate): p is NotOf {
+function isNotOf(p: Predicate): p is NotOf {
   return "not" in p;
 }
-export function isComparison(p: Predicate): p is Comparison {
+function isComparison(p: Predicate): p is Comparison {
   return "field" in p && "op" in p;
 }
 

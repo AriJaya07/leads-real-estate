@@ -16,9 +16,9 @@ import "server-only";
  * processing needs outgrow this.
  */
 
-export type LogLevel = "debug" | "info" | "warn" | "error";
+type LogLevel = "debug" | "info" | "warn" | "error";
 
-export type LogFields = Record<string, unknown>;
+type LogFields = Record<string, unknown>;
 
 export interface Logger {
   debug(message: string, fields?: LogFields): void;

@@ -9,17 +9,9 @@ import { z } from "zod";
  * hardcoded list of keys, which is what lets a brand-new upstream field become a
  * working filter with no code change.
  */
-export const leadSortEnum = z.enum([
-  "priority",
-  "newest",
-  "intent",
-  "quality",
-  "reach",
-  "oldest",
-]);
-export type LeadSort = z.infer<typeof leadSortEnum>;
+const leadSortEnum = z.enum(["priority", "newest", "intent", "quality", "reach", "oldest"]);
 
-export const leadViewEnum = z.enum(["table", "cards"]);
+const leadViewEnum = z.enum(["table", "cards"]);
 
 const csv = z
   .union([z.string(), z.array(z.string())])
@@ -30,7 +22,7 @@ const csv = z
     return list.map((v) => v.trim()).filter(Boolean);
   });
 
-export const leadFiltersSchema = z.object({
+const leadFiltersSchema = z.object({
   q: z.string().trim().default(""),
   datasetId: z.string().uuid().optional(),
   intent: csv,

@@ -3,7 +3,7 @@ import type { RemoteDataset, RemoteItemPage, SourceConnector } from "@/domain/sy
 import { APIFY_API_BASE_URL } from "@/shared/constants";
 import { serverEnv } from "@/shared/config/env";
 
-export class ApifyError extends Error {
+class ApifyError extends Error {
   constructor(
     message: string,
     readonly status?: number,

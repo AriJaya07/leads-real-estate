@@ -142,13 +142,27 @@ conventions.
 - Zod schemas double as both runtime validation and the TypeScript source of truth
   (`z.infer<typeof leadFiltersSchema>`) — define the Zod schema first, derive the type
   from it, not the other way around.
+- **`export` only what a different file actually imports.** A function/type used solely
+  within its own module shouldn't carry `export` — it overstates the module's public
+  API and is exactly what a dead-code check (`npx knip`) flags as an "unused export"
+  false alarm on every future audit. This was cleaned up wholesale in one pass rather
+  than case-by-case (`domain/alerting/predicate.ts`'s `isAllOf`/`isAnyOf`/etc.,
+  `domain/dataset/mapping.ts`'s `applyFieldRule`, `infrastructure/auth/session.ts`'s
+  `verifySession`, and others) — keep new internal helpers unexported by default and
+  only add `export` when a second file needs to import it.
 
 ## UI conventions
 
 - `components/ui/` — shadcn primitives (style `base-nova`, see `components.json`), don't
   hand-edit these beyond what `shadcn` generates; regenerate via the CLI instead.
 - `components/common/` — small composed components shared across features
-  (`empty-state`, `score-badge`, `relative-time`, etc).
+  (`empty-state`, `score-badge`, `relative-time`, `spinner`, `data-table`, etc). Two
+  worth knowing specifically: `Spinner` is the one place `<Loader2 className="animate-spin"
+  aria-hidden />` is written — every busy-state button (dataset sync, discovery, add
+  team member, form submits) renders it instead of inlining the markup. `DataTable`/
+  `DataTableHead` are the bordered, scrollable table shell every hand-rolled admin
+  table (leads, datasets, team) shares — a new admin table reaches for these rather
+  than re-writing the wrapper `<div>`/`<table>`/`<thead>` classes again.
 - `features/<name>/components/` — feature-scoped, not reused elsewhere, and named to
   match its `application/<name>/` counterpart 1:1 where one exists
   (`features/datasets` ↔ `application/datasets`, `features/team` ↔
@@ -173,8 +187,9 @@ conventions.
   [architecture.md](architecture.md)'s "Search, filtering, and client-side data
   fetching". Don't reach for it on a page that just reads once per navigation; a Server
   Component calling its `*-queries.ts` function directly is still the default. Where it
-  is used: query-key functions live in a directive-free `features/<name>/query-keys.ts`
-  (not the `"use client"` `queries.ts` that also re-exports them), because a Server
+  is used: query-key functions live in a directive-free `features/<name>/query-keys.ts`,
+  imported separately by both the prefetching Server Component and the `"use client"`
+  `queries.ts` hooks — never re-exported from `queries.ts` itself, because a Server
   Component can't call a function exported from a `"use client"` module. Every mutation
   that touches a React-Query-cached view must invalidate both the RSC tag cache
   (`updateTag`/`revalidateTag`, already required — see "Cache invalidation" in
@@ -227,3 +242,27 @@ not `` log.error(`failed to X: ${leadId}`) ``.
   *before* the expensive/sensitive work, with the same fake-timing cost on the way out
   as a real failure would have — a throttled response must not be distinguishable by
   latency from a normal one.
+
+## Dead-code hygiene
+
+`npx knip` (no local install needed — it's not a dependency) finds unused files, unused
+`package.json` dependencies, and unused exports across the whole project. Run it after
+any round of feature work that removes or replaces a code path, not just at the end of
+a dedicated cleanup pass. Before deleting anything it flags:
+
+- **Unused files**: check whether the file is reachable through a config-only path
+  knip can't trace — `test/stubs/server-only.ts` is a permanent false positive here,
+  wired in via `vitest.config.ts`'s `resolve.alias`, not an import statement.
+- **Unused dependencies**: check config files (`eslint.config.mjs`, `.prettierrc`-style
+  files, package.json's own `"prettier"`/`"lint-staged"` fields, husky hooks) before
+  trusting the flag — a formatter/linter plugin is often referenced only from config,
+  never from a source file. If a dependency has no config, no script, and no import
+  anywhere, it's a real orphan, not a false positive — that was the case for the
+  `@testing-library/*` trio, `jsdom`, and the prettier/lint-staged tooling, none of
+  which had a config file or a call site.
+- **Unused exports**: an unexported-elsewhere symbol usually just needs its `export`
+  keyword dropped (see the Types section's "export only what's used outside the file"
+  rule), not deletion — check whether it's used *within* its own file first. A genuinely
+  dead export tied to real backend capability (a schema column, a workflow) ahead of
+  its UI — `getDatasetDetail`, `assignLead`, etc. — belongs in `docs/tech-debt.md` as
+  intentional, not deleted; see that file for the running list.

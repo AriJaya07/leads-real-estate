@@ -5,13 +5,13 @@ import { usePathname } from "next/navigation";
 import { Database, Inbox, KanbanSquare, Settings2, TrendingUp, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const NAV = [
+const NAV = [
   { href: "/leads", label: "Inbox", icon: Inbox },
   { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { href: "/intelligence", label: "Intelligence", icon: TrendingUp },
 ];
 
-export const ADMIN_NAV = [
+const ADMIN_NAV = [
   { href: "/admin/datasets", label: "Datasets", icon: Database },
   { href: "/admin/sync", label: "Sync", icon: Settings2 },
   { href: "/admin/team", label: "Team", icon: Users },

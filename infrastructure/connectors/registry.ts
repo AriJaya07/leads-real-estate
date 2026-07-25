@@ -15,10 +15,6 @@ export function getConnector(kind: string): SourceConnector {
   return connector;
 }
 
-export function connectorKinds(): string[] {
-  return [...connectors.keys()];
-}
-
 /**
  * Registers an adapter under a source kind, overwriting any existing one for that
  * kind. Exists for two reasons: a real new connector wiring itself in at startup,

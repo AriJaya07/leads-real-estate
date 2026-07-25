@@ -1,11 +1,12 @@
 "use client";
 
-import { Loader2, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/common/spinner";
 import { runDiscovery } from "@/application/datasets/dataset.actions";
 import { useServerAction } from "@/hooks/use-server-action";
-import { datasetsQueryKey } from "@/features/datasets/queries";
+import { datasetsQueryKey } from "@/features/datasets/query-keys";
 
 export function DiscoveryButton() {
   const { busyId, run } = useServerAction();
@@ -28,7 +29,7 @@ export function DiscoveryButton() {
   return (
     <Button size="sm" onClick={() => void discover()} disabled={busyId === "discovery"}>
       {busyId === "discovery" ? (
-        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+        <Spinner className="size-3.5" />
       ) : (
         <RefreshCw className="size-3.5" aria-hidden />
       )}

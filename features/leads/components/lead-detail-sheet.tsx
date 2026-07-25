@@ -4,12 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { IntentBadge } from "@/components/common/intent-badge";
 import { ScoreBadge } from "@/components/common/score-badge";
+import { Spinner } from "@/components/common/spinner";
 import { saveLeadNotes, setLeadStatus } from "@/application/leads/lead.actions";
 import type { LeadListItem } from "@/application/leads/lead-queries";
 
@@ -196,7 +197,7 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
                 Original post
               </Button>
             )}
-            {saving && <Loader2 className="text-muted-foreground size-4 animate-spin" aria-hidden />}
+            {saving && <Spinner className="text-muted-foreground size-4" />}
           </div>
         </div>
       </SheetContent>

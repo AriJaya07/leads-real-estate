@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/common/spinner";
 import { changePassword } from "@/application/auth/login.actions";
 
 export function ChangePasswordForm({ forced }: { forced: boolean }) {
@@ -81,7 +81,7 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
       </div>
 
       <Button type="submit" disabled={pending}>
-        {pending && <Loader2 className="size-4 animate-spin" aria-hidden />}
+        {pending && <Spinner className="size-4" />}
         Change password
       </Button>
     </form>

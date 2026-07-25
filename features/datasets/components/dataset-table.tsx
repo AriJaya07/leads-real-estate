@@ -1,19 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { Archive, Loader2, Pause, Play, RefreshCw, Search } from "lucide-react";
+import { Archive, Pause, Play, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HealthPill } from "@/components/common/health-pill";
 import { EmptyState } from "@/components/common/empty-state";
 import { RelativeTime } from "@/components/common/relative-time";
+import { Spinner } from "@/components/common/spinner";
+import { DataTable, DataTableHead } from "@/components/common/data-table";
 import { runSync, setDatasetStatus } from "@/application/datasets/dataset.actions";
 import { useServerAction } from "@/hooks/use-server-action";
 import type { DatasetSummary } from "@/application/datasets/dataset-queries";
 import { cn } from "@/lib/utils";
 import { formatCount } from "@/shared/format";
-import { datasetsQueryKey } from "@/features/datasets/queries";
+import { datasetsQueryKey } from "@/features/datasets/query-keys";
 
 export function DatasetTable({ datasets }: { datasets: DatasetSummary[] }) {
   const [query, setQuery] = useState("");
@@ -67,21 +69,18 @@ export function DatasetTable({ datasets }: { datasets: DatasetSummary[] }) {
         />
       </div>
 
-      <div className="border-border overflow-x-auto rounded-xl border">
-        <table className="w-full min-w-[900px] text-sm">
-          <thead className="bg-muted/50 text-muted-foreground">
-            <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-left [&>th]:font-medium">
-              <th>Dataset</th>
-              <th className="w-32">Health</th>
-              <th className="w-24">Items</th>
-              <th className="w-24">Leads</th>
-              <th className="w-24">Buyers</th>
-              <th className="w-32">Last sync</th>
-              <th className="w-40">Mapping</th>
-              <th className="w-36">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
+      <DataTable minWidth="min-w-[900px]">
+        <DataTableHead>
+          <th>Dataset</th>
+          <th className="w-32">Health</th>
+          <th className="w-24">Items</th>
+          <th className="w-24">Leads</th>
+          <th className="w-24">Buyers</th>
+          <th className="w-32">Last sync</th>
+          <th className="w-40">Mapping</th>
+          <th className="w-36">Actions</th>
+        </DataTableHead>
+        <tbody>
             {filtered.map((dataset) => (
               <tr
                 key={dataset.id}
@@ -139,7 +138,7 @@ export function DatasetTable({ datasets }: { datasets: DatasetSummary[] }) {
                       onClick={() => void sync(dataset)}
                     >
                       {busyId === dataset.id ? (
-                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                        <Spinner className="size-3.5" />
                       ) : (
                         <RefreshCw className="size-3.5" aria-hidden />
                       )}
@@ -172,9 +171,8 @@ export function DatasetTable({ datasets }: { datasets: DatasetSummary[] }) {
                 </td>
               </tr>
             ))}
-          </tbody>
-        </table>
-      </div>
+        </tbody>
+      </DataTable>
     </div>
   );
 }

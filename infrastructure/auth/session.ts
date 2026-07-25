@@ -24,7 +24,7 @@ export async function signSession(payload: SessionPayload): Promise<string> {
     .sign(secretKey());
 }
 
-export async function verifySession(token: string): Promise<SessionPayload | null> {
+async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
     if (

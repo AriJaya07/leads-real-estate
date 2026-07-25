@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
 import { TableSkeleton } from "@/components/common/table-skeleton";
+import { DataTable, DataTableHead } from "@/components/common/data-table";
 import { RelativeTime } from "@/components/common/relative-time";
 import { IntentBadge } from "@/components/common/intent-badge";
 import { ScoreBadge, ScoreReasons } from "@/components/common/score-badge";
@@ -344,29 +345,26 @@ export function LeadInbox() {
                 ))}
               </div>
             ) : (
-              <div
-                className="border-border hidden overflow-x-auto rounded-xl border md:block"
+              <DataTable
+                minWidth="min-w-[900px]"
+                className="hidden md:block"
                 data-testid="lead-list-desktop"
               >
-                <table className="w-full min-w-[900px] text-sm">
-                  <thead className="bg-muted/50 text-muted-foreground">
-                    <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-left [&>th]:font-medium">
-                      <th className="w-20">Score</th>
-                      <th>Lead</th>
-                      <th className="w-32">Wants</th>
-                      <th className="w-32">Where</th>
-                      <th className="w-28">Budget</th>
-                      <th className="w-24">Posted</th>
-                      <th className="w-36">Act</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {page.items.map((lead) => (
-                      <LeadRow key={lead.id} lead={lead} onSelect={setSelected} onContact={contact} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                <DataTableHead>
+                  <th className="w-20">Score</th>
+                  <th>Lead</th>
+                  <th className="w-32">Wants</th>
+                  <th className="w-32">Where</th>
+                  <th className="w-28">Budget</th>
+                  <th className="w-24">Posted</th>
+                  <th className="w-36">Act</th>
+                </DataTableHead>
+                <tbody>
+                  {page.items.map((lead) => (
+                    <LeadRow key={lead.id} lead={lead} onSelect={setSelected} onContact={contact} />
+                  ))}
+                </tbody>
+              </DataTable>
             )}
           </div>
 
