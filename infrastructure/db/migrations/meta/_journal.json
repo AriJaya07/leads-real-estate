@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1784968777203,
+      "tag": "0000_dry_swordsman",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784970054961,
+      "tag": "0001_moaning_omega_sentinel",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784971505018,
+      "tag": "0002_abnormal_obadiah_stane",
+      "breakpoints": true
+    }
+  ]
+}
