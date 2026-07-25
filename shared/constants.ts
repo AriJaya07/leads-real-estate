@@ -52,3 +52,14 @@ export const MAPPING_QUALITY_MAX_EMPTY_BODY_RATE = 0.5;
 /** Sign-in throttling window and threshold — see application/auth/login-attempts.ts. */
 export const LOGIN_ATTEMPT_WINDOW_MINUTES = 15;
 export const LOGIN_MAX_FAILED_ATTEMPTS = 5;
+
+/**
+ * Retention for append-only tables nothing else prunes — see
+ * application/maintenance/prune-old-rows.ts. `sync_runs` and `lead_events` are
+ * deliberately not on this list: `sync_runs` backs historical admin log lookups
+ * (`getDatasetDetail`), and `lead_events` is the funnel-analytics source of
+ * truth, not disposable operational noise the way per-line sync logs and
+ * failed-login rows are.
+ */
+export const SYNC_EVENTS_RETENTION_DAYS = 30;
+export const LOGIN_ATTEMPTS_RETENTION_DAYS = 7;

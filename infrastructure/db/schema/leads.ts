@@ -98,6 +98,22 @@ export const leads = pgTable(
       sql`to_tsvector('simple', coalesce(${t.body}, '') || ' ' || coalesce(${t.authorName}, '') || ' ' || coalesce(${t.listingTitle}, ''))`,
     ),
     index("leads_body_trgm_idx").using("gin", sql`${t.body} gin_trgm_ops`),
+    /**
+     * Additive, not a replacement for the two unfiltered indexes above: most
+     * reads (`lead-queries.ts`, `facets.ts`, `dataset-queries.ts`) scope to
+     * `isSpam = false AND canonicalLeadId IS NULL`, but a few genuinely need the
+     * full table regardless of that scope (`includeSpam`/`includeDuplicates`
+     * filters, and `findCanonicalDuplicate`'s dedupe lookup in
+     * `process-records.ts`, which explicitly searches across spam and duplicate
+     * rows too). Smaller, targeted indexes for the common case; the full ones
+     * stay for everything else.
+     */
+    index("leads_active_posted_at_idx")
+      .on(t.postedAt)
+      .where(sql`${t.isSpam} = false AND ${t.canonicalLeadId} IS NULL`),
+    index("leads_active_intent_score_idx")
+      .on(t.intent, t.intentScore)
+      .where(sql`${t.isSpam} = false AND ${t.canonicalLeadId} IS NULL`),
   ],
 );
 

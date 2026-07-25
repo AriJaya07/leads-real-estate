@@ -29,6 +29,13 @@
       "when": 1784989421592,
       "tag": "0003_salty_terrax",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784990732050,
+      "tag": "0004_robust_molecule_man",
+      "breakpoints": true
     }
   ]
 }

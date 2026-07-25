@@ -40,6 +40,30 @@ Concretely:
   (`domain/sync/ports.ts`), registered in the corresponding `registry.ts`. Don't add a
   vendor-specific branch inside `application/sync/sync-dataset.ts`.
 
+## Repository / service naming convention
+
+`application/` is already a de facto repository + service layer — this makes the
+convention explicit so it doesn't erode as more tables/use-cases are added:
+
+- **Repository**: one `<domain>/*-queries.ts` module per table (or tightly related group
+  of tables) owns *every* read for it — `lead-queries.ts`, `dataset-queries.ts`,
+  `facets.ts`. Callers never construct a Drizzle query against that table themselves;
+  they call a named function (`queryLeads(filters)`, `listDatasets()`). Don't introduce
+  a formal `Repository<T>` interface on top of this — there's one database and one ORM,
+  with no plan to swap either, so an interface layer would be ceremony with no second
+  implementation to justify it.
+- **Service**: writes and orchestration live in one of two shapes, chosen up front:
+  - `<domain>/*.actions.ts` — server-action entry points the UI calls directly, always
+    `.inputSchema(zodSchema)` through `authActionClient`/`adminActionClient` (see
+    [api-patterns.md](api-patterns.md)).
+  - a plain `.ts` module with no `"use server"` — internal orchestration called from a
+    cron/webhook route or another service, not directly from the UI (`sync-dataset.ts`,
+    `discovery.ts`, `dispatch.ts`, `refresh-fx-rates.ts`, `process-records.ts`). This is
+    where multi-step orchestration across several repositories/adapters belongs.
+- When adding a new use-case, decide which service shape it is first — "does the UI call
+  this directly" vs. "does a route or another service call this" — rather than
+  defaulting everything into `*.actions.ts`.
+
 ## Server-only boundaries
 
 Every module that touches secrets, the database, or Node built-ins starts with
