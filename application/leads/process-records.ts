@@ -7,6 +7,9 @@ import { canonicalLocation } from "@/domain/scoring/extractors";
 import type { MappingRules } from "@/domain/dataset/types";
 import { NEAR_DUPLICATE_SIMILARITY, NEAR_DUPLICATE_WINDOW_HOURS } from "@/shared/constants";
 import type { RawRecordRow } from "@/infrastructure/db/schema/sync";
+import { createLogger } from "@/infrastructure/observability/logger";
+
+const log = createLogger("process-records");
 
 export interface ProcessResult {
   created: number;
@@ -150,14 +153,21 @@ export async function processRawRecords(
       };
 
       // Upserting on rawRecordId is what makes reprocessing idempotent: the same
-      // record always resolves to the same lead row.
+      // record always resolves to the same lead row. `xmax = 0` is the standard
+      // Postgres tell for "this returned row was inserted, not updated, by this
+      // statement" — a wall-clock-age check on `createdAt` is a racier substitute
+      // (a resync completing within the same window as the original ingest, or two
+      // records in a batch landing close together, misclassifies an update as new).
       const [lead] = await db()
         .insert(schema.leads)
         .values(values)
         .onConflictDoUpdate({ target: schema.leads.rawRecordId, set: values })
-        .returning({ id: schema.leads.id, createdAt: schema.leads.createdAt });
+        .returning({
+          id: schema.leads.id,
+          inserted: sql<boolean>`(xmax = 0)`,
+        });
 
-      const isNew = Date.now() - lead.createdAt.getTime() < 2_000;
+      const isNew = lead.inserted;
       if (isNew) result.created += 1;
       else result.updated += 1;
       if (classification.isSpam) result.spam += 1;
@@ -181,7 +191,7 @@ export async function processRawRecords(
       }
     } catch (error) {
       result.failed += 1;
-      console.error("[process-records] failed to process record", record.id, error);
+      log.error("failed to process record", { error, recordId: record.id, datasetId: options.datasetId });
     }
   }
 

@@ -1,6 +1,9 @@
 import "server-only";
 import { createSafeActionClient } from "next-safe-action";
 import { currentUser } from "@/application/auth/current-user";
+import { createLogger } from "@/infrastructure/observability/logger";
+
+const log = createLogger("action");
 
 export class ActionError extends Error {
   constructor(message: string) {
@@ -13,7 +16,7 @@ export class ActionError extends Error {
 export const actionClient = createSafeActionClient({
   handleServerError(error) {
     if (error instanceof ActionError) return error.message;
-    console.error("[action]", error);
+    log.error("unhandled server action error", { error });
     return "Something went wrong. Please try again.";
   },
 });

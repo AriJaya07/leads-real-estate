@@ -60,11 +60,13 @@ curl -H "Authorization: Bearer $CRON" localhost:3000/api/cron/sync       # inges
 
 ## Scheduled jobs
 
-Declared in `vercel.json`: discovery every 15 minutes, sync every 5. This is the
-*base* rate — per-dataset intervals adapt on top of it (faster after new items, backing
-off when quiet, tightened on weekends Bali time). See
-`domain/sync/scheduling.ts::nextIntervalSeconds`. When deploying somewhere other than
-Vercel, replicate this cron schedule by hitting the same two GET routes with the bearer
+Declared in `vercel.json`: discovery every 15 minutes, sync every 5, FX rates once daily
+at 03:00 UTC. Discovery/sync's 15/5-minute figures are the *base* rate — per-dataset
+sync intervals adapt on top of it (faster after new items, backing off when quiet,
+tightened on weekends Bali time). See `domain/sync/scheduling.ts::nextIntervalSeconds`.
+FX rates don't need that adaptive treatment — see
+`application/fx/refresh-fx-rates.ts`. When deploying somewhere other than Vercel,
+replicate this cron schedule by hitting the same three GET routes with the bearer
 secret.
 
 ## Third-party services
@@ -74,6 +76,7 @@ secret.
 | Postgres | Everything — the only datastore | `DATABASE_URL` | No — hard requirement |
 | Apify | Dataset discovery + item ingestion | `APIFY_API_TOKEN`, admin `sources` row | No — the only connector implemented today |
 | Resend | Lead alert emails | `RESEND_API_KEY` (optional) | Yes — logs instead of sending |
+| frankfurter.dev | Daily FX rate refresh | No key needed | Yes — a failed refresh leaves existing `fx_rates` rows untouched, see `application/fx/refresh-fx-rates.ts` |
 | n8n | Upstream data producer (writes into Apify datasets) | Entirely external, not part of this repo | N/A |
 
 There is no test/staging Apify token distinct from production configured anywhere in
@@ -89,17 +92,45 @@ Postgres that restricts extension creation, `pg_trgm` needs to be enabled by the
 provider first (Neon and Supabase both allow it out of the box; a locked-down RDS
 instance might not).
 
+## Test and e2e databases
+
+Integration and e2e tests need their own disposable Postgres databases — never point
+either at `.env`'s `DATABASE_URL`. See [testing-strategy.md](testing-strategy.md) for
+full detail; the short version:
+
+```bash
+# Integration tests (application/domain logic against a real DB, no browser)
+createdb dreamrue_test
+cp .env.test.example .env.test   # edit DATABASE_URL to point at dreamrue_test
+npm run db:migrate:test
+npm run test:integration
+
+# E2E tests (real build, real browser, real DB)
+createdb dreamrue_e2e
+cp .env.e2e.example .env.e2e     # edit DATABASE_URL to point at dreamrue_e2e
+node --env-file=.env.e2e infrastructure/db/migrate.mjs
+npm run build && npm run test:e2e
+```
+
+`test/integration/db-helpers.ts::resetDb()` and `e2e/global-setup.ts` both refuse to run
+against a database whose name doesn't contain "test"/"e2e" — a guard against a
+misconfigured env var pointing either suite at real data.
+
 ## Commands reference
 
 ```bash
-npm run dev          # dev server
-npm run build        # production build
-npm test              # vitest run
+npm run dev              # dev server
+npm run build             # production build
+npm test                  # vitest run — fast unit suite, no database
 npm run test:watch
-npm run typecheck    # tsc --noEmit
-npm run lint          # eslint
-npm run db:generate  # create a migration from schema changes in infrastructure/db/schema
-npm run db:migrate   # apply migrations (also creates pg_trgm)
-npm run db:seed       # source, mapping profile, alert rules, aliases, FX — idempotent, safe to re-run
-npm run db:studio    # drizzle studio
+npm run test:integration  # vitest against a real disposable database — see above
+npm run test:e2e           # playwright — needs `npm run build` first, see above
+npm run typecheck          # tsc --noEmit
+npm run lint               # eslint
+npm run db:generate       # create a migration from schema changes in infrastructure/db/schema
+npm run db:migrate         # apply migrations to .env's DATABASE_URL (also creates pg_trgm)
+npm run db:migrate:test    # same, against .env.test's DATABASE_URL
+npm run db:migrate:ci      # same, reading DATABASE_URL directly from the environment (used by CI)
+npm run db:seed            # source, mapping profile, alert rules, aliases, FX — idempotent, safe to re-run
+npm run db:studio          # drizzle studio
 ```

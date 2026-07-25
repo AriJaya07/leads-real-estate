@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, ExternalLink, MessageCircle, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/common/empty-state";
@@ -11,6 +11,7 @@ import { ScoreBadge, ScoreReasons } from "@/components/common/score-badge";
 import { LeadFilterBar } from "./lead-filter-bar";
 import { LeadDetailSheet } from "./lead-detail-sheet";
 import { markContacted } from "@/application/leads/lead.actions";
+import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { LeadFilters } from "@/application/leads/filters.schema";
 import type { FacetDescriptor } from "@/application/leads/facets";
 import type { LeadListItem, LeadPage } from "@/application/leads/lead-queries";
@@ -45,15 +46,8 @@ export function LeadInbox({
   facets: FacetDescriptor[];
 }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
+  const { goToPage } = useUrlFilters();
   const [selected, setSelected] = useState<LeadListItem | null>(null);
-
-  function goToPage(next: number) {
-    const search = new URLSearchParams(params.toString());
-    search.set("page", String(next));
-    router.push(`${pathname}?${search}`, { scroll: false });
-  }
 
   /** Logs the touch first, then opens the channel — the metric must not depend on the tab opening. */
   async function contact(lead: LeadListItem, channel: "whatsapp" | "phone" | "post") {

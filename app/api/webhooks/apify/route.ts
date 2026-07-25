@@ -8,6 +8,9 @@ import { syncDataset } from "@/application/sync/sync-dataset";
 import { secretsMatch } from "@/application/http/verify-secret";
 import { serverEnv } from "@/shared/config/env";
 import { datasetTag, leadsTag } from "@/application/cache-tags";
+import { createLogger } from "@/infrastructure/observability/logger";
+
+const log = createLogger("webhook:apify");
 
 /**
  * Webhook accelerant — *not* the primary change signal.
@@ -56,7 +59,7 @@ export async function POST(request: Request) {
       // Unknown dataset — discovery will register it, and the next tick syncs it.
       await discoverAllSources();
     } catch (error) {
-      console.error("[webhook:apify] background work failed", error);
+      log.error("background work failed", { error, externalId });
     }
   });
 

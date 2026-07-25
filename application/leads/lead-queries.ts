@@ -4,6 +4,7 @@ import { db, schema } from "@/infrastructure/db/client";
 import { priorityScore } from "@/domain/lead/ranking";
 import type { LeadFilters } from "./filters.schema";
 import { textArray, validIntents, validStatuses } from "./sql-helpers";
+import { prioritySortExpression } from "./priority-sql";
 import type { ContactInfo, ScoreReason } from "@/domain/scoring/types";
 
 export interface LeadListItem {
@@ -141,16 +142,10 @@ function orderBy(sort: LeadFilters["sort"]) {
        * Recency-decayed priority, computed in SQL so it can drive ORDER BY and
        * paginate correctly. A 95-score post from three days ago has already had
        * a dozen replies; an 80-score post from ten minutes ago is still winnable.
+       * The expression itself lives in `priority-sql.ts`, built from the same
+       * constants `domain/lead/ranking.ts::priorityScore` uses for display.
        */
-      return [
-        desc(sql`
-          (CASE WHEN ${schema.leads.intent} = 'buyer'
-                THEN (${schema.leads.intentScore} * 0.7 + ${schema.leads.qualityScore} * 0.3)
-                ELSE ${schema.leads.intentScore} * 0.2 END)
-          * power(2, -GREATEST(0, EXTRACT(EPOCH FROM (now() - ${schema.leads.postedAt})) / 3600.0) / 18.0)
-        `),
-        desc(schema.leads.postedAt),
-      ];
+      return [desc(prioritySortExpression()), desc(schema.leads.postedAt)];
   }
 }
 

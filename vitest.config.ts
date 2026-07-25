@@ -5,7 +5,10 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["**/*.test.ts"],
-    exclude: ["node_modules/**", ".next/**"],
+    // Integration tests hit a real database and have their own config
+    // (vitest.integration.config.ts) — they must not also run as part of the
+    // fast unit suite, which has no DB connection configured.
+    exclude: ["node_modules/**", ".next/**", "**/*.integration.test.ts"],
   },
   resolve: {
     alias: {

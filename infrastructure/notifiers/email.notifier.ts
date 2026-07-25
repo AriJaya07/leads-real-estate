@@ -2,6 +2,9 @@ import "server-only";
 import { Resend } from "resend";
 import type { NotificationMessage, Notifier } from "@/domain/sync/ports";
 import { serverEnv } from "@/shared/config/env";
+import { createLogger } from "@/infrastructure/observability/logger";
+
+const log = createLogger("notify:email");
 
 let client: Resend | null | undefined;
 
@@ -21,7 +24,7 @@ export const emailNotifier: Notifier = {
   async send(message: NotificationMessage) {
     const api = resend();
     if (!api) {
-      console.warn(`[notify:email] not configured; would send "${message.subject}" to ${message.to}`);
+      log.warn("not configured; dropping message", { subject: message.subject, to: message.to });
       return { ok: false, error: "RESEND_API_KEY not configured" };
     }
     try {

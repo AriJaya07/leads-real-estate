@@ -42,8 +42,14 @@ domain/           Pure TypeScript. No framework, no I/O. Ports and business rule
   lead/           Priority ranking
 
 application/      Use cases and orchestration. Server actions, Zod boundaries.
-infrastructure/   Adapters: Apify connector, Postgres/Drizzle, notifiers, auth
-features/         Feature-scoped UI (leads, admin, shell, auth)
+infrastructure/   Adapters: Apify connector, Postgres/Drizzle, notifiers, auth, FX, logging
+features/         Feature-scoped UI — one folder per application/ counterpart:
+  leads/          ↔ application/leads
+  datasets/       ↔ application/datasets (dataset registry, sync, discovery)
+  team/           ↔ application/auth/team.actions.ts
+  auth/           ↔ application/auth (login)
+  shell/          App chrome: sidebar, topbar, theme toggle — not paired 1:1
+hooks/            Shared client hooks (useUrlFilters, useServerAction) — see coding-standards.md
 components/       ui/ primitives · common/ composed · brand/ custom SVG
 app/              Routes. (app) is authenticated; (auth) is not.
 shared/           Config and constants
@@ -145,6 +151,29 @@ cron/webhook routes for stale-while-revalidate — the dashboard keeps serving i
 while aggregates rebuild in the background. Tag vocabulary is centralized in
 [application/cache-tags.ts](../application/cache-tags.ts) and is per-dataset, so syncing
 one dataset never invalidates another's cached aggregates.
+
+## Data-quality and observability additions
+
+Two small subsystems sit alongside the core pipeline without changing its shape:
+
+**Mapping-quality guardrail.** An auto-approved mapping profile (confidence ≥ 0.8, zero
+human review by design) gets its first batch checked by
+`domain/dataset/mapping-quality.ts::assessMappingQuality`. If it looks suspect (mostly
+spam-flagged or empty-body), `syncDataset` revokes the profile's approval so the next
+sync treats it as awaiting review instead of silently continuing to normalize through a
+wrong mapping. See [tech-debt.md](tech-debt.md) for what this does and doesn't catch.
+
+**FX refresh.** `GET /api/cron/fx` (daily, `vercel.json`) runs
+`application/fx/refresh-fx-rates.ts`, which refreshes every currency already tracked in
+`fx_rates` from `infrastructure/fx/fx-rate.provider.ts` (ECB rates via frankfurter.dev).
+A failed refresh leaves existing rows untouched — same "degrade gracefully" rule as
+every other adapter here.
+
+**Structured logging.** `infrastructure/observability/logger.ts` gives every log line
+outside `sync_events` a consistent JSON shape (`{ level, scope, message, ...fields,
+time }`), with an `ErrorReporter` seam for wiring a managed service like Sentry later
+without touching call sites. Nothing is plugged into that seam today — it's a shape, not
+a vendor integration.
 
 ## Not built yet
 

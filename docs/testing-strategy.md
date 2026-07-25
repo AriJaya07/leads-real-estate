@@ -1,100 +1,134 @@
 # Testing Strategy
 
-## Tooling
+Three tiers, each with its own config and its own trust boundary. Run all three before
+calling a change done; CI (`.github/workflows/ci.yml`) runs all three on every PR.
 
-Vitest (`vitest.config.ts`), `environment: "node"` (no jsdom for domain/application
-tests — see `test/stubs/server-only.ts` for how `server-only` imports are neutralized
-under test). `@testing-library/react` + `jsdom` are devDependencies for future component
-tests but no component test exists yet — see [tech-debt.md](tech-debt.md).
+| Tier | Config | Command | Hits a real DB? | Hits the real app? |
+| --- | --- | --- | --- | --- |
+| Unit | `vitest.config.ts` | `npm test` | No | No |
+| Integration | `vitest.integration.config.ts` | `npm run test:integration` | Yes (disposable) | No — calls `application/`/`domain/` functions directly |
+| E2E | `playwright.config.ts` | `npm run test:e2e` | Yes (disposable) | Yes — a real built app in a real browser |
 
+## Unit tests (`*.test.ts`)
+
+Vitest, `environment: "node"`, no database. All pure `domain/` logic plus a few
+sharp-edge units elsewhere (`infrastructure/auth/password.test.ts`,
+`application/leads/sql-helpers.test.ts`, `infrastructure/observability/logger.test.ts`).
+`.husky/pre-commit` runs `npm test` locally; CI's `unit` job runs it again on every PR.
+
+**What's worth a unit test**: anything in `domain/` by default — pure, dependency-free,
+no mocks needed. Regressions with a concrete incident behind them (see the `textArray`
+comment in `sql-helpers.test.ts`, or the presence-counting comment in
+`schema-inference.ts`) — when you fix a bug in `domain/` or `application/`, add the
+regression test in the same commit, with a comment naming what broke. Anything
+security-adjacent: constant-time comparison, password hashing, SQL parameter binding.
+Scoring/ranking/threshold constants, so a weight change is caught if it wasn't
+intentional.
+
+**What a unit test can't catch**: whether a query actually *executes* against Postgres.
+`application/leads/priority-sql.test.ts` compiled its SQL and checked the parameter list
+looked right — and still shipped a bug (`0.7` bound as an `integer` parameter, which
+Postgres rejects) that only the e2e suite hitting a real database caught. See
+[tech-debt.md](tech-debt.md). If a change touches raw SQL, don't stop at a unit test
+that only compiles it — the integration tier below is what actually runs it.
+
+## Integration tests (`*.integration.test.ts`)
+
+Vitest with a separate config (`vitest.integration.config.ts`, excluded from the unit
+run and vice versa — the include/exclude globs on both configs enforce this). These call
+`application/`/`domain/` functions directly against a real, disposable Postgres
+database — no mocking of `db()`, no mocked connectors beyond a deliberately fake
+`SourceConnector`/`FxRateProvider`/`Notifier` implementation for the two adapters that
+would otherwise need real network access (Apify, the FX API).
+
+**Setup** (once):
 ```bash
-npm test          # vitest run — 64 tests as of this writing (domain + auth + sql-helpers)
-npm run test:watch
+createdb dreamrue_test
+cp .env.test.example .env.test   # point DATABASE_URL at dreamrue_test, never dreamrue_dev
+npm run db:migrate:test
 ```
 
-`.husky/pre-commit` runs `npm test` on every commit — a broken test blocks the commit.
-Keep the suite fast; don't add anything that touches a real network or a real database.
+**Run**: `npm run test:integration`. `test/integration/db-helpers.ts::resetDb()` truncates
+every app table between tests and — this matters — **refuses to run unless the target
+database's name contains "test"**, specifically so a misconfigured `DATABASE_URL`
+(someone's real `.env` sourced by accident) can't wipe dev or prod data. Never point
+`.env.test` at anything but a disposable database.
 
-## What is actually tested today
+**Faking an external adapter for a test**: `infrastructure/connectors/registry.ts`
+exports `registerConnector()` for exactly this — register a fake `SourceConnector` under
+the `"manual"` source kind (never used by a real adapter) and `syncDataset()` exercises
+its real probe/ingest/cursor/mapping logic with no network call. See the pattern in
+`application/sync/sync-dataset.integration.test.ts`. `refreshFxRates()` takes its
+provider as a parameter for the same reason — no registry needed since there's only ever
+one caller.
 
-All `*.test.ts` files sit next to the code they test (no separate `__tests__` tree):
+**What's covered**: `syncDataset`'s watermark-cursor resumability and probe-skip
+behavior; `processRawRecords`'s upsert idempotency, duplicate-linking, and
+`lead_states`-survives-reprocessing guarantee; `dispatchAlertsForLeads`'s dedupe-key
+suppression; the auto-approved mapping profile quality guardrail; `refreshFxRates`'s
+degrade-on-failure behavior; login attempt counting/throttling.
 
-- `domain/alerting/predicate.test.ts`
-- `domain/dataset/mapping-proposal.test.ts`
-- `domain/dataset/mapping.test.ts`
-- `domain/dataset/schema-inference.test.ts`
-- `domain/scoring/rules-classifier.test.ts`
-- `domain/sync/scheduling.test.ts`
-- `infrastructure/auth/password.test.ts`
-- `application/leads/sql-helpers.test.ts`
+**What's deliberately not covered here**: `infrastructure/` adapters that are thin
+wrappers over a real external API (`apify.connector.ts`,
+`infrastructure/fx/fx-rate.provider.ts`) — mocking `fetch` line-by-line for those mostly
+tests the mock. If you need confidence in one, prefer verifying it against the real
+service once (as was done manually for the FX adapter — see its git history) over a
+brittle mocked unit test.
 
-That list is the map of what this codebase considers worth guaranteeing: the pure
-domain logic (mapping, classification, scheduling, predicates) plus the two places where
-a subtle bug has real consequences — password hashing and raw SQL array binding.
+## E2E tests (`e2e/*.spec.ts`)
 
-## What to unit test
+Playwright, against a real production build (`npm run build && npm run start`) and a
+real, disposable Postgres database — this is the tier that catches what integration
+tests can't: whether the UI actually renders, whether a server action's result reaches
+the page, whether a real external API call (bad token, unreachable dataset) surfaces
+correctly as a toast.
 
-Anything in `domain/` is a strong candidate by default — it's pure, dependency-free,
-and the whole point of the domain/application/infrastructure split is that this layer
-is trivially testable without mocks. When adding to `domain/`, add tests in the same
-pass, not as follow-up.
+**Setup** (once):
+```bash
+createdb dreamrue_e2e
+cp .env.e2e.example .env.e2e   # point DATABASE_URL at dreamrue_e2e, never dreamrue_dev
+node --env-file=.env.e2e infrastructure/db/migrate.mjs
+npx playwright install chromium   # if not already cached
+```
 
-Specifically test:
-- **Edge cases in text extraction/classification** (`rules-classifier.test.ts`,
-  `mapping.test.ts`) — negation ("not looking for buyers"), mixed signals (buyer phrase
-  + seller phrase in the same post), locale variants (Indonesian phrases), and the
-  known false-positive classes already caught in production (recruitment posts scoring
-  as buyer intent — see `RECRUITMENT_PHRASES` in `domain/scoring/lexicon.ts`).
-- **Regressions with a concrete production incident behind them.** The existing tests
-  lean heavily on this — see the comment on the `textArray` tests in
-  `sql-helpers.test.ts` ("interpolating a JS array... 500'd with `Array value must
-  start with "{"`"), and the presence-counting comment in `schema-inference.ts`. When
-  you fix a bug in `domain/` or `application/`, add the regression test in the same
-  commit, with a comment naming what broke — that comment is what lets a future agent
-  understand *why* the test exists instead of "helpfully" deleting it as redundant.
-- **Anything security-adjacent**: constant-time comparison behavior, password hash
-  round-tripping, SQL injection resistance (the `sql-helpers.test.ts` "never inlines
-  values" test is the template — assert the malicious string appears only in `params`,
-  never in the compiled SQL text).
-- **Scoring/ranking formulas** when you change a weight or a threshold — a classifier
-  weight change is silent drift unless a test pins the expected before/after.
+**Run**: `npm run build` then `npm run test:e2e` (or just `npx playwright test` locally —
+`reuseExistingServer` is on outside CI, so a `npm run dev` already running on port 3100
+is reused instead of rebuilding).
 
-## What NOT to bother unit testing
+`e2e/global-setup.ts` seeds a fixed admin account, a dedicated throttling-test account,
+and one buyer lead directly via SQL before the suite runs — independent of the app's own
+pipeline (no Apify call). It talks to Postgres directly with the `postgres` package
+rather than importing `infrastructure/db/client.ts` or `infrastructure/auth/password.ts`,
+because both start with `import "server-only"`, which throws unconditionally outside
+Next's RSC build (Playwright's global setup runs in plain Node, not through Next).
 
-- `infrastructure/` adapters that are thin wrappers over an external API
-  (`apify.connector.ts`) — there's no test for it today; if you add one, prefer a
-  contract/integration test behind a flag over mocking `fetch` line-by-line, since a
-  mock-heavy test of a thin adapter mostly tests the mock.
-- Server actions and route handlers themselves (`application/*.actions.ts`,
-  `app/api/**`) — they're thin orchestration over already-tested domain functions plus
-  Drizzle calls. If you need confidence here, that's an integration-test concern (see
-  below), not a unit test with a mocked `db()`.
-- UI components — no test setup exists for them yet. If the user is asking you to
-  verify a UI change, run the dev server and check it manually (see the root
-  `run` skill) rather than writing a throwaway RTL test that won't be maintained.
+**What's covered**: sign-in (including the first-run-becomes-admin path, wrong
+credentials, throttling after 5 failed attempts, and the proxy redirect for signed-out
+visitors); the lead triage view and the mark-contacted flow via the "Open original post"
+action; an admin manually triggering a dataset sync against a real (intentionally
+invalid) Apify token and seeing the failure surfaced as a toast.
 
-## Mocking guidance
+**On not mocking external services**: the dataset-sync spec deliberately does *not* mock
+Apify. `.env.e2e`'s `APIFY_API_TOKEN` is a placeholder and the seeded dataset's
+`externalId` doesn't exist upstream, so the test exercises the real connector's error
+path (a real 401/404 round-trip) end to end. This is more valuable than a mocked
+success/failure toggle because it also proves the retry logic in
+`apify.connector.ts` doesn't hang or retry-loop on a genuine auth failure.
 
-There is essentially no mocking in this codebase's test suite — domain functions take
-plain data and return plain data, so tests call them directly with constructed input and
-assert on the output (see any test file for the pattern: no `vi.mock`, no test doubles).
-If you find yourself reaching for `vi.mock` to test something in `domain/`, that's a
-signal the function has a hidden I/O dependency and should be restructured to take that
-dependency as data/a parameter instead — don't paper over it with a mock.
+## What to add tests for going forward
 
-## Test file structure
-
-- One `.test.ts` file per source file, same directory, same base name
-  (`mapping.ts` → `mapping.test.ts`).
-- `describe` blocks group by exported function; `it` descriptions state the behavior in
-  plain English, not "should X" — see existing files for tone (`"binds each element as
-  its own parameter"`, not `"should bind elements"`).
-- Prefer several small, precisely-named `it` blocks over one large test with multiple
-  assertions about unrelated behavior — makes a failure immediately legible.
+Same priority order as before, extended with the two new tiers: pure `domain/` logic
+gets a unit test in the same commit; anything that only makes sense against a real
+database (idempotency, dedupe, cursor behavior, cross-adapter degradation) gets an
+integration test; a new *critical user path* (not every path) gets an e2e spec. Don't
+add an e2e test for something already covered by a cheaper tier — the fake-Apify-token
+sync test is valuable specifically because it can't be faithfully expressed any other
+way; a filter-chip toggle usually can be, and belongs in a component test or simply
+manual verification instead.
 
 ## Coverage expectations
 
-No enforced coverage threshold or CI gate exists in this repo (no `coverage` config in
-`vitest.config.ts`, no coverage step in `.husky/pre-commit`). Use judgment: domain logic
-with real business consequences (scoring, mapping, dedup, alerting) should be
+No enforced coverage threshold or CI gate on coverage percentage — `.github/workflows/ci.yml`
+gates on the three suites *passing*, not on a coverage number. Use judgment: domain logic
+with real business consequences (scoring, mapping, dedup, alerting, ranking) should be
 well-covered; thin plumbing does not need a test to exist for its own sake.

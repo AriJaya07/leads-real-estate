@@ -1,6 +1,9 @@
 import "server-only";
 import type { Notifier } from "@/domain/sync/ports";
 import { emailNotifier } from "./email.notifier";
+import { createLogger } from "@/infrastructure/observability/logger";
+
+const log = createLogger("notify");
 
 /**
  * Channel registry. Adding WhatsApp / Slack is a new adapter registered here —
@@ -11,7 +14,7 @@ const notifiers = new Map<string, Notifier>([[emailNotifier.channel, emailNotifi
 const nullNotifier: Notifier = {
   channel: "null",
   async send(message) {
-    console.warn(`[notify] no adapter for this channel; dropped "${message.subject}"`);
+    log.warn("no adapter for this channel; dropping message", { subject: message.subject });
     return { ok: false, error: "channel not implemented" };
   },
 };

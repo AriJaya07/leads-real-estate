@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Copy, KeyRound, Loader2, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,6 +13,7 @@ import {
   resetTeamMemberPassword,
   setTeamMemberRole,
 } from "@/application/auth/team.actions";
+import { useServerAction } from "@/hooks/use-server-action";
 
 interface Member {
   id: string;
@@ -70,8 +70,8 @@ export function TeamTable({
   members: Member[];
   currentUserId: string;
 }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const { busyId, run } = useServerAction();
+  const busy = busyId !== null;
   const [credential, setCredential] = useState<{ email: string; temporaryPassword: string } | null>(
     null,
   );
@@ -80,64 +80,42 @@ export function TeamTable({
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    setBusy(true);
 
-    const result = await createTeamMember({
-      email: String(data.get("email") ?? ""),
-      name: String(data.get("name") ?? "") || undefined,
-      role: (String(data.get("role") ?? "agent") as "admin" | "agent") ?? "agent",
-    });
-
-    setBusy(false);
-
-    if (!result?.data) {
-      toast.error(result?.serverError ?? "Could not create the account");
-      return;
-    }
-    setCredential(result.data);
-    form.reset();
-    router.refresh();
+    await run(
+      "new-member",
+      () =>
+        createTeamMember({
+          email: String(data.get("email") ?? ""),
+          name: String(data.get("name") ?? "") || undefined,
+          role: (String(data.get("role") ?? "agent") as "admin" | "agent") ?? "agent",
+        }),
+      {
+        errorFallback: "Could not create the account",
+        onSuccess: (credential) => {
+          setCredential(credential);
+          form.reset();
+        },
+      },
+    );
   }
 
   async function resetPassword(member: Member) {
-    setBusy(true);
-    const result = await resetTeamMemberPassword({ userId: member.id });
-    setBusy(false);
-
-    if (!result?.data) {
-      toast.error(result?.serverError ?? "Could not reset the password");
-      return;
-    }
-    setCredential(result.data);
-    router.refresh();
+    await run("reset", () => resetTeamMemberPassword({ userId: member.id }), {
+      errorFallback: "Could not reset the password",
+      onSuccess: setCredential,
+    });
   }
 
   async function changeRole(member: Member) {
-    setBusy(true);
-    const result = await setTeamMemberRole({
-      userId: member.id,
-      role: member.role === "admin" ? "agent" : "admin",
-    });
-    setBusy(false);
-
-    if (result?.serverError) {
-      toast.error(result.serverError);
-      return;
-    }
-    router.refresh();
+    await run("role", () =>
+      setTeamMemberRole({ userId: member.id, role: member.role === "admin" ? "agent" : "admin" }),
+    );
   }
 
   async function remove(member: Member) {
-    setBusy(true);
-    const result = await removeTeamMember({ userId: member.id });
-    setBusy(false);
-
-    if (result?.serverError) {
-      toast.error(result.serverError);
-      return;
-    }
-    toast.success(`Removed ${member.email}`);
-    router.refresh();
+    await run("remove", () => removeTeamMember({ userId: member.id }), {
+      onSuccess: () => toast.success(`Removed ${member.email}`),
+    });
   }
 
   return (

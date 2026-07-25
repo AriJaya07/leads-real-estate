@@ -5,8 +5,8 @@ import { listDatasets } from "@/application/datasets/dataset-queries";
 import { getSyncOverview } from "@/application/datasets/dataset-queries";
 import { PageHeader } from "@/components/common/page-header";
 import { StatTile } from "@/components/common/stat-tile";
-import { DatasetTable } from "@/features/admin/components/dataset-table";
-import { DiscoveryButton } from "@/features/admin/components/discovery-button";
+import { DatasetTable } from "@/features/datasets/components/dataset-table";
+import { DiscoveryButton } from "@/features/datasets/components/discovery-button";
 import { SkeletonGrid } from "@/components/common/skeleton-grid";
 
 export const metadata: Metadata = { title: "Datasets" };

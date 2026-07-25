@@ -1,12 +1,11 @@
 "use client";
 
-import { useTransition } from "react";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Filter, RotateCcw, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useUrlFilters } from "@/hooks/use-url-filters";
 import type { FacetDescriptor } from "@/application/leads/facets";
 
 /**
@@ -21,17 +20,7 @@ export function LeadFilterBar({
   facets: FacetDescriptor[];
   activeCount: number;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
-  const [pending, startTransition] = useTransition();
-
-  function update(mutate: (next: URLSearchParams) => void) {
-    const next = new URLSearchParams(params.toString());
-    mutate(next);
-    next.delete("page");
-    startTransition(() => router.push(`${pathname}?${next}`, { scroll: false }));
-  }
+  const { searchParams: params, pending, setParams: update } = useUrlFilters();
 
   function toggleMulti(key: string, value: string) {
     update((next) => {

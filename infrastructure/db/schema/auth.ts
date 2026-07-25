@@ -1,4 +1,4 @@
-import { boolean, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { userRoleEnum } from "./enums";
 
 export const users = pgTable(
@@ -22,3 +22,22 @@ export const users = pgTable(
 );
 
 export type UserRow = typeof users.$inferSelect;
+
+/**
+ * One row per sign-in attempt, keyed by the email typed in — not by user id,
+ * since a nonexistent-account attempt has no user id to key on and is exactly
+ * the case throttling most needs to cover. Never pruned automatically; fine at
+ * this app's login volume, see docs/tech-debt.md if that changes.
+ */
+export const loginAttempts = pgTable(
+  "login_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    succeeded: boolean("succeeded").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("login_attempts_email_created_idx").on(t.email, t.createdAt)],
+);
+
+export type LoginAttemptRow = typeof loginAttempts.$inferSelect;

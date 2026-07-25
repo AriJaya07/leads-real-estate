@@ -35,3 +35,20 @@ export const MAPPING_AUTO_APPROVE_CONFIDENCE = 0.8;
 
 export const NEAR_DUPLICATE_SIMILARITY = 0.9;
 export const NEAR_DUPLICATE_WINDOW_HOURS = 72;
+
+/**
+ * Sanity check on the first batch a freshly auto-approved mapping profile
+ * produces (an auto-approved profile has zero human review by design — see
+ * docs/architecture.md's curated-beats-auto-proposal decision). Below this
+ * sample size the check is skipped: a handful of records isn't enough to tell a
+ * bad mapping from a genuinely spam-heavy source.
+ */
+export const MAPPING_QUALITY_MIN_SAMPLE = 5;
+/** Above this spam rate in that first batch, the mapping is revoked for review. */
+export const MAPPING_QUALITY_MAX_SPAM_RATE = 0.6;
+/** Above this empty-body rate in that first batch, the mapping is revoked for review. */
+export const MAPPING_QUALITY_MAX_EMPTY_BODY_RATE = 0.5;
+
+/** Sign-in throttling window and threshold — see application/auth/login-attempts.ts. */
+export const LOGIN_ATTEMPT_WINDOW_MINUTES = 15;
+export const LOGIN_MAX_FAILED_ATTEMPTS = 5;

@@ -10,6 +10,7 @@ import {
   isSchemaDrift,
 } from "@/domain/dataset/schema-inference";
 import { proposeMapping } from "@/domain/dataset/mapping-proposal";
+import { assessMappingQuality } from "@/domain/dataset/mapping-quality";
 import { computeHealth, nextIntervalSeconds } from "@/domain/sync/scheduling";
 import type { FieldProfile, MappingRules } from "@/domain/dataset/types";
 import {
@@ -290,7 +291,7 @@ export async function syncDataset(
     }
 
     // --- Mapping profile ----------------------------------------------------
-    const { rules, profileId, passthrough } = await resolveMappingProfile(
+    const { rules, profileId, passthrough, isFreshlyAutoApproved } = await resolveMappingProfile(
       datasetId,
       dataset.mappingProfileId,
       source.kind,
@@ -318,6 +319,37 @@ export async function syncDataset(
           if (alerted.sent > 0) {
             log.info("alert", `Dispatched ${alerted.sent} alert(s)`, { rules: alerted.ruleNames });
           }
+        }
+      }
+
+      // A wrong-but-plausible auto-approved mapping looks like it worked — it
+      // just quietly produces spam-flagged or empty-body leads. Checking only the
+      // profile's first batch, and only revoking (not blocking) it, is what keeps
+      // this from also punishing a genuinely spam-heavy source on every run.
+      if (isFreshlyAutoApproved && profileId) {
+        const [sample] = await db()
+          .select({
+            total: sql<number>`count(*)::int`,
+            spam: sql<number>`count(*) FILTER (WHERE ${schema.leads.isSpam})::int`,
+            emptyBody: sql<number>`count(*) FILTER (WHERE ${schema.leads.body} = '')::int`,
+          })
+          .from(schema.leads)
+          .where(inArray(schema.leads.rawRecordId, newRawRecordIds));
+
+        const assessment = assessMappingQuality({
+          total: sample?.total ?? 0,
+          spam: sample?.spam ?? 0,
+          emptyBody: sample?.emptyBody ?? 0,
+        });
+
+        if (assessment.suspect) {
+          await db()
+            .update(schema.mappingProfiles)
+            .set({ approvedAt: null })
+            .where(eq(schema.mappingProfiles.id, profileId));
+          log.warn("mapping-quality", `Auto-approved mapping profile revoked: ${assessment.reason}`, {
+            sample,
+          });
         }
       }
     } else if (!rules) {
@@ -470,7 +502,13 @@ async function resolveMappingProfile(
   sourceKind: "apify" | "n8n" | "webform" | "manual",
   fieldProfiles: FieldProfile[],
   log: SyncLogger,
-): Promise<{ rules: MappingRules | null; profileId: string | null; passthrough: boolean }> {
+): Promise<{
+  rules: MappingRules | null;
+  profileId: string | null;
+  passthrough: boolean;
+  /** True only for a profile both auto-generated *and* newly attached in this call — see mapping-quality.ts. */
+  isFreshlyAutoApproved: boolean;
+}> {
   if (currentProfileId) {
     const [profile] = await db()
       .select()
@@ -478,15 +516,27 @@ async function resolveMappingProfile(
       .where(eq(schema.mappingProfiles.id, currentProfileId))
       .limit(1);
     if (profile && profile.approvedAt) {
-      return { rules: profile.rules, profileId: profile.id, passthrough: profile.passthrough };
+      return {
+        rules: profile.rules,
+        profileId: profile.id,
+        passthrough: profile.passthrough,
+        isFreshlyAutoApproved: false,
+      };
     }
     if (profile) {
       log.warn("mapping", `Mapping profile "${profile.name}" is awaiting admin approval`);
-      return { rules: null, profileId: profile.id, passthrough: profile.passthrough };
+      return {
+        rules: null,
+        profileId: profile.id,
+        passthrough: profile.passthrough,
+        isFreshlyAutoApproved: false,
+      };
     }
   }
 
-  if (fieldProfiles.length === 0) return { rules: null, profileId: null, passthrough: true };
+  if (fieldProfiles.length === 0) {
+    return { rules: null, profileId: null, passthrough: true, isFreshlyAutoApproved: false };
+  }
 
   // A curated, hand-verified profile always wins over an auto-proposal. Claim is
   // by required-path match, so the same profile picks up every dataset produced
@@ -510,7 +560,12 @@ async function resolveMappingProfile(
     log.info("mapping", `Matched curated mapping profile "${claimed.name}"`, {
       matchedOn: claimed.matchPaths.length,
     });
-    return { rules: claimed.rules, profileId: claimed.id, passthrough: claimed.passthrough };
+    return {
+      rules: claimed.rules,
+      profileId: claimed.id,
+      passthrough: claimed.passthrough,
+      isFreshlyAutoApproved: false,
+    };
   }
 
   const proposal = proposeMapping(fieldProfiles);
@@ -529,7 +584,9 @@ async function resolveMappingProfile(
     .onConflictDoNothing()
     .returning();
 
-  if (!profile) return { rules: null, profileId: null, passthrough: true };
+  if (!profile) {
+    return { rules: null, profileId: null, passthrough: true, isFreshlyAutoApproved: false };
+  }
 
   log.info(
     "mapping",
@@ -543,6 +600,7 @@ async function resolveMappingProfile(
     rules: approved ? proposal.rules : null,
     profileId: profile.id,
     passthrough: true,
+    isFreshlyAutoApproved: approved,
   };
 }
 

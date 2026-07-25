@@ -1,5 +1,8 @@
 import "server-only";
 import { db, schema } from "@/infrastructure/db/client";
+import { createLogger } from "@/infrastructure/observability/logger";
+
+const fallbackLog = createLogger("sync-logger");
 
 type Level = "debug" | "info" | "warn" | "error";
 
@@ -45,7 +48,7 @@ export class SyncLogger {
       await db().insert(schema.syncEvents).values(rows);
     } catch (error) {
       // Losing a log line must never fail the sync that produced it.
-      console.error("[sync-logger] failed to persist events", error);
+      fallbackLog.error("failed to persist sync_events", { error, syncRunId: this.syncRunId });
     }
   }
 }

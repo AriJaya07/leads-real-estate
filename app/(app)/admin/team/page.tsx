@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { requireAdmin } from "@/application/auth/current-user";
 import { listTeamMembers } from "@/application/auth/team.actions";
 import { PageHeader } from "@/components/common/page-header";
-import { TeamTable } from "@/features/admin/components/team-table";
+import { TeamTable } from "@/features/team/components/team-table";
 import { SkeletonGrid } from "@/components/common/skeleton-grid";
 
 export const metadata: Metadata = { title: "Team" };

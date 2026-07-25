@@ -18,3 +18,14 @@ export function getConnector(kind: string): SourceConnector {
 export function connectorKinds(): string[] {
   return [...connectors.keys()];
 }
+
+/**
+ * Registers an adapter under a source kind, overwriting any existing one for that
+ * kind. Exists for two reasons: a real new connector wiring itself in at startup,
+ * and integration tests exercising the sync engine against a fake connector
+ * (registered under the "manual" kind, which is never used by a real adapter)
+ * instead of making network calls.
+ */
+export function registerConnector(connector: SourceConnector): void {
+  connectors.set(connector.kind, connector);
+}

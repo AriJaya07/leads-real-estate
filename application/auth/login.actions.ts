@@ -13,6 +13,8 @@ import {
 } from "@/infrastructure/auth/password";
 import { clearSessionCookie, setSessionCookie, signSession } from "@/infrastructure/auth/session";
 import { ActionError, actionClient, authActionClient } from "@/application/safe-action";
+import { countRecentFailedAttempts, recordLoginAttempt } from "./login-attempts";
+import { isLoginRateLimited } from "@/domain/auth/rate-limit";
 
 const credentialsSchema = z.object({
   email: z.string().email().transform((value) => value.trim().toLowerCase()),
@@ -70,6 +72,15 @@ export const signIn = actionClient.inputSchema(credentialsSchema).action(async (
     return { bootstrapped: true, mustChangePassword: false };
   }
 
+  // Checked ahead of the credential lookup, and with the same fake-timing cost
+  // as a real check on the way out — a rate-limited response must not be
+  // distinguishable-by-latency from a normal wrong-password response, for the
+  // same reason `fakeVerify()` exists at all.
+  if (isLoginRateLimited(await countRecentFailedAttempts(email))) {
+    await fakeVerify();
+    throw new ActionError("Too many failed attempts. Try again in a few minutes.");
+  }
+
   const [user] = await db()
     .select()
     .from(schema.users)
@@ -79,13 +90,16 @@ export const signIn = actionClient.inputSchema(credentialsSchema).action(async (
   if (!user?.passwordHash) {
     // Same cost as a real check, so a missing account is indistinguishable.
     await fakeVerify();
+    await recordLoginAttempt(email, false);
     throw new ActionError(INVALID_CREDENTIALS);
   }
 
   if (!(await verifyPassword(password, user.passwordHash))) {
+    await recordLoginAttempt(email, false);
     throw new ActionError(INVALID_CREDENTIALS);
   }
 
+  await recordLoginAttempt(email, true);
   await startSession(user);
   return { bootstrapped: false, mustChangePassword: user.mustChangePassword };
 });

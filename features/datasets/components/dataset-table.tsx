@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Archive, Loader2, Pause, Play, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,43 +9,35 @@ import { HealthPill } from "@/components/common/health-pill";
 import { EmptyState } from "@/components/common/empty-state";
 import { RelativeTime } from "@/components/common/relative-time";
 import { runSync, setDatasetStatus } from "@/application/datasets/dataset.actions";
+import { useServerAction } from "@/hooks/use-server-action";
 import type { DatasetSummary } from "@/application/datasets/dataset-queries";
 import { cn } from "@/lib/utils";
 import { formatCount } from "@/shared/format";
 
 export function DatasetTable({ datasets }: { datasets: DatasetSummary[] }) {
-  const router = useRouter();
   const [query, setQuery] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
+  const { busyId, run } = useServerAction();
 
   const filtered = datasets.filter((dataset) =>
     `${dataset.label} ${dataset.externalId}`.toLowerCase().includes(query.trim().toLowerCase()),
   );
 
   async function sync(dataset: DatasetSummary) {
-    setBusyId(dataset.id);
-    const result = await runSync({ datasetId: dataset.id, force: true });
-    setBusyId(null);
-
-    const outcome = result?.data;
-    if (!outcome) {
-      toast.error(result?.serverError ?? "Sync failed");
-      return;
-    }
-    toast[outcome.status === "failed" ? "error" : "success"](
-      `${dataset.label}: ${outcome.status} — ${outcome.itemsNew} new item(s), ${outcome.leadsCreated} lead(s)`,
-      { description: outcome.reason },
-    );
-    startTransition(() => router.refresh());
+    await run(dataset.id, () => runSync({ datasetId: dataset.id, force: true }), {
+      errorFallback: "Sync failed",
+      onSuccess: (outcome) => {
+        toast[outcome.status === "failed" ? "error" : "success"](
+          `${dataset.label}: ${outcome.status} — ${outcome.itemsNew} new item(s), ${outcome.leadsCreated} lead(s)`,
+          { description: outcome.reason },
+        );
+      },
+    });
   }
 
   async function changeStatus(dataset: DatasetSummary, status: "active" | "paused" | "archived") {
-    setBusyId(dataset.id);
-    await setDatasetStatus({ datasetId: dataset.id, status });
-    setBusyId(null);
-    toast.success(`${dataset.label} is now ${status}`);
-    startTransition(() => router.refresh());
+    await run(dataset.id, () => setDatasetStatus({ datasetId: dataset.id, status }), {
+      onSuccess: () => toast.success(`${dataset.label} is now ${status}`),
+    });
   }
 
   if (datasets.length === 0) {

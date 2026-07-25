@@ -75,12 +75,13 @@ async function contact() {
 
 ## Route handlers (`app/api/**`)
 
-Only three exist, and each is a system-to-system endpoint, not a public API:
+Four exist, and each is a system-to-system endpoint, not a public API:
 
 | Route | Method | Auth | Purpose |
 | --- | --- | --- | --- |
 | `/api/cron/discover` | GET | `Authorization: Bearer $CRON_SECRET` | Runs `discoverAllSources()` |
 | `/api/cron/sync` | GET | `Authorization: Bearer $CRON_SECRET` | Runs `syncDataset()` for datasets whose adaptive interval is due |
+| `/api/cron/fx` | GET | `Authorization: Bearer $CRON_SECRET` | Runs `refreshFxRates()` once daily |
 | `/api/webhooks/apify` | POST | `x-webhook-secret` or `Authorization: Bearer $APIFY_WEBHOOK_SECRET` | Accelerates a sync for one dataset; falls back to full discovery if the dataset is unknown |
 
 Pattern for a new one, if you ever add one:

@@ -117,8 +117,19 @@ conventions.
   hand-edit these beyond what `shadcn` generates; regenerate via the CLI instead.
 - `components/common/` — small composed components shared across features
   (`empty-state`, `score-badge`, `relative-time`, etc).
-- `features/<name>/components/` — feature-scoped, not reused elsewhere. New leads/admin
-  UI goes here, not in `components/`.
+- `features/<name>/components/` — feature-scoped, not reused elsewhere, and named to
+  match its `application/<name>/` counterpart 1:1 where one exists
+  (`features/datasets` ↔ `application/datasets`, `features/team` ↔
+  `application/auth/team.actions.ts`). `features/shell/` is the exception — app chrome
+  has no single application-layer counterpart. When adding a new feature area, follow
+  this pairing rather than dropping a new table into an existing unrelated feature
+  folder (see `docs/tech-debt.md`'s git history for why — `features/admin/` used to be
+  exactly that catch-all, before dataset/team management were split out to match).
+- `hooks/` — cross-feature client hooks. `useUrlFilters` (searchParams-as-state, used by
+  any component that filters/paginates via the URL) and `useServerAction` (busy-state +
+  error-toast + `router.refresh()` around a `next-safe-action` call, used by any admin
+  table). Pull a new hook out here the second a pattern shows up in two components, not
+  after the third or fourth copy accumulates.
 - Client components (`"use client"`) call server actions directly and `router.refresh()`
   afterward rather than managing local mutation state — see `LeadInbox` in
   `features/leads/components/lead-inbox.tsx` for the pattern (log the action, refresh,
@@ -128,6 +139,16 @@ conventions.
   `Intl.NumberFormat` to `en-US` explicitly. A bare `toLocaleString()` uses the runtime
   locale, which differs between SSR and the browser and produces a hydration mismatch —
   don't reintroduce that.
+
+## Logging
+
+Use `createLogger(scope)` from `infrastructure/observability/logger.ts` for anything
+outside the sync pipeline's own `SyncLogger` (which persists to `sync_events` and should
+keep doing that). Don't reach for a bare `console.error`/`console.warn` in new
+`application/`/`infrastructure/` code — every existing call site was migrated to this in
+one pass specifically so log output has one consistent shape to filter/query on. Pass
+structured `fields`, not string interpolation: `log.error("failed to X", { error, leadId })`,
+not `` log.error(`failed to X: ${leadId}`) ``.
 
 ## Security patterns already established — reuse, don't reinvent
 
@@ -139,3 +160,11 @@ conventions.
 - Passwords: `scrypt` with explicit OWASP-tier params (`N=16384, r=8, p=1`), formatted as
   self-describing `scrypt$<salt>$<hash>` so parameters can be raised later without
   invalidating existing hashes. Never store or log a plaintext password.
+- Rate limiting a sensitive action: see `application/auth/login-attempts.ts` +
+  `domain/auth/rate-limit.ts` for the established shape — a pure `isXRateLimited(count)`
+  decision function in `domain/`, a thin count/record pair in `application/` (split out
+  specifically so it's testable without a request-scoped Next.js context, since the
+  action itself may need `cookies()`/`headers()`), and the rate-limit check happens
+  *before* the expensive/sensitive work, with the same fake-timing cost on the way out
+  as a real failure would have — a throttled response must not be distinguishable by
+  latency from a normal one.

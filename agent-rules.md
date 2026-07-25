@@ -51,6 +51,14 @@ shapes from training data — see [docs/coding-standards.md](docs/coding-standar
   registered in `infrastructure/connectors/registry.ts`. New notification channel →
   same pattern via `infrastructure/notifiers/registry.ts`. Don't special-case a vendor
   inside `application/sync/sync-dataset.ts` or `application/alerting/dispatch.ts`.
+- New `features/<name>/` folder should pair 1:1 with an `application/<name>/` folder
+  where one exists — don't drop unrelated UI into an existing feature folder as a
+  catch-all. See [docs/coding-standards.md](docs/coding-standards.md).
+- A pattern duplicated across two or more client components → pull it into `hooks/`
+  (see `useUrlFilters`, `useServerAction`) rather than leaving each component with its
+  own copy.
+- Logging outside the sync pipeline → `createLogger()` from
+  `infrastructure/observability/logger.ts`, not a bare `console.*` call.
 - Anything in `domain/` should stay pure (no `db()`, no `fetch`, no `import "server-only"`)
   and get a unit test alongside any behavior change. See
   [docs/testing-strategy.md](docs/testing-strategy.md).
@@ -70,10 +78,17 @@ shapes from training data — see [docs/coding-standards.md](docs/coding-standar
 
 - `npm run typecheck && npm run lint && npm test` — the pre-commit hook runs `npm test`
   regardless, but check all three before calling something done.
+- If you touched anything that writes raw SQL (a new Drizzle `sql` template, a changed
+  query), a passing unit test is not enough — it can compile a query without ever
+  executing it against Postgres. Run `npm run test:integration` too. See
+  [docs/tech-debt.md](docs/tech-debt.md) for the exact bug this caught once already.
 - If you touched `infrastructure/db/schema/*`, run `npm run db:generate` to produce the
-  migration — do not hand-write migration SQL.
+  migration — do not hand-write migration SQL. Apply it to `dreamrue_test`/`dreamrue_e2e`
+  too (`npm run db:migrate:test` / `node --env-file=.env.e2e infrastructure/db/migrate.mjs`)
+  before running those suites, or they'll fail against a stale schema.
 - If you touched UI, run the dev server and check the change in a browser (see the
-  `run` skill) rather than relying on typecheck/lint alone to mean the feature works.
+  `run` skill), and if it's on a path already covered by `e2e/*.spec.ts`, run
+  `npm run build && npm run test:e2e` — don't rely on typecheck/lint alone.
 - If you changed a domain-layer scoring/mapping/ranking function, confirm its unit
   tests still describe the new behavior accurately — a passing test that now asserts
   the wrong thing is worse than a failing one.
