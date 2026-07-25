@@ -1,6 +1,6 @@
 "use client";
 
-import { Filter, RotateCcw, Search, Sparkles } from "lucide-react";
+import { Filter, LayoutGrid, RotateCcw, Search, Sparkles, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ export function LeadFilterBar({
   activeCount: number;
 }) {
   const { searchParams: params, pending, setParams: update } = useUrlFilters();
+  const view = params.get("view") === "cards" ? "cards" : "table";
 
   function toggleMulti(key: string, value: string) {
     update((next) => {
@@ -91,7 +92,34 @@ export function LeadFilterBar({
           </Button>
         )}
 
-        {pending && <span className="text-muted-foreground text-xs">Updating…</span>}
+        {pending && (
+          <span className="text-muted-foreground text-xs" role="status" aria-live="polite">
+            Updating…
+          </span>
+        )}
+
+        {/* Below md the layout is always cards (a fixed-column table can't fit),
+            so the choice is meaningless there — desktop only. */}
+        <div className="border-border hidden shrink-0 items-center gap-0.5 rounded-lg border p-0.5 md:flex">
+          <Button
+            variant={view === "table" ? "secondary" : "ghost"}
+            size="icon-sm"
+            aria-label="Table view"
+            aria-pressed={view === "table"}
+            onClick={() => update((next) => next.delete("view"))}
+          >
+            <Table2 className="size-3.5" aria-hidden />
+          </Button>
+          <Button
+            variant={view === "cards" ? "secondary" : "ghost"}
+            size="icon-sm"
+            aria-label="Card view"
+            aria-pressed={view === "cards"}
+            onClick={() => update((next) => next.set("view", "cards"))}
+          >
+            <LayoutGrid className="size-3.5" aria-hidden />
+          </Button>
+        </div>
       </div>
 
       <div className={cn("flex flex-col gap-2", pending && "opacity-60")}>

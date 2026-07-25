@@ -4,7 +4,7 @@ import { requireAdmin } from "@/application/auth/current-user";
 import { listTeamMembers } from "@/application/auth/team.actions";
 import { PageHeader } from "@/components/common/page-header";
 import { TeamTable } from "@/features/team/components/team-table";
-import { SkeletonGrid } from "@/components/common/skeleton-grid";
+import { TableSkeleton } from "@/components/common/table-skeleton";
 
 export const metadata: Metadata = { title: "Team" };
 
@@ -22,7 +22,7 @@ export default async function AdminTeamPage() {
         title="Team"
         description="Create accounts and hand over the generated password directly. No email provider is involved, so nothing depends on a mail service being configured."
       />
-      <Suspense fallback={<SkeletonGrid />}>
+      <Suspense fallback={<TableSkeleton rows={4} />}>
         <Team currentUserId={user.userId} />
       </Suspense>
     </div>

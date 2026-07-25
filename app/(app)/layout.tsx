@@ -5,11 +5,18 @@ import { AppSidebar } from "@/features/shell/components/app-sidebar";
 import { AppTopbar } from "@/features/shell/components/app-topbar";
 import { listDatasets } from "@/application/datasets/dataset-queries";
 
-async function DatasetSwitcherSlot({ userEmail }: { userEmail: string }) {
+async function DatasetSwitcherSlot({
+  userEmail,
+  role,
+}: {
+  userEmail: string;
+  role: "admin" | "agent";
+}) {
   const datasets = await listDatasets();
   return (
     <AppTopbar
       userEmail={userEmail}
+      role={role}
       datasets={datasets.map((d) => ({
         id: d.id,
         label: d.label,
@@ -42,9 +49,11 @@ async function AuthedShell({ children }: { children: React.ReactNode }) {
       <AppSidebar role={user.role} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Suspense fallback={<div className="border-border h-14 border-b" />}>
-          <DatasetSwitcherSlot userEmail={user.email} />
+          <DatasetSwitcherSlot userEmail={user.email} role={user.role} />
         </Suspense>
-        <main className="min-w-0 flex-1">{children}</main>
+        <main id="main-content" className="min-w-0 flex-1">
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -1,5 +1,17 @@
 # Known Tech Debt
 
+## `/pipeline`, `/intelligence`, `/admin/sync` are placeholders, not 404s
+
+They used to be dead nav links (404 on click) — now they're real pages with an honest
+"not built yet" state (`components/common/coming-soon.tsx`), which is the right fix for
+a UI-only pass but not a substitute for the features themselves. Worth knowing:
+`application/datasets/dataset-queries.ts::getDatasetDetail` and `getSyncEvents` already
+exist and are unused by any page — a real per-dataset detail/log view could be built on
+top of them without new query-layer work. What's missing for `/admin/sync` specifically
+is a product decision (per-dataset detail view vs. a cross-dataset activity feed, which
+would need a new "recent runs across all datasets" query) more than missing plumbing —
+that's why this round left it as a placeholder rather than guessing the IA.
+
 ## ~~Duplicated ranking formula (SQL vs. TypeScript)~~ — fixed
 
 `domain/lead/ranking.ts` now exports its weights (`BUYER_INTENT_WEIGHT`,

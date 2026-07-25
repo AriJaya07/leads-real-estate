@@ -6,7 +6,8 @@ import { queryLeads, getLeadStats } from "@/application/leads/lead-queries";
 import { getDynamicAttributeFacets, getLeadFacets } from "@/application/leads/facets";
 import { LeadInbox } from "@/features/leads/components/lead-inbox";
 import { LeadStatsRow } from "@/features/leads/components/lead-stats-row";
-import { SkeletonGrid } from "@/components/common/skeleton-grid";
+import { TableSkeleton } from "@/components/common/table-skeleton";
+import { StatRowSkeleton } from "@/components/common/stat-row-skeleton";
 import { PageHeader } from "@/components/common/page-header";
 
 export const metadata: Metadata = { title: "Inbox — DreamRue" };
@@ -59,11 +60,11 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
       />
 
       {/* Filters live in searchParams — a runtime API — so both blocks stream. */}
-      <Suspense fallback={<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" />}>
+      <Suspense fallback={<StatRowSkeleton />}>
         <Stats searchParams={searchParams} />
       </Suspense>
 
-      <Suspense fallback={<SkeletonGrid />}>
+      <Suspense fallback={<TableSkeleton />}>
         <Inbox searchParams={searchParams} />
       </Suspense>
     </div>

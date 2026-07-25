@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./theme-toggle";
+import { MobileNav } from "./mobile-nav";
 import { cn } from "@/lib/utils";
 import { formatCount } from "@/shared/format";
 import { signOut } from "@/application/auth/login.actions";
@@ -30,7 +31,15 @@ export interface DatasetOption {
  * every page reacts to it, and it lives in the URL so a filtered view is
  * shareable.
  */
-export function AppTopbar({ datasets, userEmail }: { datasets: DatasetOption[]; userEmail: string }) {
+export function AppTopbar({
+  datasets,
+  userEmail,
+  role,
+}: {
+  datasets: DatasetOption[];
+  userEmail: string;
+  role: "admin" | "agent";
+}) {
   const router = useRouter();
   const [datasetId, setDatasetId] = useQueryState("datasetId", {
     history: "push",
@@ -41,17 +50,19 @@ export function AppTopbar({ datasets, userEmail }: { datasets: DatasetOption[]; 
   const totalLeads = datasets.reduce((sum, d) => sum + d.leadCount, 0);
 
   return (
-    <header className="border-border bg-background/80 sticky top-0 z-20 flex h-14 items-center gap-3 border-b px-4 backdrop-blur">
+    <header className="border-border bg-background/80 sticky top-0 z-20 flex h-14 items-center gap-2 border-b px-3 backdrop-blur sm:gap-3 sm:px-4">
+      <MobileNav role={role} />
+
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button variant="outline" size="sm" className="gap-2">
-              <Layers className="size-3.5" aria-hidden />
-              <span className="max-w-52 truncate">{active?.label ?? "All datasets"}</span>
-              <span className="text-muted-foreground font-mono text-xs tabular-nums">
+            <Button variant="outline" size="sm" className="min-w-0 gap-1.5 sm:gap-2">
+              <Layers className="size-3.5 shrink-0" aria-hidden />
+              <span className="max-w-24 truncate sm:max-w-52">{active?.label ?? "All datasets"}</span>
+              <span className="text-muted-foreground hidden font-mono text-xs tabular-nums sm:inline">
                 {formatCount(active?.leadCount ?? totalLeads)}
               </span>
-              <ChevronDown className="size-3.5 opacity-60" aria-hidden />
+              <ChevronDown className="size-3.5 shrink-0 opacity-60" aria-hidden />
             </Button>
           }
         />

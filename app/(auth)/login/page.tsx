@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
 import { LoginForm } from "@/features/auth/components/login-form";
 import { BrandMark } from "@/components/brand/brand-mark";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -15,9 +16,19 @@ async function Form() {
   return <LoginForm isFirstRun={count === 0} />;
 }
 
+function FormSkeleton() {
+  return (
+    <div className="flex flex-col gap-4" aria-hidden>
+      <Skeleton className="h-9 w-full" />
+      <Skeleton className="h-9 w-full" />
+      <Skeleton className="h-8 w-full" />
+    </div>
+  );
+}
+
 export default function LoginPage() {
   return (
-    <main className="grid min-h-dvh place-items-center px-4 py-12">
+    <main id="main-content" className="grid min-h-dvh place-items-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <BrandMark className="size-11" />
@@ -28,7 +39,7 @@ export default function LoginPage() {
         </div>
 
         {/* Counting users is a database read, so it streams. */}
-        <Suspense fallback={<div className="h-64" />}>
+        <Suspense fallback={<FormSkeleton />}>
           <Form />
         </Suspense>
       </div>

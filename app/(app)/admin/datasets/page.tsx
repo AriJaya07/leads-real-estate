@@ -7,7 +7,8 @@ import { PageHeader } from "@/components/common/page-header";
 import { StatTile } from "@/components/common/stat-tile";
 import { DatasetTable } from "@/features/datasets/components/dataset-table";
 import { DiscoveryButton } from "@/features/datasets/components/discovery-button";
-import { SkeletonGrid } from "@/components/common/skeleton-grid";
+import { TableSkeleton } from "@/components/common/table-skeleton";
+import { StatRowSkeleton } from "@/components/common/stat-row-skeleton";
 
 export const metadata: Metadata = { title: "Datasets" };
 
@@ -45,11 +46,11 @@ export default async function AdminDatasetsPage() {
         actions={<DiscoveryButton />}
       />
 
-      <Suspense fallback={<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" />}>
+      <Suspense fallback={<StatRowSkeleton />}>
         <Overview />
       </Suspense>
 
-      <Suspense fallback={<SkeletonGrid />}>
+      <Suspense fallback={<TableSkeleton />}>
         <Registry />
       </Suspense>
     </div>
