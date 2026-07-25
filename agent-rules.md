@@ -1,0 +1,92 @@
+# Agent Rules
+
+Project-specific rules for AI agents working in this repository. Read
+[AGENTS.md](AGENTS.md) first (Next.js version notice), then the `/docs` set linked
+below as needed. This file is the fast-reference layer — constraints and defaults, not
+explanations. See [docs/architecture.md](docs/architecture.md) for the why behind most
+of these.
+
+## Before writing any Next.js route/caching/proxy code
+
+Read `node_modules/next/dist/docs/` first. This project runs Next 16, which renamed
+Middleware to Proxy (`proxy.ts`, not `middleware.ts`) and changed cache invalidation
+APIs (`updateTag` vs `revalidateTag(tag, "max")`). Do not "fix" these back to older API
+shapes from training data — see [docs/coding-standards.md](docs/coding-standards.md).
+
+## Hard constraints
+
+- **Never add an env var for operational config.** Which datasets sync, alert
+  thresholds, recipients, intervals — all of that is database state edited from
+  `/admin`. If a task seems to need a new env var for something other than a secret or
+  deployment identity, that's a signal to model it as a DB row instead. See
+  [docs/environment.md](docs/environment.md).
+- **Never bypass `authActionClient`/`adminActionClient` for a mutation.** No direct
+  `db()` calls from a `"use client"` component. No skipping `.inputSchema()` on a server
+  action. See [docs/api-patterns.md](docs/api-patterns.md).
+- **Never touch `lead_states` from the sync/reprocessing pipeline except via
+  `onConflictDoNothing` on first creation.** Status, assignment, notes, tags,
+  `firstContactedAt` are human-owned and must survive every reprocess, remap, and
+  reclassification. If a change would overwrite an existing `lead_states` row from
+  pipeline code, stop and reconsider — see [docs/domain.md](docs/domain.md).
+- **Never mix `reach`/engagement into `intentScore` or `priorityScore`.** This was
+  reverted from an earlier design on purpose. Keep them as separate fields/axes.
+- **Never compare secrets with `===`.** Use `secretsMatch()`
+  (`application/http/verify-secret.ts`) for cron/webhook secrets, the existing
+  `verifyPassword`/`timingSafeEqual` path for passwords. Constant-time everywhere a
+  shared secret or hash is checked.
+- **Never interpolate a raw JS array into a Drizzle `sql` template.** Use `textArray()`
+  from `application/leads/sql-helpers.ts`. Never build SQL text from a user-controlled
+  string — bind it as a parameter, even inside a `jsonb ->> key` lookup.
+- **Never let ingestion abort on one bad record.** Batch processing
+  (`processRawRecords`, `syncDataset`) must catch per-item and keep going; one malformed
+  upstream payload must not fail an entire sync run.
+- **Never delete a raw record, a lead, or a duplicate lead.** Duplicates are linked via
+  `canonicalLeadId`, missing upstream datasets are flagged `status = "missing"`, nothing
+  in the ingestion path does a hard delete. If a task seems to call for deleting data,
+  ask first.
+
+## Defaults / preferred approach
+
+- New upstream source → new `infrastructure/` adapter implementing `SourceConnector`,
+  registered in `infrastructure/connectors/registry.ts`. New notification channel →
+  same pattern via `infrastructure/notifiers/registry.ts`. Don't special-case a vendor
+  inside `application/sync/sync-dataset.ts` or `application/alerting/dispatch.ts`.
+- Anything in `domain/` should stay pure (no `db()`, no `fetch`, no `import "server-only"`)
+  and get a unit test alongside any behavior change. See
+  [docs/testing-strategy.md](docs/testing-strategy.md).
+- Prefer extending the existing predicate language (`domain/alerting/predicate.ts`) over
+  adding a new bespoke condition type for alert rules — it's deliberately small and
+  closed (no arbitrary expressions) as a security property, not an oversight.
+- When a change touches scoring weights, mapping synonyms, or the intent lexicon, treat
+  it as tuning a live production signal, not a code refactor — check
+  `domain/scoring/lexicon.ts`'s existing weight scale (roughly 10–45) and keep new
+  entries consistent with it, and prefer adding a test that pins the before/after
+  classification of a representative real-world phrase.
+- Match the existing comment style: comments explain *why*, often citing a specific
+  past bug or production incident, never restate *what* the code does. See
+  [docs/coding-standards.md](docs/coding-standards.md).
+
+## Before finishing a task
+
+- `npm run typecheck && npm run lint && npm test` — the pre-commit hook runs `npm test`
+  regardless, but check all three before calling something done.
+- If you touched `infrastructure/db/schema/*`, run `npm run db:generate` to produce the
+  migration — do not hand-write migration SQL.
+- If you touched UI, run the dev server and check the change in a browser (see the
+  `run` skill) rather than relying on typecheck/lint alone to mean the feature works.
+- If you changed a domain-layer scoring/mapping/ranking function, confirm its unit
+  tests still describe the new behavior accurately — a passing test that now asserts
+  the wrong thing is worse than a failing one.
+
+## Reference
+
+- [docs/architecture.md](docs/architecture.md) — system design, data flow, key decisions
+- [docs/domain.md](docs/domain.md) — glossary, entity relationships, business rules
+- [docs/coding-standards.md](docs/coding-standards.md) — style, layering, patterns
+- [docs/api-patterns.md](docs/api-patterns.md) — server actions, route handlers, errors
+- [docs/prd.md](docs/prd.md) — what this product is for, roadmap, non-goals
+- [docs/tech-debt.md](docs/tech-debt.md) — known sharp edges, don't be surprised by them
+- [docs/testing-strategy.md](docs/testing-strategy.md) — what/how to test
+- [docs/environment.md](docs/environment.md) — env vars, setup, third-party services
+- [ai-prompts/](ai-prompts/) — task-shaped prompt templates (feature work, bug fixes,
+  reviews, refactoring, tests, docs)

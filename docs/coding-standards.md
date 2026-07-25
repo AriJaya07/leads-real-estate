@@ -1,0 +1,141 @@
+# Coding Standards
+
+## Before touching anything Next.js-specific
+
+This repo runs **Next.js 16** on the App Router with breaking changes vs. older
+training data. `AGENTS.md` at the repo root already flags this — treat it as a hard
+rule: **read `node_modules/next/dist/docs/` before writing route handlers, middleware,
+caching, or `after()`/streaming code.** Confirmed differences already in use in this
+codebase, so don't "fix" them back to the old API:
+
+- **`middleware.ts` is gone — it's `proxy.ts`** at the repo root, exporting `proxy()`
+  instead of `middleware()`. See [proxy.ts](../proxy.ts). It is optimistic-only (cookie
+  presence check); it is never the security boundary.
+- **`updateTag` vs `revalidateTag`.** `updateTag(tag)` is used inside a server action
+  when the actor must see their own change immediately (no stale-while-revalidate).
+  `revalidateTag(tag, "max")` — note the second argument — is used from cron/webhook
+  routes for background refresh with SWR semantics. Pick based on who needs the fresh
+  data and when: see `application/leads/lead.actions.ts` vs.
+  `app/api/cron/sync/route.ts`.
+- **`after()` from `next/server`** is used in the Apify webhook route to ack
+  immediately and do the sync in the background, since Apify retries on slow webhook
+  responses. See `app/api/webhooks/apify/route.ts`.
+
+If you hit an API that doesn't behave like you expect from training data, assume the
+docs bundle is right and your memory is stale, not the other way around.
+
+## Layering
+
+Respect the one-way dependency rule described in [architecture.md](architecture.md):
+`domain` → nothing. `application` → `domain` (via ports) + `infrastructure` client
+(`db()`, `getConnector()`, `getNotifier()`). `features`/`app` → `application` only.
+
+Concretely:
+- Never import from `infrastructure/` in `domain/`.
+- Never write raw Drizzle queries inside `domain/`. Domain functions take plain data in,
+  return plain data out (`applyMapping`, `classifyWithRules`, `evaluatePredicate`,
+  `priorityScore` are all pure and unit-testable with no mocks).
+- New upstream integrations (a portal feed, an inbound webhook, a form) are a new file
+  in `infrastructure/` implementing `SourceConnector` or `Notifier`
+  (`domain/sync/ports.ts`), registered in the corresponding `registry.ts`. Don't add a
+  vendor-specific branch inside `application/sync/sync-dataset.ts`.
+
+## Server-only boundaries
+
+Every module that touches secrets, the database, or Node built-ins starts with
+`import "server-only";` (see `shared/config/env.ts`, `application/safe-action.ts`,
+`infrastructure/db/client.ts`, all of `application/*`). This is what makes an accidental
+client-side import of a DB query fail the build instead of leaking a connection string.
+Add it to any new `application/` or `infrastructure/` module. `test/stubs/server-only.ts`
+is aliased in for Vitest since there's no RSC boundary under test.
+
+## Server actions
+
+All mutations go through `next-safe-action` clients defined in
+`application/safe-action.ts`:
+- `actionClient` — no auth (sign-in only).
+- `authActionClient` — re-verifies the session server-side via `currentUser()` on every
+  call. Use this for anything a signed-in user does.
+- `adminActionClient` — additionally requires `role === "admin"`.
+
+Never call `currentUser()`/`db()` directly from a `"use client"` component to bypass an
+action — always go through one of these three clients, and prefer the narrowest one that
+works. `.inputSchema(zodSchema)` is required on every action; there is no untyped action
+in this codebase. See [api-patterns.md](api-patterns.md) for the full pattern and error
+conventions.
+
+## SQL and Drizzle
+
+- Never interpolate a raw JS array into a `sql` template — it binds as a single scalar
+  and Postgres errors expecting `{...}` array syntax. Use the `textArray()` helper
+  (`application/leads/sql-helpers.ts`), which emits `ARRAY[$1,$2]::text[]` with each
+  element as its own bound parameter. There's a regression test for exactly this in
+  `application/leads/sql-helpers.test.ts` — read it before touching array filtering.
+- Validate any user-controlled enum-ish value against the real Drizzle enum before it
+  reaches a query (`validIntents`/`validStatuses` in `sql-helpers.ts`) — an unvalidated
+  value passed straight to an enum column 500s the page instead of silently filtering.
+- Dynamic/open-ended filters (the `attr.*` map from discovered fields) are bound as
+  parameters against a fixed `jsonb ->> key` path — the key is never spliced into SQL
+  text, only the comparison value is parameterized alongside it.
+- Upserts key off a stable natural identity, not a surrogate check-then-insert:
+  `onConflictDoUpdate({ target: schema.leads.rawRecordId, ... })` is what makes
+  reprocessing idempotent.
+
+## Naming and style
+
+- File names: kebab-case (`lead-queries.ts`, `dataset.actions.ts`). Server action
+  modules end in `.actions.ts`; query/read modules end in `-queries.ts`.
+  Domain type modules are `types.ts` per subfolder.
+- Prefer named exports; no default exports observed anywhere in the codebase — keep it
+  that way for grep-ability.
+- Comments are reserved for the *why*, not the *what* — this codebase is dense with
+  "why" comments explaining a specific past bug or a non-obvious tradeoff (e.g. the
+  regex-alternation-order comment in `domain/dataset/mapping.ts`, or the
+  presence-counting comment in `domain/dataset/schema-inference.ts`). Match that style:
+  don't add a comment that just restates the code, but do add one when you're encoding a
+  hard-won lesson or a constraint that isn't visible in the diff.
+- Formatting is Prettier + `prettier-plugin-tailwindcss` (class order), enforced by
+  `eslint-config-next` + `eslint-config-prettier`. Run `npm run lint` before considering
+  a change done; there is no separate `prettier --write` script, lint-staged runs on
+  commit-adjacent tooling via Husky (`.husky/pre-commit` currently runs `npm test`).
+
+## Types
+
+- `strict: true` in `tsconfig.json`. Don't introduce `any` to route around a type error;
+  narrow or extend the actual type. `unknown` is preferred for genuinely-untyped
+  external payloads (see `Record<string, unknown>` throughout the dataset/mapping code).
+- Row types are inferred from the schema (`export type LeadRow = typeof
+  leads.$inferSelect`), not hand-duplicated. Add the inferred type export next to a new
+  table, following the existing pattern in `infrastructure/db/schema/*.ts`.
+- Zod schemas double as both runtime validation and the TypeScript source of truth
+  (`z.infer<typeof leadFiltersSchema>`) — define the Zod schema first, derive the type
+  from it, not the other way around.
+
+## UI conventions
+
+- `components/ui/` — shadcn primitives (style `base-nova`, see `components.json`), don't
+  hand-edit these beyond what `shadcn` generates; regenerate via the CLI instead.
+- `components/common/` — small composed components shared across features
+  (`empty-state`, `score-badge`, `relative-time`, etc).
+- `features/<name>/components/` — feature-scoped, not reused elsewhere. New leads/admin
+  UI goes here, not in `components/`.
+- Client components (`"use client"`) call server actions directly and `router.refresh()`
+  afterward rather than managing local mutation state — see `LeadInbox` in
+  `features/leads/components/lead-inbox.tsx` for the pattern (log the action, refresh,
+  *then* do the side effect like opening a WhatsApp link — the metric must not depend on
+  whether the tab opens).
+- Formatting numbers/dates for display goes through `shared/format.ts`, which pins
+  `Intl.NumberFormat` to `en-US` explicitly. A bare `toLocaleString()` uses the runtime
+  locale, which differs between SSR and the browser and produces a hydration mismatch —
+  don't reintroduce that.
+
+## Security patterns already established — reuse, don't reinvent
+
+- Constant-time secret/password comparison (`timingSafeEqual`) everywhere a secret is
+  checked: `application/http/verify-secret.ts` (cron/webhook bearer tokens),
+  `infrastructure/auth/password.ts` (login).
+- `fakeVerify()` burns the same time as a real password check so a nonexistent account
+  doesn't respond faster than a wrong password — preserve this when touching auth flows.
+- Passwords: `scrypt` with explicit OWASP-tier params (`N=16384, r=8, p=1`), formatted as
+  self-describing `scrypt$<salt>$<hash>` so parameters can be raised later without
+  invalidating existing hashes. Never store or log a plaintext password.
