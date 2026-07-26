@@ -11,7 +11,13 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { datasetHealthEnum, datasetStatusEnum, leadRecordKindEnum, sourceKindEnum } from "./enums";
+import {
+  datasetHealthEnum,
+  datasetStatusEnum,
+  leadRecordKindEnum,
+  platformEnum,
+  sourceKindEnum,
+} from "./enums";
 import type { FieldProfile, MappingRules } from "@/domain/dataset/types";
 
 /** A connector instance. Replaces APIFY_ACTOR_ID / APIFY_DATASET_ID env vars. */
@@ -43,6 +49,8 @@ export const mappingProfiles = pgTable(
     sourceKind: sourceKindEnum("source_kind").notNull(),
     /** What the payload *is* — a post, a like, a comment. Carried onto every lead it produces. */
     recordKind: leadRecordKindEnum("record_kind").notNull().default("content_post"),
+    /** Which platform this profile's identity id (authorExternalId) belongs to — facebookId vs instagramId at merge time. */
+    platform: platformEnum("platform").notNull().default("facebook"),
     version: integer("version").notNull().default(1),
     rules: jsonb("rules").$type<MappingRules>().notNull(),
     /**

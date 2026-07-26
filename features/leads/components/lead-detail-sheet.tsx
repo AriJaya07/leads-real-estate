@@ -13,10 +13,9 @@ import { ScoreBadge } from "@/components/common/score-badge";
 import { Spinner } from "@/components/common/spinner";
 import { saveLeadNotes, setLeadStatus } from "@/application/leads/lead.actions";
 import { LEAD_STATUSES, leadStatusLabel } from "@/application/leads/lead-status";
-import type { LeadListItem } from "@/application/leads/lead-queries";
-
-/** Every status except `spam` — that one is classifier-assigned, not a manual choice. */
-const STATUSES = LEAD_STATUSES.filter((status) => status !== "spam");
+import { useLeadAppearancesQuery } from "@/features/leads/queries";
+import type { LeadAppearanceListItem, LeadListItem } from "@/application/leads/lead-queries";
+import { primaryLeadScore } from "@/domain/lead/ranking";
 
 interface EngagementContext {
   targetPostExternalId?: string | null;
@@ -56,11 +55,9 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState(lead.notes);
   const [saving, setSaving] = useState(false);
+  const { data: appearances = [], isLoading: loadingAppearances } = useLeadAppearancesQuery(lead.id);
 
-  const isEngagement = lead.recordKind !== "content_post";
-  const engagement = lead.attributes._engagement as EngagementContext | undefined;
-
-  async function update(status: (typeof STATUSES)[number]) {
+  async function update(status: (typeof LEAD_STATUSES)[number]) {
     setSaving(true);
     await setLeadStatus({ leadId: lead.id, status });
     setSaving(false);
@@ -82,130 +79,98 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
       <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-xl">
         <SheetHeader>
           <SheetTitle className="flex flex-wrap items-center gap-2">
-            <IntentBadge intent={lead.intent} />
-            {lead.authorName ?? "Unknown"}
-            <ScoreBadge score={lead.intentScore} />
+            <IntentBadge intent={lead.leadType} />
+            {lead.name ?? "Unknown"}
+            <ScoreBadge score={primaryLeadScore(lead)} />
           </SheetTitle>
           <SheetDescription>
-            {lead.sourceGroup ?? "Unknown source"} ·{" "}
-            {format(new Date(lead.postedAt), "d MMM yyyy, HH:mm")}
+            {lead.username ? `@${lead.username}` : "Unknown handle"}
+            {lead.location ? ` · ${lead.location}` : ""} · seen {lead.appearanceCount}{" "}
+            {lead.appearanceCount === 1 ? "time" : "times"}
           </SheetDescription>
         </SheetHeader>
 
         <div className="flex flex-col gap-5 px-4 pb-6">
-          {lead.images.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto">
-              {lead.images.slice(0, 6).map((src) => (
-                // Plain <img>: these are signed CDN URLs that expire, so the
-                // optimizer would cache a URL that stops resolving.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={src}
-                  src={src}
-                  alt=""
-                  loading="lazy"
-                  className="border-border h-28 w-40 shrink-0 rounded-lg border object-cover"
-                />
-              ))}
-            </div>
+          {lead.avatarUrl && (
+            // Plain <img>: these are signed CDN URLs that expire, so the
+            // optimizer would cache a URL that stops resolving.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={lead.avatarUrl}
+              alt=""
+              loading="lazy"
+              className="border-border size-16 shrink-0 rounded-full border object-cover"
+            />
           )}
 
-          {isEngagement ? (
+          {lead.bio && (
             <section>
-              <h3 className="mb-1.5 text-sm font-semibold">
-                {lead.recordKind === "engagement_comment" ? "Commented on" : "Liked"}
-              </h3>
-              {engagement?.targetListingTitle && (
-                <p className="mb-1 text-sm font-medium">{engagement.targetListingTitle}</p>
-              )}
-              <p className="text-muted-foreground text-sm">
-                {[engagement?.targetLocationRaw, engagement?.targetPriceRaw]
-                  .filter(Boolean)
-                  .join(" · ") || "No listing details captured for this engagement."}
-              </p>
-              {engagement?.targetPostUrl && (
-                <a
-                  href={engagement.targetPostUrl}
-                  target="_blank"
-                  rel="noopener"
-                  className="text-primary mt-1 inline-block text-xs underline"
-                >
-                  View the post they engaged with
-                </a>
-              )}
-            </section>
-          ) : (
-            <section>
-              <h3 className="mb-1.5 text-sm font-semibold">Post</h3>
-              {lead.listingTitle && <p className="mb-1 text-sm font-medium">{lead.listingTitle}</p>}
-              <p className="text-muted-foreground text-sm whitespace-pre-wrap">
-                {lead.body || "(no text)"}
-              </p>
+              <h3 className="mb-1.5 text-sm font-semibold">Bio</h3>
+              <p className="text-muted-foreground text-sm whitespace-pre-wrap">{lead.bio}</p>
             </section>
           )}
 
           <section>
-            <h3 className="mb-1.5 text-sm font-semibold">Why it scored {lead.intentScore}</h3>
-            <ul className="flex flex-col gap-1">
-              {lead.scoreReasons.map((reason) => (
-                <li
-                  key={reason.code + reason.label}
-                  className="flex items-start justify-between gap-3 text-sm"
-                >
-                  <span className={reason.weight < 0 ? "text-destructive" : undefined}>
-                    {reason.label}
-                    {reason.evidence && (
-                      <span className="text-muted-foreground"> — “{reason.evidence}”</span>
-                    )}
-                  </span>
-                  <span className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums">
-                    {reason.weight > 0 ? "+" : ""}
-                    {reason.weight}
-                  </span>
-                </li>
-              ))}
-              {lead.scoreReasons.length === 0 && (
-                <li className="text-muted-foreground text-sm">No signals detected.</li>
-              )}
-            </ul>
+            <h3 className="mb-1.5 text-sm font-semibold">AI analysis</h3>
+            <div className="mb-2 flex flex-wrap gap-3 text-xs">
+              <span className="flex items-center gap-1">
+                <ScoreBadge score={lead.buyerScore} label="buyer" /> buyer
+              </span>
+              <span className="flex items-center gap-1">
+                <ScoreBadge score={lead.sellerScore} label="seller" /> seller
+              </span>
+              <span className="flex items-center gap-1">
+                <ScoreBadge score={lead.investorScore} label="investor" /> investor
+              </span>
+              <span className="flex items-center gap-1">
+                <ScoreBadge score={lead.confidenceScore} label="confidence" /> confidence
+              </span>
+            </div>
+            <p className="text-muted-foreground text-sm">{lead.aiExplanation || "No signal yet."}</p>
           </section>
 
           <section className="grid grid-cols-2 gap-3 text-sm">
             <Field label="Wants" value={lead.propertyTypes.join(", ") || "—"} />
             <Field label="Where" value={lead.locations.join(", ") || "—"} />
-            <Field label="Bedrooms" value={lead.bedrooms?.toString() ?? "—"} />
-            <Field label="Quality" value={`${lead.qualityScore}/100`} />
+            <Field
+              label="Budget"
+              value={
+                lead.budgetMin === null && lead.budgetMax === null
+                  ? "—"
+                  : `${lead.budgetCurrency ?? ""} ${lead.budgetMin ?? "?"}–${lead.budgetMax ?? "?"}`
+              }
+            />
+            <Field label="Facebook" value={lead.facebookId ?? "—"} />
+            <Field label="Instagram" value={lead.instagramId ?? "—"} />
             <Field label="WhatsApp" value={lead.contact.whatsapp ?? "—"} />
             <Field label="Phone" value={lead.contact.phone ?? "—"} />
             <Field label="Email" value={lead.contact.email ?? "—"} />
-            <Field label="Engagement" value={`${lead.reach} reach`} />
           </section>
 
-          {Object.keys(lead.attributes).filter((key) => key !== "_engagement").length > 0 && (
-            <section>
-              <h3 className="mb-1.5 text-sm font-semibold">Source fields</h3>
-              <p className="text-muted-foreground mb-2 text-xs">
-                Discovered in the payload and preserved automatically — these are filterable
-                without any code change.
-              </p>
-              <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                {Object.entries(lead.attributes)
-                  .filter(([key]) => key !== "_engagement")
-                  .slice(0, 12)
-                  .map(([key, value]) => (
-                    <div key={key} className="contents">
-                      <dt className="text-muted-foreground truncate">{key}</dt>
-                      <dd className="truncate">{formatAttributeValue(value).slice(0, 60)}</dd>
-                    </div>
-                  ))}
-              </dl>
-            </section>
-          )}
+          <section>
+            <h3 className="mb-1.5 text-sm font-semibold">
+              Sources {appearances.length > 0 && `(${appearances.length})`}
+            </h3>
+            <p className="text-muted-foreground mb-2 text-xs">
+              Every post, comment or like this lead was collected from.
+            </p>
+            {loadingAppearances ? (
+              <p className="text-muted-foreground text-sm">Loading…</p>
+            ) : appearances.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No sources found.</p>
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {appearances.map((appearance) => (
+                  <AppearanceCard key={appearance.id} appearance={appearance} />
+                ))}
+              </ul>
+            )}
+          </section>
 
           <section>
             <h3 className="mb-1.5 text-sm font-semibold">Status</h3>
             <div className="flex flex-wrap gap-1.5">
-              {STATUSES.map((status) => (
+              {LEAD_STATUSES.map((status) => (
                 <Button
                   key={status}
                   size="sm"
@@ -230,22 +195,100 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
             />
           </section>
 
-          <div className="flex items-center gap-2">
-            {lead.externalUrl && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.open(lead.externalUrl as string, "_blank", "noopener")}
-              >
-                <ExternalLink className="size-3.5" aria-hidden />
-                Original post
-              </Button>
-            )}
-            {saving && <Spinner className="text-muted-foreground size-4" />}
-          </div>
+          {saving && (
+            <div className="flex items-center gap-2">
+              <Spinner className="text-muted-foreground size-4" />
+            </div>
+          )}
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function AppearanceCard({ appearance }: { appearance: LeadAppearanceListItem }) {
+  const isEngagement = appearance.recordKind !== "content_post";
+  const engagement = appearance.attributes._engagement as EngagementContext | undefined;
+  const attributeEntries = Object.entries(appearance.attributes).filter(([key]) => key !== "_engagement");
+
+  return (
+    <li className="border-border rounded-lg border p-3 text-sm">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-muted-foreground text-xs">
+          {appearance.sourceGroup ?? "Unknown source"} ·{" "}
+          {format(new Date(appearance.postedAt), "d MMM yyyy, HH:mm")}
+          {appearance.duplicateCount > 0 && ` · +${appearance.duplicateCount} reposts`}
+        </span>
+        <ScoreBadge score={appearance.intentScore} />
+      </div>
+
+      {isEngagement ? (
+        <>
+          <p className="text-muted-foreground text-xs font-medium">
+            {appearance.recordKind === "engagement_comment" ? "Commented on" : "Liked"}
+          </p>
+          {engagement?.targetListingTitle && <p className="font-medium">{engagement.targetListingTitle}</p>}
+          <p className="text-muted-foreground">
+            {[engagement?.targetLocationRaw, engagement?.targetPriceRaw].filter(Boolean).join(" · ") ||
+              "No listing details captured for this engagement."}
+          </p>
+          {engagement?.targetPostUrl && (
+            <a
+              href={engagement.targetPostUrl}
+              target="_blank"
+              rel="noopener"
+              className="text-primary mt-1 inline-block text-xs underline"
+            >
+              View the post they engaged with
+            </a>
+          )}
+        </>
+      ) : (
+        <>
+          {appearance.listingTitle && <p className="font-medium">{appearance.listingTitle}</p>}
+          <p className="text-muted-foreground whitespace-pre-wrap">{appearance.body || "(no text)"}</p>
+        </>
+      )}
+
+      {appearance.scoreReasons.length > 0 && (
+        <ul className="mt-1.5 flex flex-wrap gap-1">
+          {appearance.scoreReasons
+            .filter((r) => r.weight > 0)
+            .slice(0, 3)
+            .map((reason) => (
+              <li
+                key={reason.code + reason.label}
+                className="text-muted-foreground border-border/60 rounded border px-1.5 py-0.5 text-[11px] leading-4"
+              >
+                {reason.label}
+              </li>
+            ))}
+        </ul>
+      )}
+
+      {attributeEntries.length > 0 && (
+        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+          {attributeEntries.slice(0, 6).map(([key, value]) => (
+            <div key={key} className="contents">
+              <dt className="text-muted-foreground truncate">{key}</dt>
+              <dd className="truncate">{formatAttributeValue(value).slice(0, 60)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      {appearance.externalUrl && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          onClick={() => window.open(appearance.externalUrl as string, "_blank", "noopener")}
+        >
+          <ExternalLink className="size-3.5" aria-hidden />
+          Original post
+        </Button>
+      )}
+    </li>
   );
 }
 

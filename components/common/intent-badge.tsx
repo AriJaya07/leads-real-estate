@@ -4,14 +4,20 @@ const LABELS: Record<string, string> = {
   buyer: "Buyer",
   seller: "Seller",
   agent: "Agent",
+  broker: "Broker",
+  investor: "Investor",
   other: "Other",
+  unknown: "Unknown",
 };
 
 const DOT: Record<string, string> = {
   buyer: "bg-intent-buyer",
   seller: "bg-intent-seller",
   agent: "bg-intent-agent",
+  broker: "bg-intent-broker",
+  investor: "bg-intent-investor",
   other: "bg-intent-other",
+  unknown: "bg-intent-other",
 };
 
 /**

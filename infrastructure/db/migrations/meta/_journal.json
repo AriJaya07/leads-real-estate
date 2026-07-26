@@ -5,50 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1784968777203,
-      "tag": "0000_dry_swordsman",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1784970054961,
-      "tag": "0001_moaning_omega_sentinel",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1784971505018,
-      "tag": "0002_abnormal_obadiah_stane",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1784989421592,
-      "tag": "0003_salty_terrax",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1784990732050,
-      "tag": "0004_robust_molecule_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1784991301420,
-      "tag": "0005_blue_enchantress",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1785052510727,
-      "tag": "0006_yellow_rockslide",
+      "when": 1785056467469,
+      "tag": "0000_cool_forge",
       "breakpoints": true
     }
   ]

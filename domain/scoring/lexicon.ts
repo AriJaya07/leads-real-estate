@@ -94,6 +94,49 @@ export const AGENT_PHRASES: Phrase[] = [
 ];
 
 /**
+ * Investment framing, distinct from plain buyer intent ("looking to buy") or
+ * plain seller/agency copy ("investment opportunity" as a listing hook, already
+ * in SELLER_PHRASES). This is about the *person's own* investor framing — buying
+ * for yield/return rather than to live in — and feeds `investorScore`
+ * (per-appearance, additive, does not change `intent`/`intentScore`).
+ */
+export const INVESTOR_PHRASES: Phrase[] = [
+  { text: "rental yield", weight: 30, lang: "en" },
+  { text: "rental income", weight: 26, lang: "en" },
+  { text: "passive income", weight: 24, lang: "en" },
+  { text: "cap rate", weight: 30, lang: "en" },
+  { text: "cash flow", weight: 22, lang: "en" },
+  { text: "add to my portfolio", weight: 28, lang: "en" },
+  { text: "expand my portfolio", weight: 28, lang: "en" },
+  { text: "second property", weight: 20, lang: "en" },
+  { text: "investment property", weight: 24, lang: "en" },
+  { text: "looking to invest", weight: 26, lang: "en" },
+  { text: "adr", weight: 22, lang: "en" },
+  { text: "occupancy rate", weight: 24, lang: "en" },
+  { text: "airbnb income", weight: 24, lang: "en" },
+  { text: "buy to let", weight: 26, lang: "en" },
+
+  { text: "investasi", weight: 26, lang: "id" },
+  { text: "sewa tahunan menguntungkan", weight: 22, lang: "id" },
+];
+
+/**
+ * Licensed/agency-brokerage framing, distinct from a general "our listing"
+ * agent post (`AGENT_PHRASES`). Feeds `brokerScore` (per-appearance, additive) —
+ * used at the person-rollup level to pick `leadType: "broker"` over `"agent"`
+ * when this signal dominates.
+ */
+export const BROKER_PHRASES: Phrase[] = [
+  { text: "licensed broker", weight: 34, lang: "en" },
+  { text: "real estate broker", weight: 32, lang: "en" },
+  { text: "brokerage", weight: 28, lang: "en" },
+  { text: "broker license", weight: 30, lang: "en" },
+  { text: "buyer's agent", weight: 22, lang: "en" },
+  { text: "co-broke", weight: 26, lang: "en" },
+  { text: "commission split", weight: 26, lang: "en" },
+];
+
+/**
  * Off-topic commerce posted into property groups. The current pipeline surfaces
  * these as leads; they waste an agent's time and erode trust in the alert channel.
  */

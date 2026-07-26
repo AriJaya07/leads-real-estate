@@ -130,8 +130,11 @@ describe("syncDataset resumability", () => {
     // cause "a"/"b" to be re-read and double-counted as new.
     expect(second.itemsNew).toBe(1);
 
-    const leads = await db().select().from(schema.leads).where(eq(schema.leads.datasetId, datasetId));
-    expect(leads).toHaveLength(3);
+    const appearances = await db()
+      .select()
+      .from(schema.leadAppearances)
+      .where(eq(schema.leadAppearances.datasetId, datasetId));
+    expect(appearances).toHaveLength(3);
   });
 
   it("skips the run entirely when nothing changed upstream and force is not set", async () => {

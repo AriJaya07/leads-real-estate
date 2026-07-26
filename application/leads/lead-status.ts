@@ -14,12 +14,13 @@ export const PIPELINE_STATUSES = [
   "new",
   "contacted",
   "qualified",
-  "viewing_booked",
-  "converted",
+  "interested",
+  "negotiation",
+  "closed",
 ] as const satisfies readonly LeadStatusValue[];
 
-/** Terminal side-states: not part of the left-to-right flow, shown separately. */
-export const TERMINAL_STATUSES = ["lost", "archived", "spam"] as const satisfies readonly LeadStatusValue[];
+/** Terminal side-state: not part of the left-to-right flow, shown separately. */
+export const TERMINAL_STATUSES = ["rejected"] as const satisfies readonly LeadStatusValue[];
 
 export function leadStatusLabel(status: string): string {
   return status.replace(/_/g, " ");

@@ -6,6 +6,17 @@
 export type LeadIntent = "buyer" | "seller" | "agent" | "other";
 
 /**
+ * Person-level business classification — rolled up from every appearance a
+ * lead has, via `domain/scoring/lead-rollup.ts`. Deliberately a separate type
+ * from `LeadIntent`: intent is what *one post* looks like; `LeadType` is what
+ * *this person* looks like across everything they've done. `"broker"` and
+ * `"investor"` have no `LeadIntent` equivalent — they only exist at the rollup
+ * level, fed by additive per-appearance signals (`investorScore`/`brokerScore`
+ * on `Classification`) rather than the primary intent pick.
+ */
+export type LeadType = "buyer" | "seller" | "agent" | "broker" | "investor" | "unknown";
+
+/**
  * What a record *is*, independent of its intent. `content_post` has body text
  * to classify; `engagement_*` kinds don't — they're a person's reaction to
  * someone else's post, scored on what they engaged with instead (see
@@ -72,6 +83,15 @@ export interface Classification {
   intentScore: number;
   /** 0-100. How workable the lead is: contactable, specific, budgeted. */
   qualityScore: number;
+  /**
+   * 0-100, additive — does not change `intent`/`intentScore`. Investment
+   * framing ("rental yield", "cap rate") can co-occur with buyer intent; this
+   * is a parallel signal consumed only by person-level rollup
+   * (`domain/scoring/lead-rollup.ts`), not by this appearance's own intent pick.
+   */
+  investorScore: number;
+  /** 0-100, additive. Licensed-broker framing, feeds `leadType` rollup only. */
+  brokerScore: number;
   /** Separate from intent — post popularity is not buying intent. */
   reach: number;
   isSpam: boolean;

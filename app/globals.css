@@ -9,6 +9,8 @@
   --color-intent-buyer: var(--intent-buyer);
   --color-intent-seller: var(--intent-seller);
   --color-intent-agent: var(--intent-agent);
+  --color-intent-broker: var(--intent-broker);
+  --color-intent-investor: var(--intent-investor);
   --color-intent-other: var(--intent-other);
   --color-surface-chart: var(--surface-chart);
   --color-background: var(--background);
@@ -140,6 +142,8 @@
   --intent-buyer: #2a78d6;
   --intent-seller: #eb6834;
   --intent-agent: #1baf7a;
+  --intent-broker: #4a3aa7;
+  --intent-investor: #eda100;
   --intent-other: oklch(0.556 0 0);
 
   --score-high-bg: oklch(0.94 0.05 150);
@@ -173,6 +177,8 @@
   --intent-buyer: #3987e5;
   --intent-seller: #d95926;
   --intent-agent: #199e70;
+  --intent-broker: #6552c9;
+  --intent-investor: #eda100;
   --intent-other: oklch(0.708 0 0);
 
   --score-high-bg: oklch(0.32 0.06 150);

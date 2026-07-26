@@ -4,18 +4,19 @@ CREATE TYPE "public"."dataset_health" AS ENUM('unknown', 'healthy', 'stale', 'de
 CREATE TYPE "public"."dataset_status" AS ENUM('active', 'paused', 'archived', 'missing');--> statement-breakpoint
 CREATE TYPE "public"."lead_event_type" AS ENUM('created', 'status_changed', 'assigned', 'note_added', 'contacted', 'alerted', 'reclassified', 'merged');--> statement-breakpoint
 CREATE TYPE "public"."lead_intent" AS ENUM('buyer', 'seller', 'agent', 'other');--> statement-breakpoint
-CREATE TYPE "public"."lead_status" AS ENUM('new', 'contacted', 'qualified', 'viewing_booked', 'converted', 'lost', 'archived', 'spam');--> statement-breakpoint
+CREATE TYPE "public"."lead_record_kind" AS ENUM('content_post', 'engagement_like', 'engagement_comment');--> statement-breakpoint
+CREATE TYPE "public"."lead_status" AS ENUM('new', 'contacted', 'qualified', 'interested', 'negotiation', 'closed', 'rejected');--> statement-breakpoint
+CREATE TYPE "public"."lead_type" AS ENUM('buyer', 'seller', 'agent', 'broker', 'investor', 'unknown');--> statement-breakpoint
 CREATE TYPE "public"."log_level" AS ENUM('debug', 'info', 'warn', 'error');--> statement-breakpoint
+CREATE TYPE "public"."platform" AS ENUM('facebook', 'instagram', 'other');--> statement-breakpoint
 CREATE TYPE "public"."source_kind" AS ENUM('apify', 'n8n', 'webform', 'manual');--> statement-breakpoint
 CREATE TYPE "public"."sync_status" AS ENUM('running', 'succeeded', 'partial', 'failed', 'skipped');--> statement-breakpoint
 CREATE TYPE "public"."sync_trigger" AS ENUM('cron', 'webhook', 'manual', 'discovery');--> statement-breakpoint
 CREATE TYPE "public"."user_role" AS ENUM('admin', 'agent');--> statement-breakpoint
-CREATE TABLE "login_tokens" (
+CREATE TABLE "login_attempts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"email" text NOT NULL,
-	"token_hash" text NOT NULL,
-	"expires_at" timestamp with time zone NOT NULL,
-	"consumed_at" timestamp with time zone,
+	"succeeded" boolean NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -24,6 +25,10 @@ CREATE TABLE "users" (
 	"email" text NOT NULL,
 	"name" text,
 	"role" "user_role" DEFAULT 'agent' NOT NULL,
+	"password_hash" text,
+	"password_set_at" timestamp with time zone,
+	"must_change_password" boolean DEFAULT false NOT NULL,
+	"session_version" integer DEFAULT 1 NOT NULL,
 	"accepts_assignments" boolean DEFAULT true NOT NULL,
 	"last_seen_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -96,8 +101,11 @@ CREATE TABLE "mapping_profiles" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,
 	"source_kind" "source_kind" NOT NULL,
+	"record_kind" "lead_record_kind" DEFAULT 'content_post' NOT NULL,
+	"platform" "platform" DEFAULT 'facebook' NOT NULL,
 	"version" integer DEFAULT 1 NOT NULL,
 	"rules" jsonb NOT NULL,
+	"match_paths" text[] DEFAULT '{}'::text[] NOT NULL,
 	"passthrough" boolean DEFAULT true NOT NULL,
 	"auto_generated" boolean DEFAULT false NOT NULL,
 	"confidence" real,
@@ -165,6 +173,56 @@ CREATE TABLE "fx_rates" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "lead_appearances" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"lead_id" uuid NOT NULL,
+	"raw_record_id" uuid NOT NULL,
+	"dataset_id" uuid NOT NULL,
+	"canonical_appearance_id" uuid,
+	"record_kind" "lead_record_kind" DEFAULT 'content_post' NOT NULL,
+	"platform" "platform" DEFAULT 'facebook' NOT NULL,
+	"external_id" text NOT NULL,
+	"external_url" text,
+	"source_group" text,
+	"author_name" text,
+	"author_url" text,
+	"author_avatar_url" text,
+	"author_external_id" text,
+	"author_username" text,
+	"author_bio" text,
+	"author_location" text,
+	"body" text DEFAULT '' NOT NULL,
+	"listing_title" text,
+	"images" text[] DEFAULT '{}'::text[] NOT NULL,
+	"posted_at" timestamp with time zone NOT NULL,
+	"likes" integer DEFAULT 0 NOT NULL,
+	"comments" integer DEFAULT 0 NOT NULL,
+	"shares" integer DEFAULT 0 NOT NULL,
+	"intent" "lead_intent" DEFAULT 'other' NOT NULL,
+	"intent_score" integer DEFAULT 0 NOT NULL,
+	"quality_score" integer DEFAULT 0 NOT NULL,
+	"investor_score" integer DEFAULT 0 NOT NULL,
+	"broker_score" integer DEFAULT 0 NOT NULL,
+	"reach" integer DEFAULT 0 NOT NULL,
+	"score_reasons" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"classifier_id" text DEFAULT 'unclassified' NOT NULL,
+	"classified_at" timestamp with time zone,
+	"property_types" text[] DEFAULT '{}'::text[] NOT NULL,
+	"locations" text[] DEFAULT '{}'::text[] NOT NULL,
+	"bedrooms" integer,
+	"bathrooms" integer,
+	"budget_min" bigint,
+	"budget_max" bigint,
+	"budget_currency" text,
+	"budget_usd_min" bigint,
+	"budget_usd_max" bigint,
+	"contact" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"attributes" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"is_spam" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "lead_events" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"lead_id" uuid NOT NULL,
@@ -189,42 +247,32 @@ CREATE TABLE "lead_states" (
 --> statement-breakpoint
 CREATE TABLE "leads" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"raw_record_id" uuid NOT NULL,
-	"dataset_id" uuid NOT NULL,
-	"canonical_lead_id" uuid,
-	"external_id" text NOT NULL,
-	"external_url" text,
-	"source_group" text,
-	"author_name" text,
-	"author_url" text,
-	"author_avatar_url" text,
-	"author_external_id" text,
-	"body" text DEFAULT '' NOT NULL,
-	"listing_title" text,
-	"images" text[] DEFAULT '{}'::text[] NOT NULL,
-	"posted_at" timestamp with time zone NOT NULL,
-	"likes" integer DEFAULT 0 NOT NULL,
-	"comments" integer DEFAULT 0 NOT NULL,
-	"shares" integer DEFAULT 0 NOT NULL,
-	"intent" "lead_intent" DEFAULT 'other' NOT NULL,
-	"intent_score" integer DEFAULT 0 NOT NULL,
-	"quality_score" integer DEFAULT 0 NOT NULL,
-	"reach" integer DEFAULT 0 NOT NULL,
-	"score_reasons" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"facebook_id" text,
+	"instagram_id" text,
+	"profile_url" text,
+	"username" text,
+	"name" text,
+	"avatar_url" text,
+	"location" text,
+	"bio" text,
+	"contact" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"lead_type" "lead_type" DEFAULT 'unknown' NOT NULL,
+	"buyer_score" integer DEFAULT 0 NOT NULL,
+	"seller_score" integer DEFAULT 0 NOT NULL,
+	"investor_score" integer DEFAULT 0 NOT NULL,
+	"confidence_score" integer DEFAULT 0 NOT NULL,
+	"ai_explanation" text DEFAULT '' NOT NULL,
 	"classifier_id" text DEFAULT 'unclassified' NOT NULL,
 	"classified_at" timestamp with time zone,
 	"property_types" text[] DEFAULT '{}'::text[] NOT NULL,
 	"locations" text[] DEFAULT '{}'::text[] NOT NULL,
-	"bedrooms" integer,
-	"bathrooms" integer,
 	"budget_min" bigint,
 	"budget_max" bigint,
 	"budget_currency" text,
 	"budget_usd_min" bigint,
 	"budget_usd_max" bigint,
-	"contact" jsonb DEFAULT '{}'::jsonb NOT NULL,
-	"attributes" jsonb DEFAULT '{}'::jsonb NOT NULL,
-	"is_spam" boolean DEFAULT false NOT NULL,
+	"latest_appearance_at" timestamp with time zone,
+	"appearance_count" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -276,18 +324,18 @@ ALTER TABLE "raw_records" ADD CONSTRAINT "raw_records_dataset_id_datasets_id_fk"
 ALTER TABLE "raw_records" ADD CONSTRAINT "raw_records_sync_run_id_sync_runs_id_fk" FOREIGN KEY ("sync_run_id") REFERENCES "public"."sync_runs"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sync_events" ADD CONSTRAINT "sync_events_sync_run_id_sync_runs_id_fk" FOREIGN KEY ("sync_run_id") REFERENCES "public"."sync_runs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sync_runs" ADD CONSTRAINT "sync_runs_dataset_id_datasets_id_fk" FOREIGN KEY ("dataset_id") REFERENCES "public"."datasets"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "lead_appearances" ADD CONSTRAINT "lead_appearances_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "lead_appearances" ADD CONSTRAINT "lead_appearances_raw_record_id_raw_records_id_fk" FOREIGN KEY ("raw_record_id") REFERENCES "public"."raw_records"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "lead_appearances" ADD CONSTRAINT "lead_appearances_dataset_id_datasets_id_fk" FOREIGN KEY ("dataset_id") REFERENCES "public"."datasets"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "lead_events" ADD CONSTRAINT "lead_events_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "lead_events" ADD CONSTRAINT "lead_events_actor_id_users_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "lead_states" ADD CONSTRAINT "lead_states_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "lead_states" ADD CONSTRAINT "lead_states_assigned_to_users_id_fk" FOREIGN KEY ("assigned_to") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "lead_states" ADD CONSTRAINT "lead_states_updated_by_users_id_fk" FOREIGN KEY ("updated_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "leads" ADD CONSTRAINT "leads_raw_record_id_raw_records_id_fk" FOREIGN KEY ("raw_record_id") REFERENCES "public"."raw_records"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "leads" ADD CONSTRAINT "leads_dataset_id_datasets_id_fk" FOREIGN KEY ("dataset_id") REFERENCES "public"."datasets"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "saved_views" ADD CONSTRAINT "saved_views_owner_id_users_id_fk" FOREIGN KEY ("owner_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "alert_deliveries" ADD CONSTRAINT "alert_deliveries_alert_rule_id_alert_rules_id_fk" FOREIGN KEY ("alert_rule_id") REFERENCES "public"."alert_rules"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "alert_deliveries" ADD CONSTRAINT "alert_deliveries_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX "login_tokens_hash_key" ON "login_tokens" USING btree ("token_hash");--> statement-breakpoint
-CREATE INDEX "login_tokens_email_idx" ON "login_tokens" USING btree ("email");--> statement-breakpoint
+CREATE INDEX "login_attempts_email_created_idx" ON "login_attempts" USING btree ("email","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "users_email_key" ON "users" USING btree ("email");--> statement-breakpoint
 CREATE UNIQUE INDEX "dataset_versions_no_key" ON "dataset_versions" USING btree ("dataset_id","version_no");--> statement-breakpoint
 CREATE UNIQUE INDEX "datasets_source_external_key" ON "datasets" USING btree ("source_id","external_id");--> statement-breakpoint
@@ -303,19 +351,34 @@ CREATE INDEX "raw_records_dataset_idx" ON "raw_records" USING btree ("dataset_id
 CREATE INDEX "sync_events_run_at_idx" ON "sync_events" USING btree ("sync_run_id","at");--> statement-breakpoint
 CREATE INDEX "sync_runs_dataset_started_idx" ON "sync_runs" USING btree ("dataset_id","started_at");--> statement-breakpoint
 CREATE INDEX "sync_runs_status_idx" ON "sync_runs" USING btree ("status");--> statement-breakpoint
+CREATE UNIQUE INDEX "lead_appearances_raw_record_key" ON "lead_appearances" USING btree ("raw_record_id");--> statement-breakpoint
+CREATE INDEX "lead_appearances_lead_idx" ON "lead_appearances" USING btree ("lead_id");--> statement-breakpoint
+CREATE INDEX "lead_appearances_dataset_idx" ON "lead_appearances" USING btree ("dataset_id");--> statement-breakpoint
+CREATE INDEX "lead_appearances_record_kind_idx" ON "lead_appearances" USING btree ("record_kind");--> statement-breakpoint
+CREATE INDEX "lead_appearances_intent_score_idx" ON "lead_appearances" USING btree ("intent","intent_score");--> statement-breakpoint
+CREATE INDEX "lead_appearances_posted_at_idx" ON "lead_appearances" USING btree ("posted_at");--> statement-breakpoint
+CREATE INDEX "lead_appearances_canonical_idx" ON "lead_appearances" USING btree ("canonical_appearance_id");--> statement-breakpoint
+CREATE INDEX "lead_appearances_property_types_idx" ON "lead_appearances" USING gin ("property_types");--> statement-breakpoint
+CREATE INDEX "lead_appearances_locations_idx" ON "lead_appearances" USING gin ("locations");--> statement-breakpoint
+CREATE INDEX "lead_appearances_attributes_idx" ON "lead_appearances" USING gin ("attributes");--> statement-breakpoint
+CREATE INDEX "lead_appearances_search_idx" ON "lead_appearances" USING gin (to_tsvector('simple', coalesce("body", '') || ' ' || coalesce("author_name", '') || ' ' || coalesce("listing_title", '')));--> statement-breakpoint
+CREATE INDEX "lead_appearances_body_trgm_idx" ON "lead_appearances" USING gin ("body" gin_trgm_ops);--> statement-breakpoint
+CREATE INDEX "lead_appearances_active_posted_at_idx" ON "lead_appearances" USING btree ("posted_at") WHERE "lead_appearances"."is_spam" = false AND "lead_appearances"."canonical_appearance_id" IS NULL;--> statement-breakpoint
+CREATE INDEX "lead_appearances_active_intent_score_idx" ON "lead_appearances" USING btree ("intent","intent_score") WHERE "lead_appearances"."is_spam" = false AND "lead_appearances"."canonical_appearance_id" IS NULL;--> statement-breakpoint
+CREATE INDEX "lead_appearances_engagement_author_idx" ON "lead_appearances" USING btree ("author_external_id") WHERE "lead_appearances"."record_kind" != 'content_post';--> statement-breakpoint
 CREATE INDEX "lead_events_lead_at_idx" ON "lead_events" USING btree ("lead_id","at");--> statement-breakpoint
 CREATE INDEX "lead_states_status_idx" ON "lead_states" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "lead_states_assigned_idx" ON "lead_states" USING btree ("assigned_to");--> statement-breakpoint
-CREATE UNIQUE INDEX "leads_raw_record_key" ON "leads" USING btree ("raw_record_id");--> statement-breakpoint
-CREATE INDEX "leads_dataset_idx" ON "leads" USING btree ("dataset_id");--> statement-breakpoint
-CREATE INDEX "leads_intent_score_idx" ON "leads" USING btree ("intent","intent_score");--> statement-breakpoint
-CREATE INDEX "leads_posted_at_idx" ON "leads" USING btree ("posted_at");--> statement-breakpoint
-CREATE INDEX "leads_canonical_idx" ON "leads" USING btree ("canonical_lead_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "leads_facebook_id_key" ON "leads" USING btree ("facebook_id") WHERE "leads"."facebook_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "leads_instagram_id_key" ON "leads" USING btree ("instagram_id") WHERE "leads"."instagram_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "leads_profile_url_key" ON "leads" USING btree ("profile_url") WHERE "leads"."profile_url" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "leads_lead_type_idx" ON "leads" USING btree ("lead_type");--> statement-breakpoint
+CREATE INDEX "leads_lead_type_buyer_score_idx" ON "leads" USING btree ("lead_type","buyer_score");--> statement-breakpoint
+CREATE INDEX "leads_latest_appearance_idx" ON "leads" USING btree ("latest_appearance_at");--> statement-breakpoint
 CREATE INDEX "leads_property_types_idx" ON "leads" USING gin ("property_types");--> statement-breakpoint
 CREATE INDEX "leads_locations_idx" ON "leads" USING gin ("locations");--> statement-breakpoint
-CREATE INDEX "leads_attributes_idx" ON "leads" USING gin ("attributes");--> statement-breakpoint
-CREATE INDEX "leads_search_idx" ON "leads" USING gin (to_tsvector('simple', coalesce("body", '') || ' ' || coalesce("author_name", '') || ' ' || coalesce("listing_title", '')));--> statement-breakpoint
-CREATE INDEX "leads_body_trgm_idx" ON "leads" USING gin ("body" gin_trgm_ops);--> statement-breakpoint
+CREATE INDEX "leads_search_idx" ON "leads" USING gin (to_tsvector('simple', coalesce("name", '') || ' ' || coalesce("username", '') || ' ' || coalesce("bio", '')));--> statement-breakpoint
+CREATE INDEX "leads_name_trgm_idx" ON "leads" USING gin ("name" gin_trgm_ops);--> statement-breakpoint
 CREATE INDEX "saved_views_owner_idx" ON "saved_views" USING btree ("owner_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "alert_deliveries_dedupe_key" ON "alert_deliveries" USING btree ("dedupe_key");--> statement-breakpoint
 CREATE INDEX "alert_deliveries_lead_idx" ON "alert_deliveries" USING btree ("lead_id");--> statement-breakpoint

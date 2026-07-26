@@ -29,6 +29,9 @@ const FIELD_SYNONYMS: Record<CanonicalField, Candidate> = {
     synonyms: ["profilepic", "profilepicture", "avatar", "authorprofilepicture", "picture"],
   },
   authorExternalId: { synonyms: ["userid", "authorid", "ownerid"] },
+  authorUsername: { synonyms: ["username", "handle", "screenname"] },
+  authorBio: { synonyms: ["bio", "biography", "about", "description"] },
+  authorLocation: { synonyms: ["userlocation", "authorlocation", "profilelocation", "hometown"] },
   body: { synonyms: ["text", "message", "content", "caption", "description", "body"], weight: 3 },
   listingTitle: { synonyms: ["title", "headline", "subject"] },
   images: {

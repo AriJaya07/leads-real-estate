@@ -21,24 +21,39 @@ tool.
 
 ## Core user stories (implemented)
 
-- As an agent, I see an inbox of leads ranked by priority (intent + quality, recency
-  weighted) by default, so the most contactable, most-real, most-recent buyer intent is
-  always at the top — `triageFilters()` in `application/leads/filters.schema.ts`
-  defaults to `intent=buyer, status=new, sort=priority`.
-- As an agent, I can filter by intent, status, property type, location, source group,
-  budget range, contact-availability, and any dynamically-discovered attribute from the
-  raw data, with results paginated and sortable — `application/leads/lead-queries.ts`.
-- As an agent, I see *why* a lead scored the way it did (specific phrases, budget
-  evidence, location match) rather than a bare number — `scoreReasons` on every lead.
+- As an agent, each lead is a **person**, not a post — the same Facebook/Instagram
+  account posting in multiple groups, showing up as both a post author and a Post Liker,
+  or appearing across Facebook and Instagram, is one lead with every source it was found
+  in listed, not N separate inbox items. Deterministic identity match on
+  `facebookId`/`instagramId`/`profileUrl` (never fuzzy name matching) —
+  `domain/lead/identity.ts`, `application/leads/identity-resolution.ts`.
+- As an agent, I see an inbox of leads ranked by priority (buyer score + confidence,
+  recency weighted) by default, so the most contactable, most-real, most-recently-active
+  buyer is always at the top — `triageFilters()` in
+  `application/leads/filters.schema.ts` defaults to `leadType=buyer, status=new,
+  sort=priority`.
+- As an agent, I can filter by lead type, status, property type, location, source group,
+  record kind (post/comment/like), budget range, contact-availability, and any
+  dynamically-discovered attribute from the raw data, with results paginated and
+  sortable — `application/leads/lead-queries.ts`.
+- As an agent, I see *why* a lead scored the way it did: `scoreReasons` (specific
+  phrases, budget evidence, location match) on every source it came from, plus a
+  person-level `aiExplanation` synthesizing across everything they've done.
+- As an agent, I see a lead's personal information (name, username, Facebook/Instagram
+  ID, profile URL, profile photo, location, bio, published contact details) and business
+  classification (buyer/seller/agent/broker/investor/unknown) alongside the AI analysis
+  (buyer/seller/investor/confidence scores) — `leads` table, `features/leads/components/lead-detail-sheet.tsx`.
 - As an agent, marking a lead "contacted" stamps the time automatically — I don't log
   time-to-first-touch myself, the action does it — `markContacted` in
   `application/leads/lead.actions.ts`.
 - As an agent, I can assign a lead, change its status through a pipeline (`new` →
-  `contacted` → `qualified` → `viewing_booked` → `converted`, or `lost`/`archived`/
-  `spam`), leave notes, and bookmark it — all in `lead_states`, all surviving any
-  reprocessing of the underlying data.
+  `contacted` → `qualified` → `interested` → `negotiation` → `closed`, or `rejected`),
+  leave notes, and bookmark it — all in `lead_states`, all surviving any reprocessing or
+  rollup recompute of the underlying data.
 - As an agent, when the same post is reposted or cross-posted, I see it collapsed under
-  one canonical lead with a duplicate count, not as separate inbox items.
+  one canonical *appearance* with a repost count, inside that lead's list of sources —
+  not as a separate inbox item and not confused with the (separate, person-level)
+  identity merge above.
 - As an admin, a new dataset from n8n/Apify shows up automatically without me
   configuring anything — `discoverDatasets`.
 - As an admin, when an upstream actor changes its field names, I get a `schema_drift`
@@ -63,11 +78,14 @@ tool.
 
 ## North-star metric
 
-**Time-to-first-touch**: the gap between a lead's `postedAt` and its
-`firstContactedAt`. Measured automatically (stamped by the "mark contacted" action, not
-self-reported), aggregated as a median in `getLeadStats()`, and surfaced on the inbox
-stats row. Every other feature in this product — ranking, alerting, digest batching — is
-in service of shrinking this number.
+**Time-to-first-touch**: the gap between when a lead (person) was first identified
+(`leads.createdAt`) and its `firstContactedAt`. Measured automatically (stamped by the
+"mark contacted" action, not self-reported), aggregated as a median in
+`getLeadStats()`, and surfaced on the inbox stats row. Rebased from a single post's
+`postedAt` to the person's own `createdAt` when leads became person-centric — there's
+no one "the post" anymore, and "how long from when we identified this person to first
+contact" is the more correct read of the same metric. Every other feature in this
+product — ranking, alerting, digest batching — is in service of shrinking this number.
 
 ## Non-goals / explicit scope decisions
 
@@ -80,9 +98,15 @@ in service of shrinking this number.
 - **Engagement (likes/comments/shares) is explicitly not a ranking or scoring input for
   intent.** This was a deliberate product decision, not an oversight — see
   `architecture.md`.
-- **No LLM classification yet.** The rules-based classifier is intentionally the
-  starting point; an LLM classifier is designed for (the `LeadClassifier` port,
-  `classifierId` column) but not built. Don't assume one exists.
+- **No LLM classification or rollup yet.** The rules-based classifier and rules-based
+  person rollup are intentionally the starting point; an LLM implementation of each is
+  designed for (the `LeadClassifier` and `LeadIntelligence` ports, `classifierId`
+  columns on both `lead_appearances` and `leads`) but not built. Don't assume one
+  exists.
+- **No fuzzy identity matching.** Merging two leads because their names/photos *look*
+  similar is explicitly out of scope — identity resolution only merges on exact
+  `facebookId`/`instagramId`/`profileUrl` match. A wrong merge is worse than a
+  duplicate; see architecture.md.
 
 ## Roadmap / not built yet
 
@@ -90,14 +114,19 @@ In rough priority order as understood from the codebase and README:
 
 1. **Buyer-side data sourcing (highest leverage, not a code change).** Current n8n
    feeds are almost entirely seller listings and job posts. Needs buyer-side Facebook
-   groups, keyword searches, and mining commenters on listing posts. See
+   groups, keyword searches, and mining commenters on listing posts. The person-centric
+   lead model (identity merge, `recordKind`/`platform` on mapping profiles) is what
+   makes that expansion produce clean, deduplicated leads once the n8n side ships — see
    [tech-debt.md](tech-debt.md).
 2. **Visual mapping editor** — mapping profiles are still edited as JSON rows, not
    through a UI. (The pipeline kanban, intelligence dashboards, and cross-dataset sync
    activity feed that used to be listed here are built — `/pipeline`, `/intelligence`,
    `/admin/sync`.)
-3. **LLM classifier** behind the existing `LeadClassifier` port, shadow-mode validated
-   against the rules classifier before cutover.
+3. **LLM classifier and/or LLM rollup** behind the existing `LeadClassifier`/
+   `LeadIntelligence` ports, shadow-mode validated against the rules-based versions
+   before cutover. An engagement-only lead (liked a listing, no text anywhere) is the
+   case a phrase lexicon structurally can't help with and an LLM given "this profile +
+   these appearances" could.
 4. **WhatsApp notifier** — `alertChannelEnum` already includes `whatsapp`, and the
    notifier registry pattern (`infrastructure/notifiers/registry.ts`) makes it a new
    adapter, but only `email` is implemented. This is called out in the README as "the

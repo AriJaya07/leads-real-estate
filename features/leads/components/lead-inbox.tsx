@@ -20,6 +20,7 @@ import { useLeadFacetsQuery, useLeadsQuery } from "@/features/leads/queries";
 import { parseLeadFilters, type LeadFilters } from "@/application/leads/filters.schema";
 import { leadStatusLabel } from "@/application/leads/lead-status";
 import type { LeadListItem } from "@/application/leads/lead-queries";
+import { primaryLeadScore } from "@/domain/lead/ranking";
 import { cn } from "@/lib/utils";
 import { formatCompact, formatCount } from "@/shared/format";
 
@@ -45,9 +46,9 @@ function budgetLabel(lead: LeadListItem): string {
 function countActiveFilters(filters: LeadFilters): number {
   let count = 0;
   if (filters.q) count += 1;
-  count += filters.intent.length + filters.status.length;
+  count += filters.leadType.length + filters.status.length;
   count += filters.propertyTypes.length + filters.locations.length + filters.groups.length;
-  if (filters.minIntent !== undefined) count += 1;
+  if (filters.minBuyerScore !== undefined) count += 1;
   if (filters.hasContact) count += 1;
   count += Object.keys(filters.attr).length;
   return count;
@@ -69,7 +70,8 @@ const ContactActions = memo(function ContactActions({
   lead: LeadListItem;
   onContact: (lead: LeadListItem, channel: ContactChannel) => void;
 }) {
-  if (!lead.contact.whatsapp && !lead.contact.phone && !lead.externalUrl) {
+  const externalUrl = lead.primaryAppearance?.externalUrl ?? null;
+  if (!lead.contact.whatsapp && !lead.contact.phone && !externalUrl) {
     return <span className="text-muted-foreground text-xs">no contact</span>;
   }
 
@@ -98,7 +100,7 @@ const ContactActions = memo(function ContactActions({
           <Phone className="size-3.5" aria-hidden />
         </Button>
       )}
-      {lead.externalUrl && (
+      {externalUrl && (
         <Button
           size="icon"
           variant="outline"
@@ -130,6 +132,7 @@ const LeadCard = memo(function LeadCard({
   onSelect: (lead: LeadListItem) => void;
   onContact: (lead: LeadListItem, channel: ContactChannel) => void;
 }) {
+  const appearance = lead.primaryAppearance;
   return (
     <div
       role="button"
@@ -148,19 +151,19 @@ const LeadCard = memo(function LeadCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <ScoreBadge score={lead.intentScore} />
-          <IntentBadge intent={lead.intent} />
+          <ScoreBadge score={primaryLeadScore(lead)} />
+          <IntentBadge intent={lead.leadType} />
         </div>
         <span className="text-muted-foreground shrink-0 text-xs">
-          <RelativeTime value={lead.postedAt} />
+          <RelativeTime value={lead.latestAppearanceAt} />
         </span>
       </div>
 
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{lead.authorName ?? "Unknown"}</span>
-          {lead.duplicateCount > 0 && (
-            <span className="text-muted-foreground text-xs">+{lead.duplicateCount} similar</span>
+          <span className="font-medium">{lead.name ?? "Unknown"}</span>
+          {lead.appearanceCount > 1 && (
+            <span className="text-muted-foreground text-xs">seen {lead.appearanceCount}×</span>
           )}
           {lead.status !== "new" && (
             <span className="bg-muted rounded px-1.5 py-0.5 text-[11px]">
@@ -169,8 +172,8 @@ const LeadCard = memo(function LeadCard({
           )}
         </div>
         <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
-          {lead.listingTitle ? `${lead.listingTitle} — ` : ""}
-          {lead.body || "(no text)"}
+          {appearance?.listingTitle ? `${appearance.listingTitle} — ` : ""}
+          {appearance?.body || "(no text)"}
         </p>
       </div>
 
@@ -180,11 +183,11 @@ const LeadCard = memo(function LeadCard({
         <span className="font-mono tabular-nums">{budgetLabel(lead)}</span>
       </div>
 
-      <ScoreReasons reasons={lead.scoreReasons} />
+      <ScoreReasons reasons={appearance?.scoreReasons ?? []} />
 
       <div className="mt-1 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
         <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
-          quality {lead.qualityScore}
+          confidence {lead.confidenceScore}
         </span>
         <ContactActions lead={lead} onContact={onContact} />
       </div>
@@ -202,6 +205,7 @@ const LeadRow = memo(function LeadRow({
   onSelect: (lead: LeadListItem) => void;
   onContact: (lead: LeadListItem, channel: ContactChannel) => void;
 }) {
+  const appearance = lead.primaryAppearance;
   return (
     <tr
       className={cn(
@@ -212,19 +216,19 @@ const LeadRow = memo(function LeadRow({
     >
       <td className="px-3 py-3">
         <div className="flex flex-col gap-1">
-          <ScoreBadge score={lead.intentScore} />
+          <ScoreBadge score={primaryLeadScore(lead)} />
           <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
-            q{lead.qualityScore}
+            c{lead.confidenceScore}
           </span>
         </div>
       </td>
 
       <td className="px-3 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <IntentBadge intent={lead.intent} />
-          <span className="font-medium">{lead.authorName ?? "Unknown"}</span>
-          {lead.duplicateCount > 0 && (
-            <span className="text-muted-foreground text-xs">+{lead.duplicateCount} similar</span>
+          <IntentBadge intent={lead.leadType} />
+          <span className="font-medium">{lead.name ?? "Unknown"}</span>
+          {lead.appearanceCount > 1 && (
+            <span className="text-muted-foreground text-xs">seen {lead.appearanceCount}×</span>
           )}
           {lead.status !== "new" && (
             <span className="bg-muted rounded px-1.5 py-0.5 text-[11px]">
@@ -233,10 +237,10 @@ const LeadRow = memo(function LeadRow({
           )}
         </div>
         <p className="text-muted-foreground mt-1 line-clamp-2 max-w-xl text-sm">
-          {lead.listingTitle ? `${lead.listingTitle} — ` : ""}
-          {lead.body || "(no text)"}
+          {appearance?.listingTitle ? `${appearance.listingTitle} — ` : ""}
+          {appearance?.body || "(no text)"}
         </p>
-        <ScoreReasons reasons={lead.scoreReasons} className="mt-1.5" />
+        <ScoreReasons reasons={appearance?.scoreReasons ?? []} className="mt-1.5" />
       </td>
 
       <td className="text-muted-foreground px-3 py-3 text-xs">
@@ -247,7 +251,7 @@ const LeadRow = memo(function LeadRow({
       </td>
       <td className="px-3 py-3 font-mono text-xs tabular-nums">{budgetLabel(lead)}</td>
       <td className="text-muted-foreground px-3 py-3 text-xs">
-        <RelativeTime value={lead.postedAt} />
+        <RelativeTime value={lead.latestAppearanceAt} />
       </td>
 
       <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
@@ -295,10 +299,11 @@ export function LeadInbox() {
       void queryClient.invalidateQueries({ queryKey: ["leads"] });
       router.refresh();
 
+      const externalUrl = lead.primaryAppearance?.externalUrl ?? null;
       if (channel === "whatsapp" && lead.contact.whatsapp) {
         window.open(`https://wa.me/${lead.contact.whatsapp.replace(/\D/g, "")}`, "_blank", "noopener");
-      } else if (channel === "post" && lead.externalUrl) {
-        window.open(lead.externalUrl, "_blank", "noopener");
+      } else if (channel === "post" && externalUrl) {
+        window.open(externalUrl, "_blank", "noopener");
       }
     },
     [queryClient, router],
@@ -357,7 +362,7 @@ export function LeadInbox() {
                   <th className="w-32">Wants</th>
                   <th className="w-32">Where</th>
                   <th className="w-28">Budget</th>
-                  <th className="w-24">Posted</th>
+                  <th className="w-24">Last seen</th>
                   <th className="w-36">Act</th>
                 </DataTableHead>
                 <tbody>

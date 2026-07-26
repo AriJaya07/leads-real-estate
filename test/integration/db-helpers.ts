@@ -25,6 +25,7 @@ export async function resetDb(): Promise<void> {
       ${schema.alertRules},
       ${schema.savedViews},
       ${schema.leadStates},
+      ${schema.leadAppearances},
       ${schema.leads},
       ${schema.rawRecords},
       ${schema.syncEvents},

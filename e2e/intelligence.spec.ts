@@ -14,17 +14,17 @@ test.describe("intelligence dashboard", () => {
     await expect(page.getByRole("heading", { name: "Intelligence" })).toBeVisible();
 
     // Overview stats: the one seeded lead is a buyer. `exact: true` matters —
-    // the "Buyer intent" tile's own hint text ("Of total leads") otherwise
+    // the "Buyer leads" tile's own hint text ("Of total leads") otherwise
     // substring-matches the "Total leads" label too.
     const totalTile = page.getByText("Total leads", { exact: true }).locator("..");
     await expect(totalTile.getByText("1", { exact: true })).toBeVisible();
 
-    const buyerTile = page.getByText("Buyer intent", { exact: true }).locator("..");
+    const buyerTile = page.getByText("Buyer leads", { exact: true }).locator("..");
     await expect(buyerTile.getByText("1", { exact: true })).toBeVisible();
 
-    await expect(page.getByRole("heading", { name: "Leads posted, last 30 days" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "New leads, last 30 days" })).toBeVisible();
 
-    await expect(page.getByRole("heading", { name: "Intent" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Lead type" })).toBeVisible();
     await expect(page.getByText("Buyer", { exact: true })).toBeVisible();
 
     expect(errors).toEqual([]);

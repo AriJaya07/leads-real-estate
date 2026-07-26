@@ -1,2 +1,0 @@
-CREATE INDEX "leads_active_posted_at_idx" ON "leads" USING btree ("posted_at") WHERE "leads"."is_spam" = false AND "leads"."canonical_lead_id" IS NULL;--> statement-breakpoint
-CREATE INDEX "leads_active_intent_score_idx" ON "leads" USING btree ("intent","intent_score") WHERE "leads"."is_spam" = false AND "leads"."canonical_lead_id" IS NULL;

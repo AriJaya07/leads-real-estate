@@ -8,6 +8,7 @@ import type { MappingRules } from "@/domain/dataset/types";
 import { NEAR_DUPLICATE_SIMILARITY, NEAR_DUPLICATE_WINDOW_HOURS } from "@/shared/constants";
 import type { RawRecordRow } from "@/infrastructure/db/schema/sync";
 import { createLogger } from "@/infrastructure/observability/logger";
+import { resolveIdentity, recomputePersonRollup } from "./identity-resolution";
 
 const log = createLogger("process-records");
 
@@ -17,6 +18,7 @@ export interface ProcessResult {
   duplicates: number;
   failed: number;
   spam: number;
+  /** Person (lead) ids touched by a new, non-duplicate appearance — alerting candidates. */
   leadIds: string[];
 }
 
@@ -33,72 +35,76 @@ async function usdRate(currency: string): Promise<number> {
 }
 
 /**
- * Near-duplicate detection.
+ * Near-duplicate detection between appearances (a repost, or the same item
+ * re-scraped) — distinct from and independent of person-level identity merge
+ * (`resolveIdentity`). Two appearances with matching `authorExternalId` are
+ * already the same person after identity resolution; this additionally links
+ * them as the same *appearance* when the text is a near-exact repost, so
+ * repost frequency doesn't get double-counted as separate rollup evidence.
  *
- * Reposts are common and are not noise to be deleted — repost frequency is
- * itself an intent signal — so duplicates are *linked* to a canonical lead
- * rather than dropped, and the UI collapses them.
+ * Reposts are not noise to be deleted — repost frequency is itself an intent
+ * signal — so duplicates are *linked* to a canonical appearance rather than
+ * dropped, and the UI collapses them.
  */
 async function findCanonicalDuplicate(
   body: string,
   authorExternalId: string | null,
   postedAt: Date,
-  excludeLeadId?: string,
+  excludeAppearanceId?: string,
 ): Promise<string | null> {
   if (body.trim().length < 40) return null;
 
   const since = new Date(postedAt.getTime() - NEAR_DUPLICATE_WINDOW_HOURS * 3_600_000);
 
   const conditions = [
-    gte(schema.leads.postedAt, since),
-    sql`similarity(${schema.leads.body}, ${body}) > ${NEAR_DUPLICATE_SIMILARITY}`,
-    sql`${schema.leads.canonicalLeadId} IS NULL`,
+    gte(schema.leadAppearances.postedAt, since),
+    sql`similarity(${schema.leadAppearances.body}, ${body}) > ${NEAR_DUPLICATE_SIMILARITY}`,
+    sql`${schema.leadAppearances.canonicalAppearanceId} IS NULL`,
   ];
   if (authorExternalId) {
-    conditions.push(eq(schema.leads.authorExternalId, authorExternalId));
+    conditions.push(eq(schema.leadAppearances.authorExternalId, authorExternalId));
   }
-  if (excludeLeadId) {
-    conditions.push(ne(schema.leads.id, excludeLeadId));
+  if (excludeAppearanceId) {
+    conditions.push(ne(schema.leadAppearances.id, excludeAppearanceId));
   }
 
   const [match] = await db()
-    .select({ id: schema.leads.id })
-    .from(schema.leads)
+    .select({ id: schema.leadAppearances.id })
+    .from(schema.leadAppearances)
     .where(and(...conditions))
-    .orderBy(schema.leads.postedAt)
+    .orderBy(schema.leadAppearances.postedAt)
     .limit(1);
 
   return match?.id ?? null;
 }
 
 /**
- * Dedup for `engagement_*` records: identity, not text similarity — there's no
- * body to compare. The same like re-scraped always resolves to the same lead
- * (`authorExternalId` + `targetPostExternalId` match); liking a *different*
- * post stays a separate lead, since that's a distinct, real signal that rolls
- * up as `repeatEngagementCount` on scoring rather than being deduped away.
- * Fixes the duplicate-growth bug `findCanonicalDuplicate`'s `body.length >= 40`
- * gate left engagement records exposed to (see lead-source-scaling-plan.md).
+ * Dedup for `engagement_*` appearances: identity, not text similarity — there's
+ * no body to compare. The same like re-scraped always resolves to the same
+ * appearance (`authorExternalId` + `targetPostExternalId` match); liking a
+ * *different* post stays a separate appearance, since that's a distinct, real
+ * signal that rolls up as `repeatEngagementCount` on scoring rather than being
+ * deduped away.
  */
 async function findEngagementDuplicate(
   authorExternalId: string | null,
   targetPostExternalId: string | null,
-  excludeLeadId?: string,
+  excludeAppearanceId?: string,
 ): Promise<string | null> {
   if (!authorExternalId || !targetPostExternalId) return null;
 
   const conditions = [
-    eq(schema.leads.authorExternalId, authorExternalId),
-    sql`${schema.leads.attributes}->'_engagement'->>'targetPostExternalId' = ${targetPostExternalId}`,
-    sql`${schema.leads.canonicalLeadId} IS NULL`,
+    eq(schema.leadAppearances.authorExternalId, authorExternalId),
+    sql`${schema.leadAppearances.attributes}->'_engagement'->>'targetPostExternalId' = ${targetPostExternalId}`,
+    sql`${schema.leadAppearances.canonicalAppearanceId} IS NULL`,
   ];
-  if (excludeLeadId) conditions.push(ne(schema.leads.id, excludeLeadId));
+  if (excludeAppearanceId) conditions.push(ne(schema.leadAppearances.id, excludeAppearanceId));
 
   const [match] = await db()
-    .select({ id: schema.leads.id })
-    .from(schema.leads)
+    .select({ id: schema.leadAppearances.id })
+    .from(schema.leadAppearances)
     .where(and(...conditions))
-    .orderBy(schema.leads.postedAt)
+    .orderBy(schema.leadAppearances.postedAt)
     .limit(1);
 
   return match?.id ?? null;
@@ -113,15 +119,15 @@ async function countRecentEngagementTargets(
 
   const [row] = await db()
     .select({
-      count: sql<number>`count(distinct ${schema.leads.attributes}->'_engagement'->>'targetPostExternalId')::int`,
+      count: sql<number>`count(distinct ${schema.leadAppearances.attributes}->'_engagement'->>'targetPostExternalId')::int`,
     })
-    .from(schema.leads)
+    .from(schema.leadAppearances)
     .where(
       and(
-        eq(schema.leads.authorExternalId, authorExternalId),
-        sql`${schema.leads.recordKind} != 'content_post'`,
+        eq(schema.leadAppearances.authorExternalId, authorExternalId),
+        sql`${schema.leadAppearances.recordKind} != 'content_post'`,
         excludeTargetPostExternalId
-          ? sql`${schema.leads.attributes}->'_engagement'->>'targetPostExternalId' != ${excludeTargetPostExternalId}`
+          ? sql`${schema.leadAppearances.attributes}->'_engagement'->>'targetPostExternalId' != ${excludeTargetPostExternalId}`
           : sql`true`,
       ),
     );
@@ -130,11 +136,16 @@ async function countRecentEngagementTargets(
 }
 
 /**
- * Normalizes, classifies and persists a batch of raw records.
+ * Normalizes, classifies, identity-resolves and persists a batch of raw
+ * records. Runs on ingest and on backfill alike.
  *
- * Runs on ingest and on backfill alike. Classification happens exactly once per
- * record rather than per request — the old fetch-everything-and-classify model
- * would re-bill an LLM for the whole corpus on every cold cache.
+ * Two-phase per record: (1) classify and upsert the *appearance* — exactly
+ * what this function did before `leads` split into `leads`/`lead_appearances`
+ * — then (2) resolve the appearance's author to a person (`resolveIdentity`)
+ * and recompute that person's rollup (`recomputePersonRollup`). Identity
+ * resolution runs before the appearance upsert because `lead_appearances.leadId`
+ * is a required FK — every appearance belongs to a person from the moment it's
+ * created, never linked up later.
  */
 export async function processRawRecords(
   records: RawRecordRow[],
@@ -143,9 +154,11 @@ export async function processRawRecords(
     passthrough: boolean;
     datasetId: string;
     recordKind?: "content_post" | "engagement_like" | "engagement_comment";
+    platform?: "facebook" | "instagram" | "other";
   },
 ): Promise<ProcessResult> {
   const recordKind = options.recordKind ?? "content_post";
+  const platform = options.platform ?? "facebook";
   const isEngagement = recordKind !== "content_post";
   const result: ProcessResult = {
     created: 0,
@@ -155,6 +168,7 @@ export async function processRawRecords(
     spam: 0,
     leadIds: [],
   };
+  const touchedLeadIds = new Set<string>();
 
   for (const record of records) {
     try {
@@ -196,10 +210,40 @@ export async function processRawRecords(
         attributes._engagement = normalized.engagementContext;
       }
 
+      // Identity resolution runs once per appearance, at creation — not on
+      // every reprocess. Re-resolving on replay is wasted work at best; at
+      // worst, an appearance with no identity signal at all (no author id
+      // mapped) would spawn a fresh orphan person on every single reprocess
+      // instead of staying linked to the one it was already resolved to,
+      // since "no signal" always means "create a new person" (see
+      // identity-resolution.ts). An already-existing appearance's `leadId` is
+      // as stable as `lead_states` — set once, never re-derived.
+      const [existingAppearance] = await db()
+        .select({ leadId: schema.leadAppearances.leadId })
+        .from(schema.leadAppearances)
+        .where(eq(schema.leadAppearances.rawRecordId, record.id))
+        .limit(1);
+
+      const leadId =
+        existingAppearance?.leadId ??
+        (await resolveIdentity({
+          facebookId: platform === "facebook" ? normalized.authorExternalId : null,
+          instagramId: platform === "instagram" ? normalized.authorExternalId : null,
+          profileUrl: normalized.authorUrl,
+          username: normalized.authorUsername,
+          name: normalized.authorName,
+          avatarUrl: normalized.authorAvatarUrl,
+          location: normalized.authorLocation,
+          bio: normalized.authorBio,
+          contact: classification.contact,
+        }));
+
       const values = {
+        leadId,
         rawRecordId: record.id,
         datasetId: options.datasetId,
         recordKind,
+        platform,
         externalId: normalized.externalId,
         externalUrl: normalized.externalUrl,
         sourceGroup: normalized.sourceGroup,
@@ -207,6 +251,9 @@ export async function processRawRecords(
         authorUrl: normalized.authorUrl,
         authorAvatarUrl: normalized.authorAvatarUrl,
         authorExternalId: normalized.authorExternalId,
+        authorUsername: normalized.authorUsername,
+        authorBio: normalized.authorBio,
+        authorLocation: normalized.authorLocation,
         body: normalized.body,
         listingTitle: normalized.listingTitle,
         images: normalized.images,
@@ -217,6 +264,8 @@ export async function processRawRecords(
         intent: classification.intent,
         intentScore: classification.intentScore,
         qualityScore: classification.qualityScore,
+        investorScore: classification.investorScore,
+        brokerScore: classification.brokerScore,
         reach: classification.reach,
         scoreReasons: classification.reasons,
         classifierId: classification.classifierId,
@@ -237,21 +286,22 @@ export async function processRawRecords(
       };
 
       // Upserting on rawRecordId is what makes reprocessing idempotent: the same
-      // record always resolves to the same lead row. `xmax = 0` is the standard
-      // Postgres tell for "this returned row was inserted, not updated, by this
-      // statement" — a wall-clock-age check on `createdAt` is a racier substitute
-      // (a resync completing within the same window as the original ingest, or two
-      // records in a batch landing close together, misclassifies an update as new).
-      const [lead] = await db()
-        .insert(schema.leads)
+      // record always resolves to the same appearance row. `xmax = 0` is the
+      // standard Postgres tell for "this returned row was inserted, not
+      // updated, by this statement" — a wall-clock-age check on `createdAt` is
+      // a racier substitute (a resync completing within the same window as the
+      // original ingest, or two records in a batch landing close together,
+      // misclassifies an update as new).
+      const [appearance] = await db()
+        .insert(schema.leadAppearances)
         .values(values)
-        .onConflictDoUpdate({ target: schema.leads.rawRecordId, set: values })
+        .onConflictDoUpdate({ target: schema.leadAppearances.rawRecordId, set: values })
         .returning({
-          id: schema.leads.id,
+          id: schema.leadAppearances.id,
           inserted: sql<boolean>`(xmax = 0)`,
         });
 
-      const isNew = lead.inserted;
+      const isNew = appearance.inserted;
       if (isNew) result.created += 1;
       else result.updated += 1;
       if (classification.isSpam) result.spam += 1;
@@ -260,30 +310,41 @@ export async function processRawRecords(
         ? await findEngagementDuplicate(
             normalized.authorExternalId,
             normalized.engagementContext.targetPostExternalId,
-            lead.id,
+            appearance.id,
           )
         : await findCanonicalDuplicate(
             normalized.body,
             normalized.authorExternalId,
             normalized.postedAt,
-            lead.id,
+            appearance.id,
           );
+
       if (canonicalId) {
         await db()
-          .update(schema.leads)
-          .set({ canonicalLeadId: canonicalId })
-          .where(eq(schema.leads.id, lead.id));
+          .update(schema.leadAppearances)
+          .set({ canonicalAppearanceId: canonicalId })
+          .where(eq(schema.leadAppearances.id, appearance.id));
         result.duplicates += 1;
-      } else {
-        // Human state is created once and never touched again by the pipeline.
-        await db().insert(schema.leadStates).values({ leadId: lead.id }).onConflictDoNothing();
-        if (isNew) result.leadIds.push(lead.id);
       }
+
+      // Human state is created once and never touched again by the pipeline —
+      // as soon as a person has any appearance, whether or not this specific
+      // one turned out to be a duplicate.
+      await db().insert(schema.leadStates).values({ leadId }).onConflictDoNothing();
+
+      // Recomputed regardless of duplicate status: reprocessing (a mapping
+      // change, a reclassification) can change which appearances count as
+      // duplicates, so the rollup has to stay correct under replay, not just
+      // on first ingest.
+      await recomputePersonRollup(leadId);
+
+      if (isNew && !canonicalId) touchedLeadIds.add(leadId);
     } catch (error) {
       result.failed += 1;
       log.error("failed to process record", { error, recordId: record.id, datasetId: options.datasetId });
     }
   }
 
+  result.leadIds = [...touchedLeadIds];
   return result;
 }

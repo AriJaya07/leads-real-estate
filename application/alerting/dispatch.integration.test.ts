@@ -4,37 +4,15 @@ import { db, schema } from "@/infrastructure/db/client";
 import { dispatchAlertsForLeads } from "./dispatch";
 import { resetDb } from "@/test/integration/db-helpers";
 
-async function seedMatchingLead() {
-  const [source] = await db()
-    .insert(schema.sources)
-    .values({ kind: "manual", name: `alert-test-source-${crypto.randomUUID()}` })
-    .returning();
-  const [dataset] = await db()
-    .insert(schema.datasets)
-    .values({ sourceId: source.id, externalId: "alert-ds-1" })
-    .returning();
-  const [record] = await db()
-    .insert(schema.rawRecords)
-    .values({
-      datasetId: dataset.id,
-      sourceItemId: "alert-post-1",
-      payload: {},
-      contentHash: "h1",
-      payloadHash: "p1",
-    })
-    .returning();
+async function seedMatchingLead(overrides: Partial<typeof schema.leads.$inferInsert> = {}) {
   const [lead] = await db()
     .insert(schema.leads)
     .values({
-      rawRecordId: record.id,
-      datasetId: dataset.id,
-      externalId: "alert-post-1",
-      body: "Looking to buy a villa, budget $100k",
-      postedAt: new Date(),
-      intent: "buyer",
-      intentScore: 80,
-      qualityScore: 40,
-      isSpam: false,
+      name: "Jane Doe",
+      leadType: "buyer",
+      buyerScore: 80,
+      confidenceScore: 40,
+      ...overrides,
     })
     .returning();
   return lead.id;
@@ -46,7 +24,7 @@ async function seedAlertRule() {
     .values({
       name: `dispatch-test-rule-${crypto.randomUUID()}`,
       enabled: true,
-      predicate: { all: [{ field: "intent", op: "eq", value: "buyer" }] },
+      predicate: { all: [{ field: "leadType", op: "eq", value: "buyer" }] },
       channels: ["email"],
       recipients: ["agent@example.com"],
     })
@@ -87,7 +65,9 @@ describe("dispatchAlertsForLeads", () => {
 
     // This is what stops a mapping-profile backfill from re-alerting the whole
     // history: the second attempt at the same (rule, lead, channel) must be
-    // suppressed by the dedupeKey's unique constraint, not sent again.
+    // suppressed by the dedupeKey's unique constraint, not sent again. Also
+    // what makes it safe to pass the same person id through this function
+    // repeatedly across many appearances of the same lead.
     expect(second.matched).toBe(1);
     expect(second.suppressed).toBe(1);
 
@@ -107,10 +87,29 @@ describe("dispatchAlertsForLeads", () => {
     expect(result.matched).toBe(0);
   });
 
-  it("never matches a spam-flagged lead even if the predicate would otherwise fire", async () => {
-    const leadId = await seedMatchingLead();
-    await db().update(schema.leads).set({ isSpam: true }).where(eq(schema.leads.id, leadId));
-    await seedAlertRule();
+  /**
+   * There's no `isSpam` at the person level anymore — a spam appearance simply
+   * never contributes to `buyerScore` during rollup (`recomputePersonRollup`),
+   * so a person whose only appearances were spam naturally never clears a
+   * buyer-score threshold. This is the person-level equivalent of the old
+   * "never matches a spam-flagged lead" test.
+   */
+  it("does not match a lead below the rule's buyerScore threshold", async () => {
+    const leadId = await seedMatchingLead({ buyerScore: 10 });
+    await db()
+      .insert(schema.alertRules)
+      .values({
+        name: `dispatch-threshold-rule-${crypto.randomUUID()}`,
+        enabled: true,
+        predicate: {
+          all: [
+            { field: "leadType", op: "eq", value: "buyer" },
+            { field: "buyerScore", op: "gte", value: 60 },
+          ],
+        },
+        channels: ["email"],
+        recipients: ["agent@example.com"],
+      });
 
     const result = await dispatchAlertsForLeads([leadId]);
     expect(result.matched).toBe(0);

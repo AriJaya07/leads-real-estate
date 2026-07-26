@@ -93,8 +93,8 @@ feed immediately, not just "eventually."
 
 ## ~~Duplicated ranking formula (SQL vs. TypeScript)~~ — fixed
 
-`domain/lead/ranking.ts` now exports its weights (`BUYER_INTENT_WEIGHT`,
-`BUYER_QUALITY_WEIGHT`, `NON_BUYER_INTENT_WEIGHT`, `RECENCY_HALF_LIFE_HOURS`) instead of
+`domain/lead/ranking.ts` now exports its weights (`BUYER_SCORE_WEIGHT`,
+`CONFIDENCE_WEIGHT`, `NON_BUYER_SCORE_WEIGHT`, `RECENCY_HALF_LIFE_HOURS`) instead of
 inlining them, and `application/leads/priority-sql.ts::prioritySortExpression()` builds
 the `ORDER BY` SQL from those same constants — one formula, two consumers.
 `lead-queries.ts` just calls the builder now. Still deliberately omits the
@@ -104,7 +104,7 @@ that gap ever needs closing.
 
 Building this surfaced a real bug worth remembering: interpolating a bare JS number like
 `0.7` into a Drizzle `sql` template lets Postgres infer the parameter's type from
-surrounding context — multiplying against the integer `intent_score` column made it
+surrounding context — multiplying against the integer `buyer_score` column made it
 infer `integer`, and binding `0.7` failed outright with `invalid input syntax for type
 integer`. Every weight is now explicitly cast (`::numeric`).
 `application/leads/priority-sql.test.ts` only compiles the SQL and never caught this;
@@ -152,24 +152,28 @@ profile's approval on its first sync. The spam-rate check still applies uncondit
 (currently a no-op for engagement records, since `classifyEngagement` never sets
 `isSpam`, but left in place in case that changes).
 
-## Duplicate detection is same-source-kind agnostic but not cross-dataset budget-aware
+## Appearance-level duplicate detection is same-source-kind agnostic but not cross-dataset budget-aware
 
 `findCanonicalDuplicate` in `application/leads/process-records.ts` matches on trigram
 body similarity + optional `authorExternalId` within a 72-hour window
-(`NEAR_DUPLICATE_WINDOW_HOURS`), scoped to `leads.body` globally — not scoped to
-`datasetId`. This is deliberate (the same post can be scraped into two different
+(`NEAR_DUPLICATE_WINDOW_HOURS`), scoped to `lead_appearances.body` globally — not scoped
+to `datasetId`. This is deliberate (the same post can be scraped into two different
 datasets, e.g. Facebook and Instagram mirrors of the same content) but means a
-`similarity()` GIN-trigram scan runs across the whole `leads` table on every new record.
-At current volumes this is fine; if lead volume grows an order of magnitude, this query
-is the first place to look for a performance regression.
+`similarity()` GIN-trigram scan runs across the whole `lead_appearances` table on every
+new record. At current volumes this is fine; if appearance volume grows an order of
+magnitude, this query is the first place to look for a performance regression. Note this
+is *appearance*-level repost detection (same text posted twice), a different and
+narrower mechanism than person-level identity merge — two differently-worded posts from
+the same `authorExternalId` already resolve to one person via `resolveIdentity`
+regardless of what this query finds.
 
 **`engagement_*` records no longer go through this path at all — fixed.** They used to:
 the `body.trim().length >= 40` gate meant an engagement record's always-empty body never
 qualified for the similarity check, so every resync of the same like produced a second,
-undeduped lead. `findEngagementDuplicate` now handles `recordKind !== "content_post"`
-separately — an indexed `(authorExternalId, targetPostExternalId)` equality lookup
-(backed by `leads_engagement_author_idx`), cheaper than the trigram scan, not scoped to
-`datasetId` for the same cross-mirror reason as above. See
+undeduped appearance. `findEngagementDuplicate` now handles `recordKind !==
+"content_post"` separately — an indexed `(authorExternalId, targetPostExternalId)`
+equality lookup (backed by `lead_appearances_engagement_author_idx`), cheaper than the
+trigram scan, not scoped to `datasetId` for the same cross-mirror reason as above. See
 [docs/lead-source-scaling-plan.md](lead-source-scaling-plan.md).
 
 ## ~~FX rates have a hardcoded fallback table, never refreshed~~ — fixed
@@ -183,14 +187,47 @@ change — leaves the existing rows untouched and logs via the structured logger
 than throwing; budget filtering degrades to "stale" in that case, never to "broken."
 Nothing calls this on a schedule today — see "no scheduled trigger" below.
 
-## No LLM classifier yet — `LeadClassifier` port is unused beyond `rules@2`
+## No LLM classifier or rollup yet — `LeadClassifier`/`LeadIntelligence` ports are unused beyond the rules implementations
 
-`domain/scoring/types.ts::LeadClassifier` and `RULES_CLASSIFIER_ID = "rules@2"` are
-explicitly designed as a seam for a future ML/LLM classifier (shadow-mode validated per
-the README), but only the rules-based implementation exists
-(`domain/scoring/rules-classifier.ts`). `leads.classifierId` is stored per-row
-specifically so a future classifier swap can be measured/rolled out per-lead, but there
-is no A/B or shadow-mode plumbing built yet — just the column.
+`domain/scoring/types.ts::LeadClassifier` (`RULES_CLASSIFIER_ID = "rules@2"`) and
+`domain/scoring/lead-rollup.ts::LeadIntelligence` (`RULES_ROLLUP_ID = "rules-rollup@1"`)
+are explicitly designed as seams for a future ML/LLM implementation each (shadow-mode
+validated per the README), but only the rules-based versions exist. Both `classifierId`
+columns (`lead_appearances.classifierId` per appearance, `leads.classifierId` for the
+person rollup) are stored specifically so a future swap can be measured/rolled out
+incrementally, but there is no A/B or shadow-mode plumbing built yet — just the columns.
+An engagement-only lead (no body text anywhere) is the concrete case where an LLM
+rollup would earn its keep first — see domain.md's "AI analysis" section.
+
+## `buyerScore`/`sellerScore`/`investorScore`/`confidenceScore` are first-pass heuristics, not calibrated
+
+`domain/scoring/lead-rollup.ts::rollupPersonScores`'s diminishing-returns sum, the
+15-point `leadType` floor, and `confidenceScore`'s appearance-count/corroboration/
+contactability weights are reasonable starting points, not values tuned against real
+conversion data — same posture as the rules classifier's phrase weights when it
+shipped. Worth revisiting once there's enough real lead volume to check whether
+`leadType`/score thresholds actually track which leads convert.
+
+## No person-level spam suppression yet
+
+A person whose *only* appearances are all spam-flagged still gets a `leads` row —
+their `buyerScore`/`sellerScore`/`investorScore` all stay 0 (spam appearances are
+excluded from `recomputePersonRollup`'s rollup query), so they sink to the bottom of
+any score-ordered view and never clear an alert threshold, but there's no hard filter
+hiding them from `/leads` entirely the way `includeSpam` used to gate the old per-post
+inbox. Revisit if this turns out to be more than a cosmetic nuisance at real volume —
+the fix would be a computed "has any non-spam appearance" flag or facet, not a new
+per-appearance concept.
+
+## `lead_events`'s `merged` type isn't written yet
+
+`leadEventTypeEnum` has included `merged` since before this table was person-centric,
+intended for an audit trail of identity-resolution merges ("appearance from post X
+merged into existing person Y because facebookId matched"). `resolveIdentity`
+(`application/leads/identity-resolution.ts`) doesn't write one yet — there's no way to
+answer "why did these two appearances end up as the same lead" from the UI today beyond
+inspecting `facebookId`/`instagramId`/`profileUrl` directly. Worth adding once someone
+actually needs to debug a merge decision.
 
 ## ~~No coverage/CI gate~~ — fixed
 
@@ -247,6 +284,18 @@ everything degrades to "stale," not "wrong" — but it is a real gap, not a cosm
 until n8n (or something) calls these functions again. The fix is new trigger
 endpoints (see api-patterns.md's System routes section for the pattern to follow) once
 the n8n side is ready — not restoring the cron routes.
+
+## Migration history was collapsed once, during the person-centric refactor
+
+`infrastructure/db/migrations/` restarts at `0000_cool_forge.sql` — the previous
+history (through `0006_yellow_rockslide.sql`) was deleted and regenerated fresh when
+`leads` split into `leads` (person) + `lead_appearances`, because `drizzle-kit
+generate`'s rename-resolution prompts require an interactive TTY that wasn't available
+in the environment making the change. Safe specifically because no environment at the
+time held data worth preserving (confirmed before doing it, not assumed) — dev/test/e2e
+Postgres instances were reset (`DROP SCHEMA public CASCADE`) and rebuilt from the new
+baseline. If this repository ever has real data to preserve, do not repeat this move —
+hand-write an incremental migration instead, however tedious.
 
 ## The product-level gap: buyer-side data collection
 

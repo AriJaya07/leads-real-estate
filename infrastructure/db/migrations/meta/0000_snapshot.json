@@ -1,11 +1,11 @@
 {
-  "id": "7f37cfd4-1f70-4e59-acc3-c3e553fa2cd0",
+  "id": "97ce3acd-e286-4c3d-95ab-0efea60b1276",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.login_tokens": {
-      "name": "login_tokens",
+    "public.login_attempts": {
+      "name": "login_attempts",
       "schema": "",
       "columns": {
         "id": {
@@ -21,23 +21,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "text",
+        "succeeded": {
+          "name": "succeeded",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "consumed_at": {
-          "name": "consumed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -48,26 +36,17 @@
         }
       },
       "indexes": {
-        "login_tokens_hash_key": {
-          "name": "login_tokens_hash_key",
-          "columns": [
-            {
-              "expression": "token_hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "login_tokens_email_idx": {
-          "name": "login_tokens_email_idx",
+        "login_attempts_email_created_idx": {
+          "name": "login_attempts_email_created_idx",
           "columns": [
             {
               "expression": "email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -116,6 +95,32 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'agent'"
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "password_set_at": {
+          "name": "password_set_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "must_change_password": {
+          "name": "must_change_password",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "session_version": {
+          "name": "session_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
         },
         "accepts_assignments": {
           "name": "accepts_assignments",
@@ -735,6 +740,22 @@
           "primaryKey": false,
           "notNull": true
         },
+        "record_kind": {
+          "name": "record_kind",
+          "type": "lead_record_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'content_post'"
+        },
+        "platform": {
+          "name": "platform",
+          "type": "platform",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'facebook'"
+        },
         "version": {
           "name": "version",
           "type": "integer",
@@ -747,6 +768,13 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
+        },
+        "match_paths": {
+          "name": "match_paths",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
         },
         "passthrough": {
           "name": "passthrough",
@@ -1361,6 +1389,608 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.lead_appearances": {
+      "name": "lead_appearances",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "lead_id": {
+          "name": "lead_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw_record_id": {
+          "name": "raw_record_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dataset_id": {
+          "name": "dataset_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "canonical_appearance_id": {
+          "name": "canonical_appearance_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "record_kind": {
+          "name": "record_kind",
+          "type": "lead_record_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'content_post'"
+        },
+        "platform": {
+          "name": "platform",
+          "type": "platform",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'facebook'"
+        },
+        "external_id": {
+          "name": "external_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_url": {
+          "name": "external_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_group": {
+          "name": "source_group",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "author_name": {
+          "name": "author_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "author_url": {
+          "name": "author_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "author_avatar_url": {
+          "name": "author_avatar_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "author_external_id": {
+          "name": "author_external_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "author_username": {
+          "name": "author_username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "author_bio": {
+          "name": "author_bio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "author_location": {
+          "name": "author_location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "listing_title": {
+          "name": "listing_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "images": {
+          "name": "images",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "posted_at": {
+          "name": "posted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "likes": {
+          "name": "likes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "comments": {
+          "name": "comments",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "shares": {
+          "name": "shares",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "intent": {
+          "name": "intent",
+          "type": "lead_intent",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'other'"
+        },
+        "intent_score": {
+          "name": "intent_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "quality_score": {
+          "name": "quality_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "investor_score": {
+          "name": "investor_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "broker_score": {
+          "name": "broker_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "reach": {
+          "name": "reach",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "score_reasons": {
+          "name": "score_reasons",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "classifier_id": {
+          "name": "classifier_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'unclassified'"
+        },
+        "classified_at": {
+          "name": "classified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "property_types": {
+          "name": "property_types",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "locations": {
+          "name": "locations",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "bedrooms": {
+          "name": "bedrooms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bathrooms": {
+          "name": "bathrooms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "budget_min": {
+          "name": "budget_min",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "budget_max": {
+          "name": "budget_max",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "budget_currency": {
+          "name": "budget_currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "budget_usd_min": {
+          "name": "budget_usd_min",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "budget_usd_max": {
+          "name": "budget_usd_max",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contact": {
+          "name": "contact",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "attributes": {
+          "name": "attributes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "is_spam": {
+          "name": "is_spam",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "lead_appearances_raw_record_key": {
+          "name": "lead_appearances_raw_record_key",
+          "columns": [
+            {
+              "expression": "raw_record_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lead_appearances_lead_idx": {
+          "name": "lead_appearances_lead_idx",
+          "columns": [
+            {
+              "expression": "lead_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lead_appearances_dataset_idx": {
+          "name": "lead_appearances_dataset_idx",
+          "columns": [
+            {
+              "expression": "dataset_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lead_appearances_record_kind_idx": {
+          "name": "lead_appearances_record_kind_idx",
+          "columns": [
+            {
+              "expression": "record_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lead_appearances_intent_score_idx": {
+          "name": "lead_appearances_intent_score_idx",
+          "columns": [
+            {
+              "expression": "intent",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "intent_score",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lead_appearances_posted_at_idx": {
+          "name": "lead_appearances_posted_at_idx",
+          "columns": [
+            {
+              "expression": "posted_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lead_appearances_canonical_idx": {
+          "name": "lead_appearances_canonical_idx",
+          "columns": [
+            {
+              "expression": "canonical_appearance_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lead_appearances_property_types_idx": {
+          "name": "lead_appearances_property_types_idx",
+          "columns": [
+            {
+              "expression": "property_types",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "lead_appearances_locations_idx": {
+          "name": "lead_appearances_locations_idx",
+          "columns": [
+            {
+              "expression": "locations",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "lead_appearances_attributes_idx": {
+          "name": "lead_appearances_attributes_idx",
+          "columns": [
+            {
+              "expression": "attributes",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "lead_appearances_search_idx": {
+          "name": "lead_appearances_search_idx",
+          "columns": [
+            {
+              "expression": "to_tsvector('simple', coalesce(\"body\", '') || ' ' || coalesce(\"author_name\", '') || ' ' || coalesce(\"listing_title\", ''))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "lead_appearances_body_trgm_idx": {
+          "name": "lead_appearances_body_trgm_idx",
+          "columns": [
+            {
+              "expression": "\"body\" gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "lead_appearances_active_posted_at_idx": {
+          "name": "lead_appearances_active_posted_at_idx",
+          "columns": [
+            {
+              "expression": "posted_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"lead_appearances\".\"is_spam\" = false AND \"lead_appearances\".\"canonical_appearance_id\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lead_appearances_active_intent_score_idx": {
+          "name": "lead_appearances_active_intent_score_idx",
+          "columns": [
+            {
+              "expression": "intent",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "intent_score",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"lead_appearances\".\"is_spam\" = false AND \"lead_appearances\".\"canonical_appearance_id\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lead_appearances_engagement_author_idx": {
+          "name": "lead_appearances_engagement_author_idx",
+          "columns": [
+            {
+              "expression": "author_external_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"lead_appearances\".\"record_kind\" != 'content_post'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "lead_appearances_lead_id_leads_id_fk": {
+          "name": "lead_appearances_lead_id_leads_id_fk",
+          "tableFrom": "lead_appearances",
+          "tableTo": "leads",
+          "columnsFrom": [
+            "lead_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "lead_appearances_raw_record_id_raw_records_id_fk": {
+          "name": "lead_appearances_raw_record_id_raw_records_id_fk",
+          "tableFrom": "lead_appearances",
+          "tableTo": "raw_records",
+          "columnsFrom": [
+            "raw_record_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "lead_appearances_dataset_id_datasets_id_fk": {
+          "name": "lead_appearances_dataset_id_datasets_id_fk",
+          "tableFrom": "lead_appearances",
+          "tableTo": "datasets",
+          "columnsFrom": [
+            "dataset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.lead_events": {
       "name": "lead_events",
       "schema": "",
@@ -1624,148 +2254,103 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "raw_record_id": {
-          "name": "raw_record_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "dataset_id": {
-          "name": "dataset_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "canonical_lead_id": {
-          "name": "canonical_lead_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "external_id": {
-          "name": "external_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "external_url": {
-          "name": "external_url",
+        "facebook_id": {
+          "name": "facebook_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "source_group": {
-          "name": "source_group",
+        "instagram_id": {
+          "name": "instagram_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "author_name": {
-          "name": "author_name",
+        "profile_url": {
+          "name": "profile_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "author_url": {
-          "name": "author_url",
+        "username": {
+          "name": "username",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "author_avatar_url": {
-          "name": "author_avatar_url",
+        "name": {
+          "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "author_external_id": {
-          "name": "author_external_id",
+        "avatar_url": {
+          "name": "avatar_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "body": {
-          "name": "body",
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bio": {
+          "name": "bio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contact": {
+          "name": "contact",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "lead_type": {
+          "name": "lead_type",
+          "type": "lead_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'unknown'"
+        },
+        "buyer_score": {
+          "name": "buyer_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "seller_score": {
+          "name": "seller_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "investor_score": {
+          "name": "investor_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "confidence_score": {
+          "name": "confidence_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "ai_explanation": {
+          "name": "ai_explanation",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "default": "''"
-        },
-        "listing_title": {
-          "name": "listing_title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "images": {
-          "name": "images",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "posted_at": {
-          "name": "posted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "likes": {
-          "name": "likes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "comments": {
-          "name": "comments",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "shares": {
-          "name": "shares",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "intent": {
-          "name": "intent",
-          "type": "lead_intent",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'other'"
-        },
-        "intent_score": {
-          "name": "intent_score",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "quality_score": {
-          "name": "quality_score",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "reach": {
-          "name": "reach",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "score_reasons": {
-          "name": "score_reasons",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
         },
         "classifier_id": {
           "name": "classifier_id",
@@ -1793,18 +2378,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'{}'::text[]"
-        },
-        "bedrooms": {
-          "name": "bedrooms",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bathrooms": {
-          "name": "bathrooms",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
         },
         "budget_min": {
           "name": "budget_min",
@@ -1836,26 +2409,18 @@
           "primaryKey": false,
           "notNull": false
         },
-        "contact": {
-          "name": "contact",
-          "type": "jsonb",
+        "latest_appearance_at": {
+          "name": "latest_appearance_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
+          "notNull": false
         },
-        "attributes": {
-          "name": "attributes",
-          "type": "jsonb",
+        "appearance_count": {
+          "name": "appearance_count",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "is_spam": {
-          "name": "is_spam",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "default": 0
         },
         "created_at": {
           "name": "created_at",
@@ -1873,26 +2438,59 @@
         }
       },
       "indexes": {
-        "leads_raw_record_key": {
-          "name": "leads_raw_record_key",
+        "leads_facebook_id_key": {
+          "name": "leads_facebook_id_key",
           "columns": [
             {
-              "expression": "raw_record_id",
+              "expression": "facebook_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": true,
+          "where": "\"leads\".\"facebook_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "leads_dataset_idx": {
-          "name": "leads_dataset_idx",
+        "leads_instagram_id_key": {
+          "name": "leads_instagram_id_key",
           "columns": [
             {
-              "expression": "dataset_id",
+              "expression": "instagram_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"leads\".\"instagram_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leads_profile_url_key": {
+          "name": "leads_profile_url_key",
+          "columns": [
+            {
+              "expression": "profile_url",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"leads\".\"profile_url\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leads_lead_type_idx": {
+          "name": "leads_lead_type_idx",
+          "columns": [
+            {
+              "expression": "lead_type",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1903,17 +2501,17 @@
           "method": "btree",
           "with": {}
         },
-        "leads_intent_score_idx": {
-          "name": "leads_intent_score_idx",
+        "leads_lead_type_buyer_score_idx": {
+          "name": "leads_lead_type_buyer_score_idx",
           "columns": [
             {
-              "expression": "intent",
+              "expression": "lead_type",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
-              "expression": "intent_score",
+              "expression": "buyer_score",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1924,26 +2522,11 @@
           "method": "btree",
           "with": {}
         },
-        "leads_posted_at_idx": {
-          "name": "leads_posted_at_idx",
+        "leads_latest_appearance_idx": {
+          "name": "leads_latest_appearance_idx",
           "columns": [
             {
-              "expression": "posted_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "leads_canonical_idx": {
-          "name": "leads_canonical_idx",
-          "columns": [
-            {
-              "expression": "canonical_lead_id",
+              "expression": "latest_appearance_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1984,26 +2567,11 @@
           "method": "gin",
           "with": {}
         },
-        "leads_attributes_idx": {
-          "name": "leads_attributes_idx",
-          "columns": [
-            {
-              "expression": "attributes",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "gin",
-          "with": {}
-        },
         "leads_search_idx": {
           "name": "leads_search_idx",
           "columns": [
             {
-              "expression": "to_tsvector('simple', coalesce(\"body\", '') || ' ' || coalesce(\"author_name\", '') || ' ' || coalesce(\"listing_title\", ''))",
+              "expression": "to_tsvector('simple', coalesce(\"name\", '') || ' ' || coalesce(\"username\", '') || ' ' || coalesce(\"bio\", ''))",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -2014,11 +2582,11 @@
           "method": "gin",
           "with": {}
         },
-        "leads_body_trgm_idx": {
-          "name": "leads_body_trgm_idx",
+        "leads_name_trgm_idx": {
+          "name": "leads_name_trgm_idx",
           "columns": [
             {
-              "expression": "\"body\" gin_trgm_ops",
+              "expression": "\"name\" gin_trgm_ops",
               "asc": true,
               "isExpression": true,
               "nulls": "last"
@@ -2030,34 +2598,7 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "leads_raw_record_id_raw_records_id_fk": {
-          "name": "leads_raw_record_id_raw_records_id_fk",
-          "tableFrom": "leads",
-          "tableTo": "raw_records",
-          "columnsFrom": [
-            "raw_record_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "leads_dataset_id_datasets_id_fk": {
-          "name": "leads_dataset_id_datasets_id_fk",
-          "tableFrom": "leads",
-          "tableTo": "datasets",
-          "columnsFrom": [
-            "dataset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -2486,6 +3027,15 @@
         "other"
       ]
     },
+    "public.lead_record_kind": {
+      "name": "lead_record_kind",
+      "schema": "public",
+      "values": [
+        "content_post",
+        "engagement_like",
+        "engagement_comment"
+      ]
+    },
     "public.lead_status": {
       "name": "lead_status",
       "schema": "public",
@@ -2493,11 +3043,22 @@
         "new",
         "contacted",
         "qualified",
-        "viewing_booked",
-        "converted",
-        "lost",
-        "archived",
-        "spam"
+        "interested",
+        "negotiation",
+        "closed",
+        "rejected"
+      ]
+    },
+    "public.lead_type": {
+      "name": "lead_type",
+      "schema": "public",
+      "values": [
+        "buyer",
+        "seller",
+        "agent",
+        "broker",
+        "investor",
+        "unknown"
       ]
     },
     "public.log_level": {
@@ -2508,6 +3069,15 @@
         "info",
         "warn",
         "error"
+      ]
+    },
+    "public.platform": {
+      "name": "platform",
+      "schema": "public",
+      "values": [
+        "facebook",
+        "instagram",
+        "other"
       ]
     },
     "public.source_kind": {

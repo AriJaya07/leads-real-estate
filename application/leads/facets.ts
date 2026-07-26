@@ -1,6 +1,6 @@
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { db, schema } from "@/infrastructure/db/client";
 import { leadsTag } from "@/application/cache-tags";
@@ -63,51 +63,38 @@ async function arrayFacet(
 /**
  * Cached like `getLeadStats` and for the same reason: keyed on `datasetId`
  * alone, bounded key space, same `leadsTag()` invalidation lifecycle.
+ *
+ * `leads` has no `isSpam`/`canonicalLeadId` to scope out — every row here
+ * already *is* the deduped, canonical person by construction. `datasetId`
+ * scoping is an `EXISTS` against `lead_appearances` (a person isn't scoped to
+ * one dataset), not a direct column.
  */
 export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor[]> {
   "use cache";
   cacheLife("minutes");
   cacheTag(leadsTag());
 
-  const scope = and(
-    eq(schema.leads.isSpam, false),
-    isNull(schema.leads.canonicalLeadId),
-    datasetId ? eq(schema.leads.datasetId, datasetId) : undefined,
-  );
+  const scope = datasetId
+    ? sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+        WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.datasetId} = ${datasetId})`
+    : undefined;
 
   const facets: FacetDescriptor[] = [];
 
-  const intent = await db()
-    .select({ value: schema.leads.intent, count: sql<number>`count(*)::int` })
+  const leadType = await db()
+    .select({ value: schema.leads.leadType, count: sql<number>`count(*)::int` })
     .from(schema.leads)
     .where(scope)
-    .groupBy(schema.leads.intent)
+    .groupBy(schema.leads.leadType)
     .orderBy(sql`count(*) DESC`);
 
-  if (intent.length > 0) {
+  if (leadType.length > 0) {
     facets.push({
-      key: "intent",
-      label: "Intent",
+      key: "leadType",
+      label: "Lead type",
       kind: "enum",
-      options: intent.map((r) => ({ value: r.value, label: humanize(r.value), count: r.count })),
-    });
-  }
-
-  const recordKind = await db()
-    .select({ value: schema.leads.recordKind, count: sql<number>`count(*)::int` })
-    .from(schema.leads)
-    .where(scope)
-    .groupBy(schema.leads.recordKind)
-    .orderBy(sql`count(*) DESC`);
-
-  // Not worth a filter chip when every lead is the same kind — the common case
-  // today, until an engagement source is actually wired up.
-  if (recordKind.length > 1) {
-    facets.push({
-      key: "recordKind",
-      label: "Record type",
-      kind: "enum",
-      options: recordKind.map((r) => ({ value: r.value, label: humanize(r.value), count: r.count })),
+      options: leadType.map((r) => ({ value: r.value, label: humanize(r.value), count: r.count })),
     });
   }
 
@@ -139,12 +126,24 @@ export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor
   const locations = await arrayFacet(schema.leads.locations, "locations", "Location", scope);
   if (locations) facets.push(locations);
 
+  // Source group and record kind are appearance-level — count *distinct
+  // people* per value (a person seen 5 times in one group counts once), from
+  // `lead_appearances` directly rather than `leads`.
+  const appearanceScope = and(
+    eq(schema.leadAppearances.isSpam, false),
+    sql`${schema.leadAppearances.canonicalAppearanceId} IS NULL`,
+    datasetId ? eq(schema.leadAppearances.datasetId, datasetId) : undefined,
+  );
+
   const groups = await db()
-    .select({ value: schema.leads.sourceGroup, count: sql<number>`count(*)::int` })
-    .from(schema.leads)
-    .where(and(scope, sql`${schema.leads.sourceGroup} IS NOT NULL`))
-    .groupBy(schema.leads.sourceGroup)
-    .orderBy(sql`count(*) DESC`)
+    .select({
+      value: schema.leadAppearances.sourceGroup,
+      count: sql<number>`count(distinct ${schema.leadAppearances.leadId})::int`,
+    })
+    .from(schema.leadAppearances)
+    .where(and(appearanceScope, sql`${schema.leadAppearances.sourceGroup} IS NOT NULL`))
+    .groupBy(schema.leadAppearances.sourceGroup)
+    .orderBy(sql`count(distinct ${schema.leadAppearances.leadId}) DESC`)
     .limit(FACETABLE_MAX_CARDINALITY);
 
   if (groups.length > 1) {
@@ -157,6 +156,27 @@ export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor
         label: r.value ?? "Unknown",
         count: r.count,
       })),
+    });
+  }
+
+  const recordKind = await db()
+    .select({
+      value: schema.leadAppearances.recordKind,
+      count: sql<number>`count(distinct ${schema.leadAppearances.leadId})::int`,
+    })
+    .from(schema.leadAppearances)
+    .where(appearanceScope)
+    .groupBy(schema.leadAppearances.recordKind)
+    .orderBy(sql`count(distinct ${schema.leadAppearances.leadId}) DESC`);
+
+  // Not worth a filter chip when every lead is the same kind — the common case
+  // today, until an engagement source is actually wired up.
+  if (recordKind.length > 1) {
+    facets.push({
+      key: "recordKind",
+      label: "Record type",
+      kind: "enum",
+      options: recordKind.map((r) => ({ value: r.value, label: humanize(r.value), count: r.count })),
     });
   }
 
@@ -179,7 +199,7 @@ export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor
     });
   }
 
-  facets.push({ key: "minIntent", label: "Min intent score", kind: "range", min: 0, max: 100 });
+  facets.push({ key: "minBuyerScore", label: "Min buyer score", kind: "range", min: 0, max: 100 });
   facets.push({ key: "hasContact", label: "Has contact details", kind: "bool" });
 
   return facets;
@@ -188,7 +208,9 @@ export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor
 /**
  * Facets over fields that were *discovered* rather than designed. This is the
  * passthrough path: an upstream field nobody has ever seen becomes a working
- * filter as soon as it appears in enough records.
+ * filter as soon as it appears in enough records. Still appearance-scoped
+ * (`attributes` lives on `lead_appearances`), counting distinct people per
+ * value rather than raw appearance rows.
  */
 export async function getDynamicAttributeFacets(datasetId: string): Promise<FacetDescriptor[]> {
   "use cache";
@@ -212,19 +234,19 @@ export async function getDynamicAttributeFacets(datasetId: string): Promise<Face
 
     const rows = await db()
       .select({
-        value: sql<string>`${schema.leads.attributes}->>${key}`,
-        count: sql<number>`count(*)::int`,
+        value: sql<string>`${schema.leadAppearances.attributes}->>${key}`,
+        count: sql<number>`count(distinct ${schema.leadAppearances.leadId})::int`,
       })
-      .from(schema.leads)
+      .from(schema.leadAppearances)
       .where(
         and(
-          eq(schema.leads.datasetId, datasetId),
-          eq(schema.leads.isSpam, false),
-          sql`${schema.leads.attributes} ? ${key}`,
+          eq(schema.leadAppearances.datasetId, datasetId),
+          eq(schema.leadAppearances.isSpam, false),
+          sql`${schema.leadAppearances.attributes} ? ${key}`,
         ),
       )
-      .groupBy(sql`${schema.leads.attributes}->>${key}`)
-      .orderBy(sql`count(*) DESC`)
+      .groupBy(sql`${schema.leadAppearances.attributes}->>${key}`)
+      .orderBy(sql`count(distinct ${schema.leadAppearances.leadId}) DESC`)
       .limit(FACETABLE_MAX_CARDINALITY);
 
     const options = rows.filter((r) => r.value !== null && r.value !== "");

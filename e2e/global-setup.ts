@@ -130,22 +130,40 @@ export default async function globalSetup(): Promise<void> {
       })
       .returning();
 
+    // A "lead" is a person now, not a post — seed the person row (with the
+    // rollup fields a real ingest would compute) plus the one appearance it
+    // came from, exactly mirroring `application/leads/process-records.ts`'s
+    // shape without running the real pipeline (same reasoning as bypassing
+    // `infrastructure/auth/password.ts` above).
     const [lead] = await db
       .insert(schema.leads)
       .values({
-        rawRecordId: record.id,
-        datasetId: dataset.id,
-        externalId: "e2e-post-1",
-        externalUrl: "https://example.com/e2e-post-1",
-        authorName: E2E_LEAD_AUTHOR,
-        body: "Looking to buy a villa in Canggu, budget around $300k",
-        postedAt: new Date(),
-        intent: "buyer",
-        intentScore: 80,
-        qualityScore: 40,
-        isSpam: false,
+        facebookId: "e2e-fb-1",
+        name: E2E_LEAD_AUTHOR,
+        leadType: "buyer",
+        buyerScore: 80,
+        confidenceScore: 40,
+        aiExplanation: "Classified as buyer from 1 appearance(s).",
+        latestAppearanceAt: new Date(),
+        appearanceCount: 1,
       })
       .returning();
+
+    await db.insert(schema.leadAppearances).values({
+      leadId: lead.id,
+      rawRecordId: record.id,
+      datasetId: dataset.id,
+      externalId: "e2e-post-1",
+      externalUrl: "https://example.com/e2e-post-1",
+      authorName: E2E_LEAD_AUTHOR,
+      authorExternalId: "e2e-fb-1",
+      body: "Looking to buy a villa in Canggu, budget around $300k",
+      postedAt: new Date(),
+      intent: "buyer",
+      intentScore: 80,
+      qualityScore: 40,
+      isSpam: false,
+    });
 
     await db.insert(schema.leadStates).values({ leadId: lead.id, status: "new" });
   } finally {

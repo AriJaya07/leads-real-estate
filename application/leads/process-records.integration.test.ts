@@ -11,6 +11,13 @@ const rules: MappingRules = {
   postedAt: { from: ["time"], transform: "toIso8601" },
 };
 
+/** Same three canonical fields as `rules`, plus an identity signal for merge tests. */
+const rulesWithIdentity: MappingRules = {
+  ...rules,
+  authorExternalId: { from: ["authorId"] },
+  authorName: { from: ["authorName"] },
+};
+
 async function seedDataset() {
   const [source] = await db()
     .insert(schema.sources)
@@ -45,7 +52,7 @@ describe("processRawRecords", () => {
     await resetDb();
   });
 
-  it("upserts on rawRecordId, so reprocessing the same record never creates a second lead", async () => {
+  it("upserts on rawRecordId, so reprocessing the same record never creates a second appearance or a second person", async () => {
     const datasetId = await seedDataset();
     const record = await seedRawRecord(datasetId, {
       id: "post-1",
@@ -60,12 +67,41 @@ describe("processRawRecords", () => {
     const second = await processRawRecords([record], rules, { passthrough: true, datasetId });
     expect(second.updated).toBe(1);
 
-    const leads = await db()
+    const appearances = await db()
       .select()
-      .from(schema.leads)
-      .where(eq(schema.leads.rawRecordId, record.id));
-    expect(leads).toHaveLength(1);
-    expect(leads[0].intent).toBe("buyer");
+      .from(schema.leadAppearances)
+      .where(eq(schema.leadAppearances.rawRecordId, record.id));
+    expect(appearances).toHaveLength(1);
+    expect(appearances[0].intent).toBe("buyer");
+
+    // The bug reprocessing without identity would otherwise trip: no author
+    // id is mapped by `rules`, so re-resolving identity on every call would
+    // spawn a fresh orphan person each time. The appearance's `leadId` must
+    // stay the same across both calls instead.
+    const allLeads = await db().select().from(schema.leads);
+    expect(allLeads).toHaveLength(1);
+  });
+
+  it("rolls up the created person's AI-analysis fields from the appearance's classification", async () => {
+    const datasetId = await seedDataset();
+    const record = await seedRawRecord(datasetId, {
+      id: "post-1b",
+      text: "Looking to buy a villa in Canggu, budget $300k",
+      time: "2026-01-01T00:00:00.000Z",
+    });
+
+    await processRawRecords([record], rules, { passthrough: true, datasetId });
+
+    const [appearance] = await db()
+      .select()
+      .from(schema.leadAppearances)
+      .where(eq(schema.leadAppearances.rawRecordId, record.id));
+    const [lead] = await db().select().from(schema.leads).where(eq(schema.leads.id, appearance.leadId));
+
+    expect(lead.leadType).toBe("buyer");
+    expect(lead.buyerScore).toBeGreaterThan(0);
+    expect(lead.appearanceCount).toBe(1);
+    expect(lead.aiExplanation.length).toBeGreaterThan(0);
   });
 
   it("creates a lead_states row exactly once, and never overwrites it on reprocess", async () => {
@@ -77,15 +113,15 @@ describe("processRawRecords", () => {
     });
 
     await processRawRecords([record], rules, { passthrough: true, datasetId });
-    const [lead] = await db()
+    const [appearance] = await db()
       .select()
-      .from(schema.leads)
-      .where(eq(schema.leads.rawRecordId, record.id));
+      .from(schema.leadAppearances)
+      .where(eq(schema.leadAppearances.rawRecordId, record.id));
 
     await db()
       .update(schema.leadStates)
       .set({ status: "contacted", notes: "agent already called" })
-      .where(eq(schema.leadStates.leadId, lead.id));
+      .where(eq(schema.leadStates.leadId, appearance.leadId));
 
     // Reprocessing (e.g. a remap) must not clobber the human-owned state row.
     await processRawRecords([record], rules, { passthrough: true, datasetId });
@@ -93,12 +129,12 @@ describe("processRawRecords", () => {
     const [state] = await db()
       .select()
       .from(schema.leadStates)
-      .where(eq(schema.leadStates.leadId, lead.id));
+      .where(eq(schema.leadStates.leadId, appearance.leadId));
     expect(state.status).toBe("contacted");
     expect(state.notes).toBe("agent already called");
   });
 
-  it("links a near-duplicate repost to the canonical lead instead of creating a second inbox item", async () => {
+  it("links a near-duplicate repost to the canonical appearance instead of creating a second inbox item", async () => {
     const datasetId = await seedDataset();
     const body =
       "Relocating to Bali and looking to buy a 3 bedroom villa in Canggu, budget around $400k, please DM me";
@@ -119,11 +155,11 @@ describe("processRawRecords", () => {
 
     expect(result.duplicates).toBe(1);
 
-    const [repostLead] = await db()
+    const [repostAppearance] = await db()
       .select()
-      .from(schema.leads)
-      .where(eq(schema.leads.rawRecordId, repost.id));
-    expect(repostLead.canonicalLeadId).not.toBeNull();
+      .from(schema.leadAppearances)
+      .where(eq(schema.leadAppearances.rawRecordId, repost.id));
+    expect(repostAppearance.canonicalAppearanceId).not.toBeNull();
   });
 
   it("keeps processing remaining records when one record in the batch fails", async () => {
@@ -153,6 +189,110 @@ describe("processRawRecords", () => {
   });
 });
 
+describe("processRawRecords — person identity merge", () => {
+  beforeAll(async () => {
+    await resetDb();
+  });
+  afterEach(async () => {
+    await resetDb();
+  });
+
+  /**
+   * The core requirement this whole refactor exists for: the same Facebook
+   * account posting in two different groups (two different appearances, two
+   * different raw records) merges into one person, not two separate leads.
+   */
+  it("merges two appearances from the same authorExternalId into one person", async () => {
+    const datasetId = await seedDataset();
+    const first = await seedRawRecord(datasetId, {
+      id: "post-a",
+      authorId: "fb-same-person",
+      authorName: "Jane Doe",
+      text: "Looking to buy a villa in Canggu",
+      time: "2026-01-01T00:00:00.000Z",
+    });
+    const second = await seedRawRecord(datasetId, {
+      id: "post-b",
+      authorId: "fb-same-person",
+      authorName: "Jane Doe",
+      text: "Still looking to buy a villa, budget $350k",
+      time: "2026-01-05T00:00:00.000Z",
+    });
+
+    await processRawRecords([first], rulesWithIdentity, { passthrough: true, datasetId });
+    await processRawRecords([second], rulesWithIdentity, { passthrough: true, datasetId });
+
+    const allLeads = await db().select().from(schema.leads);
+    expect(allLeads).toHaveLength(1);
+    expect(allLeads[0].facebookId).toBe("fb-same-person");
+    expect(allLeads[0].appearanceCount).toBe(2);
+
+    const appearances = await db()
+      .select()
+      .from(schema.leadAppearances)
+      .where(eq(schema.leadAppearances.leadId, allLeads[0].id));
+    expect(appearances).toHaveLength(2);
+  });
+
+  it("does not merge two different authorExternalIds into the same person", async () => {
+    const datasetId = await seedDataset();
+    const first = await seedRawRecord(datasetId, {
+      id: "post-c",
+      authorId: "fb-person-1",
+      authorName: "Jane Doe",
+      text: "Looking to buy a villa",
+      time: "2026-01-01T00:00:00.000Z",
+    });
+    const second = await seedRawRecord(datasetId, {
+      id: "post-d",
+      authorId: "fb-person-2",
+      authorName: "John Smith",
+      text: "Looking to buy land",
+      time: "2026-01-01T00:00:00.000Z",
+    });
+
+    await processRawRecords([first], rulesWithIdentity, { passthrough: true, datasetId });
+    await processRawRecords([second], rulesWithIdentity, { passthrough: true, datasetId });
+
+    const allLeads = await db().select().from(schema.leads);
+    expect(allLeads).toHaveLength(2);
+  });
+
+  it("fills in a missing personal-info field on merge without overwriting an existing one", async () => {
+    const datasetId = await seedDataset();
+    const rulesWithBio: MappingRules = { ...rulesWithIdentity, authorBio: { from: ["bio"] } };
+
+    const first = await seedRawRecord(datasetId, {
+      id: "post-e",
+      authorId: "fb-bio-test",
+      authorName: "Jane Doe",
+      text: "Looking to buy a villa",
+      time: "2026-01-01T00:00:00.000Z",
+    });
+    const second = await seedRawRecord(datasetId, {
+      id: "post-f",
+      authorId: "fb-bio-test",
+      authorName: "Someone Else Entirely",
+      bio: "Relocating from Australia",
+      text: "Still looking",
+      time: "2026-01-02T00:00:00.000Z",
+    });
+
+    await processRawRecords([first], rulesWithBio, { passthrough: true, datasetId });
+    await processRawRecords([second], rulesWithBio, { passthrough: true, datasetId });
+
+    const [lead] = await db()
+      .select()
+      .from(schema.leads)
+      .where(eq(schema.leads.facebookId, "fb-bio-test"));
+
+    // name was already set by the first appearance — never overwritten.
+    expect(lead.name).toBe("Jane Doe");
+    // bio was missing — filled in by the second appearance.
+    expect(lead.bio).toBe("Relocating from Australia");
+  });
+});
+
 const engagementRules: MappingRules = {
   externalId: { from: ["id"] },
   authorExternalId: { from: ["likerId"] },
@@ -175,10 +315,10 @@ describe("processRawRecords — engagement_like identity dedup", () => {
    * The bug this fixes: `findCanonicalDuplicate`'s body-similarity gate
    * (body.length >= 40) never engages for an engagement record, whose body is
    * always empty — every resync of the same like produced a second, undeduped
-   * lead. Identity-based dedup replaces that gate for `recordKind !==
+   * appearance. Identity-based dedup replaces that gate for `recordKind !==
    * "content_post"`. See docs/lead-source-scaling-plan.md problem 2b.
    */
-  it("collapses a re-scraped like on the same post into one lead, not a duplicate", async () => {
+  it("collapses a re-scraped like on the same post into one appearance, not a duplicate", async () => {
     const datasetId = await seedDataset();
     const payload = { id: "like-1", likerId: "user-1", likerName: "Ari", postId: "post-1", postTitle: "Villa" };
 
@@ -200,14 +340,14 @@ describe("processRawRecords — engagement_like identity dedup", () => {
 
     expect(result.duplicates).toBe(1);
 
-    const [rescrapedLead] = await db()
+    const [rescrapedAppearance] = await db()
       .select()
-      .from(schema.leads)
-      .where(eq(schema.leads.rawRecordId, rescrape.id));
-    expect(rescrapedLead.canonicalLeadId).not.toBeNull();
+      .from(schema.leadAppearances)
+      .where(eq(schema.leadAppearances.rawRecordId, rescrape.id));
+    expect(rescrapedAppearance.canonicalAppearanceId).not.toBeNull();
   });
 
-  it("keeps the same person liking two different posts as two separate leads", async () => {
+  it("keeps the same person liking two different posts as two separate appearances under one person", async () => {
     const datasetId = await seedDataset();
     const first = await seedRawRecord(datasetId, {
       id: "like-2",
@@ -238,17 +378,26 @@ describe("processRawRecords — engagement_like identity dedup", () => {
     // Different posts is real, distinct signal — not a duplicate to collapse.
     expect(result.duplicates).toBe(0);
 
-    const [secondLead] = await db()
+    const [secondAppearance] = await db()
       .select()
-      .from(schema.leads)
-      .where(eq(schema.leads.rawRecordId, second.id));
-    expect(secondLead.canonicalLeadId).toBeNull();
-    // The second lead's own score should reflect it as the person's 2nd
-    // distinct engagement in the window.
-    expect(secondLead.scoreReasons.some((r) => r.code === "repeat_engagement")).toBe(true);
+      .from(schema.leadAppearances)
+      .where(eq(schema.leadAppearances.rawRecordId, second.id));
+    expect(secondAppearance.canonicalAppearanceId).toBeNull();
+    // The second appearance's own score should reflect it as the person's
+    // 2nd distinct engagement in the window.
+    expect(secondAppearance.scoreReasons.some((r) => r.code === "repeat_engagement")).toBe(true);
+
+    // Both appearances (same likerId => same authorExternalId => same person)
+    // merge under one lead, satisfying "each person exists only once" even
+    // for engagement-only records.
+    const [first_] = await db()
+      .select()
+      .from(schema.leadAppearances)
+      .where(eq(schema.leadAppearances.rawRecordId, first.id));
+    expect(first_.leadId).toBe(secondAppearance.leadId);
   });
 
-  it("stamps recordKind onto the lead row", async () => {
+  it("stamps recordKind onto the appearance row", async () => {
     const datasetId = await seedDataset();
     const record = await seedRawRecord(datasetId, {
       id: "like-4",
@@ -263,7 +412,10 @@ describe("processRawRecords — engagement_like identity dedup", () => {
       recordKind: "engagement_like",
     });
 
-    const [lead] = await db().select().from(schema.leads).where(eq(schema.leads.rawRecordId, record.id));
-    expect(lead.recordKind).toBe("engagement_like");
+    const [appearance] = await db()
+      .select()
+      .from(schema.leadAppearances)
+      .where(eq(schema.leadAppearances.rawRecordId, record.id));
+    expect(appearance.recordKind).toBe("engagement_like");
   });
 });

@@ -25,13 +25,13 @@ test.describe("lead triage", () => {
     await expect(row.getByText("contacted", { exact: true })).toBeVisible();
   });
 
-  test("the triage view button narrows to buyer intent, new status, priority sort", async ({ page }) => {
+  test("the triage view button narrows to buyer lead type, new status, priority sort", async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto("/leads");
 
     await page.getByRole("button", { name: "Triage view" }).click();
 
-    await expect(page).toHaveURL(/intent=buyer/);
+    await expect(page).toHaveURL(/leadType=buyer/);
     await expect(page).toHaveURL(/status=new/);
     await expect(page).toHaveURL(/sort=priority/);
   });
@@ -69,9 +69,11 @@ test.describe("lead triage", () => {
     await row.click();
 
     await expect(page.getByRole("heading", { name: "Status" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "converted" })).toBeVisible();
+    // exact: true matters — the "closed" status button's label otherwise
+    // substring-matches the sheet's own "Close" button.
+    await expect(page.getByRole("button", { name: "closed", exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "Close" }).click();
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Status" })).toBeHidden();
   });
 });

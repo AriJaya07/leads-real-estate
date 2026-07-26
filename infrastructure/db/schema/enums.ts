@@ -14,6 +14,15 @@ export const leadRecordKindEnum = pgEnum("lead_record_kind", [
   "engagement_comment",
 ]);
 
+/**
+ * Which social platform a mapping profile's payloads come from — needed to know
+ * whether a scraped identity id (`authorExternalId`) fills `leads.facebookId` or
+ * `leads.instagramId` when merging appearances into one person. Independent of
+ * `sourceKindEnum` (transport) and `leadRecordKindEnum` (content shape) for the
+ * same reason those two are independent of each other.
+ */
+export const platformEnum = pgEnum("platform", ["facebook", "instagram", "other"]);
+
 export const datasetStatusEnum = pgEnum("dataset_status", [
   "active",
   "paused",
@@ -47,17 +56,37 @@ export const syncStatusEnum = pgEnum("sync_status", [
 
 export const logLevelEnum = pgEnum("log_level", ["debug", "info", "warn", "error"]);
 
+/**
+ * Per-*appearance* classification (one scraped post/like/comment). Unchanged by
+ * the person-centric refactor — still what `rules-classifier.ts` outputs per
+ * item. `leadTypeEnum` below is the separate, person-level business
+ * classification rolled up from many appearances; the two are deliberately not
+ * the same enum; see domain.md.
+ */
 export const leadIntentEnum = pgEnum("lead_intent", ["buyer", "seller", "agent", "other"]);
+
+/**
+ * Person-level business classification — rolled up from every appearance a
+ * person has (buyer/seller/investor scores + agent/broker signal), not read
+ * off any single post. See `domain/scoring/lead-rollup.ts`.
+ */
+export const leadTypeEnum = pgEnum("lead_type", [
+  "buyer",
+  "seller",
+  "agent",
+  "broker",
+  "investor",
+  "unknown",
+]);
 
 export const leadStatusEnum = pgEnum("lead_status", [
   "new",
   "contacted",
   "qualified",
-  "viewing_booked",
-  "converted",
-  "lost",
-  "archived",
-  "spam",
+  "interested",
+  "negotiation",
+  "closed",
+  "rejected",
 ]);
 
 export const alertChannelEnum = pgEnum("alert_channel", ["email", "whatsapp", "slack", "inapp"]);

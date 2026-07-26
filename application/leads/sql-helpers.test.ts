@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { textArray, validIntents, validStatuses } from "./sql-helpers";
+import { textArray, validLeadTypes, validStatuses } from "./sql-helpers";
 
 const dialect = new PgDialect();
 
@@ -38,20 +38,20 @@ describe("textArray", () => {
   });
 });
 
-describe("validIntents / validStatuses", () => {
+describe("validLeadTypes / validStatuses", () => {
   it("keeps known enum values", () => {
-    expect(validIntents(["buyer", "seller"])).toEqual(["buyer", "seller"]);
+    expect(validLeadTypes(["buyer", "seller"])).toEqual(["buyer", "seller"]);
     expect(validStatuses(["new", "contacted"])).toEqual(["new", "contacted"]);
   });
 
   /** A hand-edited query string must not reach an enum column and 500 the page. */
   it("drops values the enum does not accept", () => {
-    expect(validIntents(["buyer", "landlord", ""])).toEqual(["buyer"]);
+    expect(validLeadTypes(["buyer", "landlord", ""])).toEqual(["buyer"]);
     expect(validStatuses(["new", "deleted", "DROP TABLE"])).toEqual(["new"]);
   });
 
   it("returns an empty list when nothing is valid", () => {
-    expect(validIntents(["nope"])).toEqual([]);
+    expect(validLeadTypes(["nope"])).toEqual([]);
     expect(validStatuses(["nope"])).toEqual([]);
   });
 });

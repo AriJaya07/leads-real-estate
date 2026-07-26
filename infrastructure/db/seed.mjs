@@ -49,13 +49,19 @@ const facebookRules = {
   },
 };
 
-/** The CEO's "main priority": buyers actively looking for Bali property. */
+/**
+ * The CEO's "main priority": buyers actively looking for Bali property.
+ * Evaluated against the person-level rollup (`application/alerting/dispatch.ts`'s
+ * `toSubject`), not any single appearance — `buyerScore`/`leadType` are rolled
+ * up from everywhere a lead was seen, and `latestAppearanceAt` is when they were
+ * last active anywhere, not one post's timestamp. There's no `isSpam` at the
+ * person level: a spam appearance simply never contributes to `buyerScore`.
+ */
 const priorityBuyerPredicate = {
   all: [
-    { field: "intent", op: "eq", value: "buyer" },
-    { field: "intentScore", op: "gte", value: 60 },
-    { field: "isSpam", op: "eq", value: false },
-    { field: "postedAt", op: "within", value: "P3D" },
+    { field: "leadType", op: "eq", value: "buyer" },
+    { field: "buyerScore", op: "gte", value: 60 },
+    { field: "latestAppearanceAt", op: "within", value: "P3D" },
     {
       any: [
         {
@@ -72,10 +78,9 @@ const priorityBuyerPredicate = {
 /** Wider net, lower urgency — a daily sweep so nothing genuinely good is missed. */
 const anyBuyerPredicate = {
   all: [
-    { field: "intent", op: "eq", value: "buyer" },
-    { field: "intentScore", op: "gte", value: 35 },
-    { field: "isSpam", op: "eq", value: false },
-    { field: "postedAt", op: "within", value: "P1D" },
+    { field: "leadType", op: "eq", value: "buyer" },
+    { field: "buyerScore", op: "gte", value: 35 },
+    { field: "latestAppearanceAt", op: "within", value: "P1D" },
   ],
 };
 
@@ -110,9 +115,9 @@ try {
   const facebookMatchPaths = ["user.name", "groupTitle", "facebookUrl", "text"];
 
   const [profile] = await sql`
-    INSERT INTO mapping_profiles (name, source_kind, record_kind, version, rules, match_paths, passthrough, auto_generated, confidence, approved_at)
-    VALUES ('apify/facebook-groups-scraper', 'apify', 'content_post', 1, ${sql.json(facebookRules)}, ${facebookMatchPaths}, true, false, 1.0, now())
-    ON CONFLICT (name, version) DO UPDATE SET rules = EXCLUDED.rules, match_paths = EXCLUDED.match_paths, record_kind = EXCLUDED.record_kind, approved_at = now()
+    INSERT INTO mapping_profiles (name, source_kind, record_kind, platform, version, rules, match_paths, passthrough, auto_generated, confidence, approved_at)
+    VALUES ('apify/facebook-groups-scraper', 'apify', 'content_post', 'facebook', 1, ${sql.json(facebookRules)}, ${facebookMatchPaths}, true, false, 1.0, now())
+    ON CONFLICT (name, version) DO UPDATE SET rules = EXCLUDED.rules, match_paths = EXCLUDED.match_paths, record_kind = EXCLUDED.record_kind, platform = EXCLUDED.platform, approved_at = now()
     RETURNING id, name
   `;
   console.log(`mapping profile: ${profile.name} (${profile.id})`);

@@ -28,8 +28,8 @@ describe("prioritySortExpression", () => {
 
   it("stays in sync with domain/lead/ranking.ts's exported weights, not a copy", () => {
     const { params } = dialect.sqlToQuery(prioritySortExpression());
-    // 0.7 / 0.3 / 0.2 come from BUYER_INTENT_WEIGHT / BUYER_QUALITY_WEIGHT /
-    // NON_BUYER_INTENT_WEIGHT — asserting they're present as bound params (not
+    // 0.7 / 0.3 / 0.2 come from BUYER_SCORE_WEIGHT / CONFIDENCE_WEIGHT /
+    // NON_BUYER_SCORE_WEIGHT — asserting they're present as bound params (not
     // string-concatenated literals) is what a future weight change can't silently break.
     expect(params).toEqual(expect.arrayContaining([0.7, 0.3, 0.2, RECENCY_HALF_LIFE_HOURS]));
   });

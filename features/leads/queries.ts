@@ -3,9 +3,9 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { LeadFilters } from "@/application/leads/filters.schema";
 import { serializeLeadFilters } from "@/application/leads/filters.schema";
-import type { LeadPage, LeadStats } from "@/application/leads/lead-queries";
+import type { LeadAppearanceListItem, LeadPage, LeadStats } from "@/application/leads/lead-queries";
 import type { FacetDescriptor } from "@/application/leads/facets";
-import { leadFacetsQueryKey, leadStatsQueryKey, leadsQueryKey } from "./query-keys";
+import { leadAppearancesQueryKey, leadFacetsQueryKey, leadStatsQueryKey, leadsQueryKey } from "./query-keys";
 
 async function fetchJson<T>(url: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal });
@@ -67,5 +67,22 @@ export function useLeadStatsQuery(datasetId: string | undefined, initialData?: L
     },
     staleTime: 60_000,
     initialData,
+  });
+}
+
+/**
+ * Every source a lead was collected from — fetched only once the detail sheet
+ * for that lead is actually open (`enabled`), since the full appearance
+ * history is never needed for the list/card view.
+ */
+export function useLeadAppearancesQuery(leadId: string | undefined) {
+  return useQuery({
+    queryKey: leadAppearancesQueryKey(leadId ?? ""),
+    queryFn: ({ signal }) =>
+      fetchJson<{ appearances: LeadAppearanceListItem[] }>(
+        `/api/leads/${leadId}/appearances`,
+        signal,
+      ).then((body) => body.appearances),
+    enabled: Boolean(leadId),
   });
 }

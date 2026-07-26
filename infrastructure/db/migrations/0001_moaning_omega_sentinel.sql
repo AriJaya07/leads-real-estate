@@ -1,1 +1,0 @@
-ALTER TABLE "mapping_profiles" ADD COLUMN "match_paths" text[] DEFAULT '{}'::text[] NOT NULL;

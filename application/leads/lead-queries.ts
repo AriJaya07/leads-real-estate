@@ -5,37 +5,47 @@ import { db, schema } from "@/infrastructure/db/client";
 import { priorityScore } from "@/domain/lead/ranking";
 import { leadsTag } from "@/application/cache-tags";
 import type { LeadFilters } from "./filters.schema";
-import { textArray, validIntents, validRecordKinds, validStatuses } from "./sql-helpers";
+import { textArray, validLeadTypes, validStatuses, validRecordKinds } from "./sql-helpers";
 import { prioritySortExpression } from "./priority-sql";
 import type { ContactInfo, ScoreReason } from "@/domain/scoring/types";
 
-export interface LeadListItem {
-  id: string;
-  externalUrl: string | null;
-  sourceGroup: string | null;
-  authorName: string | null;
-  authorAvatarUrl: string | null;
+/** A representative appearance for card/list display — a person has no single "body" anymore. */
+export interface PrimaryAppearance {
   body: string;
   listingTitle: string | null;
-  images: string[];
+  externalUrl: string | null;
+  sourceGroup: string | null;
   postedAt: Date;
-  intent: string;
+  images: string[];
   recordKind: string;
-  intentScore: number;
-  qualityScore: number;
-  reach: number;
   scoreReasons: ScoreReason[];
+}
+
+export interface LeadListItem {
+  id: string;
+  facebookId: string | null;
+  instagramId: string | null;
+  profileUrl: string | null;
+  username: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+  location: string | null;
+  bio: string | null;
+  contact: ContactInfo;
+  leadType: string;
+  buyerScore: number;
+  sellerScore: number;
+  investorScore: number;
+  confidenceScore: number;
+  aiExplanation: string;
   propertyTypes: string[];
   locations: string[];
-  bedrooms: number | null;
   budgetMin: number | null;
   budgetMax: number | null;
   budgetCurrency: string | null;
-  contact: ContactInfo;
-  attributes: Record<string, unknown>;
-  isSpam: boolean;
-  datasetId: string;
-  duplicateCount: number;
+  latestAppearanceAt: Date | null;
+  appearanceCount: number;
+  primaryAppearance: PrimaryAppearance | null;
   status: string;
   assignedTo: string | null;
   assignedToName: string | null;
@@ -46,38 +56,63 @@ export interface LeadListItem {
   priority: number;
 }
 
+/**
+ * Appearance-scoped filters (`datasetId`, `groups`, `recordKind`, `attr`, and
+ * the appearance half of `q`) become `EXISTS` subqueries against
+ * `lead_appearances` rather than direct columns — a person isn't scoped to one
+ * dataset/group/record-kind, they can have appearances across many.
+ */
 function buildConditions(filters: LeadFilters): SQL[] {
   const conditions: SQL[] = [];
 
-  if (!filters.includeSpam) conditions.push(eq(schema.leads.isSpam, false));
-  // Duplicates are linked rather than deleted, so they are hidden by default and
-  // surfaced as a count on the surviving lead.
-  if (!filters.includeDuplicates) conditions.push(isNull(schema.leads.canonicalLeadId));
-
-  if (filters.datasetId) conditions.push(eq(schema.leads.datasetId, filters.datasetId));
+  if (filters.datasetId) {
+    conditions.push(sql`
+      EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+        WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.datasetId} = ${filters.datasetId})
+    `);
+  }
 
   if (filters.q) {
     const term = `%${filters.q}%`;
     conditions.push(
       or(
-        ilike(schema.leads.body, term),
-        ilike(schema.leads.authorName, term),
-        ilike(schema.leads.listingTitle, term),
-        ilike(schema.leads.sourceGroup, term),
+        ilike(schema.leads.name, term),
+        ilike(schema.leads.username, term),
+        ilike(schema.leads.bio, term),
+        sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+          WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+          AND (${schema.leadAppearances.body} ILIKE ${term}
+               OR ${schema.leadAppearances.listingTitle} ILIKE ${term}
+               OR ${schema.leadAppearances.sourceGroup} ILIKE ${term}))`,
       )!,
     );
   }
 
   // Unknown values are dropped rather than passed through: an enum column
   // rejects them outright, so a hand-edited query string would 500 the page.
-  const intents = validIntents(filters.intent);
-  if (intents.length) conditions.push(inArray(schema.leads.intent, intents));
-
-  const recordKinds = validRecordKinds(filters.recordKind);
-  if (recordKinds.length) conditions.push(inArray(schema.leads.recordKind, recordKinds));
+  const leadTypes = validLeadTypes(filters.leadType);
+  if (leadTypes.length) conditions.push(inArray(schema.leads.leadType, leadTypes));
 
   const statuses = validStatuses(filters.status);
   if (statuses.length) conditions.push(inArray(schema.leadStates.status, statuses));
+
+  const recordKinds = validRecordKinds(filters.recordKind);
+  if (recordKinds.length) {
+    conditions.push(sql`
+      EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+        WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.recordKind}::text = ANY(${textArray(recordKinds)}))
+    `);
+  }
+
+  if (filters.groups.length) {
+    conditions.push(sql`
+      EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+        WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.sourceGroup} = ANY(${textArray(filters.groups)}))
+    `);
+  }
 
   if (filters.propertyTypes.length) {
     conditions.push(sql`${schema.leads.propertyTypes} && ${textArray(filters.propertyTypes)}`);
@@ -85,15 +120,12 @@ function buildConditions(filters: LeadFilters): SQL[] {
   if (filters.locations.length) {
     conditions.push(sql`${schema.leads.locations} && ${textArray(filters.locations)}`);
   }
-  if (filters.groups.length) {
-    conditions.push(inArray(schema.leads.sourceGroup, filters.groups));
-  }
 
-  if (filters.minIntent !== undefined) {
-    conditions.push(gte(schema.leads.intentScore, filters.minIntent));
+  if (filters.minBuyerScore !== undefined) {
+    conditions.push(gte(schema.leads.buyerScore, filters.minBuyerScore));
   }
-  if (filters.minQuality !== undefined) {
-    conditions.push(gte(schema.leads.qualityScore, filters.minQuality));
+  if (filters.minConfidence !== undefined) {
+    conditions.push(gte(schema.leads.confidenceScore, filters.minConfidence));
   }
   if (filters.budgetMin !== undefined) {
     conditions.push(gte(schema.leads.budgetUsdMax, filters.budgetMin));
@@ -112,19 +144,24 @@ function buildConditions(filters: LeadFilters): SQL[] {
 
   if (filters.postedAfter) {
     const date = new Date(filters.postedAfter);
-    if (!Number.isNaN(date.getTime())) conditions.push(gte(schema.leads.postedAt, date));
+    if (!Number.isNaN(date.getTime())) conditions.push(gte(schema.leads.latestAppearanceAt, date));
   }
   if (filters.postedBefore) {
     const date = new Date(filters.postedBefore);
-    if (!Number.isNaN(date.getTime())) conditions.push(lte(schema.leads.postedAt, date));
+    if (!Number.isNaN(date.getTime())) conditions.push(lte(schema.leads.latestAppearanceAt, date));
   }
 
-  // Dynamic attributes discovered in the payload. Values are bound as parameters,
-  // and the key is confined to a jsonb path — no SQL is built from user strings.
+  // Dynamic attributes discovered in the payload, now appearance-scoped. Values
+  // are bound as parameters, and the key is confined to a jsonb path — no SQL
+  // is built from user strings.
   for (const [key, raw] of Object.entries(filters.attr)) {
     const values = (Array.isArray(raw) ? raw : [raw]).filter(Boolean);
     if (values.length === 0) continue;
-    conditions.push(sql`${schema.leads.attributes}->>${key} = ANY(${textArray(values)})`);
+    conditions.push(sql`
+      EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+        WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.attributes}->>${key} = ANY(${textArray(values)}))
+    `);
   }
 
   return conditions;
@@ -133,26 +170,51 @@ function buildConditions(filters: LeadFilters): SQL[] {
 function orderBy(sort: LeadFilters["sort"]) {
   switch (sort) {
     case "newest":
-      return [desc(schema.leads.postedAt)];
+      return [desc(schema.leads.latestAppearanceAt)];
     case "oldest":
-      return [asc(schema.leads.postedAt)];
-    case "intent":
-      return [desc(schema.leads.intentScore), desc(schema.leads.postedAt)];
-    case "quality":
-      return [desc(schema.leads.qualityScore), desc(schema.leads.postedAt)];
-    case "reach":
-      return [desc(schema.leads.reach), desc(schema.leads.postedAt)];
+      return [asc(schema.leads.latestAppearanceAt)];
+    case "buyerScore":
+      return [desc(schema.leads.buyerScore), desc(schema.leads.latestAppearanceAt)];
+    case "confidence":
+      return [desc(schema.leads.confidenceScore), desc(schema.leads.latestAppearanceAt)];
     case "priority":
     default:
       /**
        * Recency-decayed priority, computed in SQL so it can drive ORDER BY and
-       * paginate correctly. A 95-score post from three days ago has already had
-       * a dozen replies; an 80-score post from ten minutes ago is still winnable.
-       * The expression itself lives in `priority-sql.ts`, built from the same
-       * constants `domain/lead/ranking.ts::priorityScore` uses for display.
+       * paginate correctly. The expression itself lives in `priority-sql.ts`,
+       * built from the same constants `domain/lead/ranking.ts::priorityScore` uses.
        */
-      return [desc(prioritySortExpression()), desc(schema.leads.postedAt)];
+      return [desc(prioritySortExpression()), desc(schema.leads.latestAppearanceAt)];
   }
+}
+
+/**
+ * A person has no single post — this picks one representative appearance per
+ * lead (highest-scoring, most recent, excluding spam/duplicates) for card/list
+ * display via `DISTINCT ON`. The full history is `getLeadAppearances`, used by
+ * the detail sheet's "Sources" list.
+ */
+export function primaryAppearanceSubquery() {
+  return db()
+    .selectDistinctOn([schema.leadAppearances.leadId], {
+      leadId: schema.leadAppearances.leadId,
+      body: schema.leadAppearances.body,
+      listingTitle: schema.leadAppearances.listingTitle,
+      externalUrl: schema.leadAppearances.externalUrl,
+      sourceGroup: schema.leadAppearances.sourceGroup,
+      postedAt: schema.leadAppearances.postedAt,
+      images: schema.leadAppearances.images,
+      recordKind: schema.leadAppearances.recordKind,
+      scoreReasons: schema.leadAppearances.scoreReasons,
+    })
+    .from(schema.leadAppearances)
+    .where(and(eq(schema.leadAppearances.isSpam, false), isNull(schema.leadAppearances.canonicalAppearanceId)))
+    .orderBy(
+      schema.leadAppearances.leadId,
+      desc(schema.leadAppearances.intentScore),
+      desc(schema.leadAppearances.postedAt),
+    )
+    .as("primary_appearance");
 }
 
 export interface LeadPage {
@@ -166,40 +228,41 @@ export interface LeadPage {
 export async function queryLeads(filters: LeadFilters): Promise<LeadPage> {
   const conditions = buildConditions(filters);
   const where = conditions.length ? and(...conditions) : undefined;
-
-  const duplicateCount = sql<number>`(
-    SELECT count(*)::int FROM ${schema.leads} AS dup
-    WHERE dup.canonical_lead_id = ${schema.leads.id}
-  )`;
+  const primary = primaryAppearanceSubquery();
 
   const rows = await db()
     .select({
       id: schema.leads.id,
-      externalUrl: schema.leads.externalUrl,
-      sourceGroup: schema.leads.sourceGroup,
-      authorName: schema.leads.authorName,
-      authorAvatarUrl: schema.leads.authorAvatarUrl,
-      body: schema.leads.body,
-      listingTitle: schema.leads.listingTitle,
-      images: schema.leads.images,
-      postedAt: schema.leads.postedAt,
-      intent: schema.leads.intent,
-      recordKind: schema.leads.recordKind,
-      intentScore: schema.leads.intentScore,
-      qualityScore: schema.leads.qualityScore,
-      reach: schema.leads.reach,
-      scoreReasons: schema.leads.scoreReasons,
+      facebookId: schema.leads.facebookId,
+      instagramId: schema.leads.instagramId,
+      profileUrl: schema.leads.profileUrl,
+      username: schema.leads.username,
+      name: schema.leads.name,
+      avatarUrl: schema.leads.avatarUrl,
+      location: schema.leads.location,
+      bio: schema.leads.bio,
+      contact: schema.leads.contact,
+      leadType: schema.leads.leadType,
+      buyerScore: schema.leads.buyerScore,
+      sellerScore: schema.leads.sellerScore,
+      investorScore: schema.leads.investorScore,
+      confidenceScore: schema.leads.confidenceScore,
+      aiExplanation: schema.leads.aiExplanation,
       propertyTypes: schema.leads.propertyTypes,
       locations: schema.leads.locations,
-      bedrooms: schema.leads.bedrooms,
       budgetMin: schema.leads.budgetMin,
       budgetMax: schema.leads.budgetMax,
       budgetCurrency: schema.leads.budgetCurrency,
-      contact: schema.leads.contact,
-      attributes: schema.leads.attributes,
-      isSpam: schema.leads.isSpam,
-      datasetId: schema.leads.datasetId,
-      duplicateCount,
+      latestAppearanceAt: schema.leads.latestAppearanceAt,
+      appearanceCount: schema.leads.appearanceCount,
+      primaryBody: primary.body,
+      primaryListingTitle: primary.listingTitle,
+      primaryExternalUrl: primary.externalUrl,
+      primarySourceGroup: primary.sourceGroup,
+      primaryPostedAt: primary.postedAt,
+      primaryImages: primary.images,
+      primaryRecordKind: primary.recordKind,
+      primaryScoreReasons: primary.scoreReasons,
       status: schema.leadStates.status,
       assignedTo: schema.leadStates.assignedTo,
       assignedToName: schema.users.name,
@@ -211,6 +274,7 @@ export async function queryLeads(filters: LeadFilters): Promise<LeadPage> {
     .from(schema.leads)
     .leftJoin(schema.leadStates, eq(schema.leadStates.leadId, schema.leads.id))
     .leftJoin(schema.users, eq(schema.users.id, schema.leadStates.assignedTo))
+    .leftJoin(primary, eq(primary.leadId, schema.leads.id))
     .where(where)
     .orderBy(...orderBy(filters.sort))
     .limit(filters.pageSize)
@@ -230,12 +294,26 @@ export async function queryLeads(filters: LeadFilters): Promise<LeadPage> {
     tags: row.tags ?? [],
     bookmarked: row.bookmarked ?? false,
     contact: row.contact ?? {},
+    primaryAppearance: row.primaryPostedAt
+      ? {
+          body: row.primaryBody ?? "",
+          listingTitle: row.primaryListingTitle,
+          externalUrl: row.primaryExternalUrl,
+          sourceGroup: row.primarySourceGroup,
+          postedAt: row.primaryPostedAt,
+          images: row.primaryImages ?? [],
+          recordKind: row.primaryRecordKind ?? "content_post",
+          scoreReasons: row.primaryScoreReasons ?? [],
+        }
+      : null,
     priority: priorityScore(
       {
-        intent: row.intent,
-        intentScore: row.intentScore,
-        qualityScore: row.qualityScore,
-        postedAt: row.postedAt,
+        leadType: row.leadType,
+        buyerScore: row.buyerScore,
+        sellerScore: row.sellerScore,
+        investorScore: row.investorScore,
+        confidenceScore: row.confidenceScore,
+        latestAppearanceAt: row.latestAppearanceAt,
         hasContact: Boolean(row.contact?.phone || row.contact?.whatsapp || row.contact?.email),
         status: row.status ?? "new",
       },
@@ -252,6 +330,143 @@ export async function queryLeads(filters: LeadFilters): Promise<LeadPage> {
   };
 }
 
+export interface AlertableLead {
+  id: string;
+  name: string | null;
+  leadType: string;
+  buyerScore: number;
+  sellerScore: number;
+  investorScore: number;
+  confidenceScore: number;
+  propertyTypes: string[];
+  locations: string[];
+  budgetMin: number | null;
+  budgetMax: number | null;
+  budgetUsdMin: number | null;
+  budgetUsdMax: number | null;
+  budgetCurrency: string | null;
+  contact: ContactInfo;
+  latestAppearanceAt: Date | null;
+  primaryAppearance: PrimaryAppearance | null;
+}
+
+/**
+ * Fetches the person rows an alert batch needs to evaluate/render — the
+ * predicate subject (`application/alerting/dispatch.ts::toSubject`) and the
+ * digest email's "what to say/where to click" both come from this, not raw
+ * `schema.leads` rows, since a person has no single body/link of their own.
+ */
+export async function getLeadsForDigest(leadIds: string[]): Promise<AlertableLead[]> {
+  if (leadIds.length === 0) return [];
+  const primary = primaryAppearanceSubquery();
+
+  const rows = await db()
+    .select({
+      id: schema.leads.id,
+      name: schema.leads.name,
+      leadType: schema.leads.leadType,
+      buyerScore: schema.leads.buyerScore,
+      sellerScore: schema.leads.sellerScore,
+      investorScore: schema.leads.investorScore,
+      confidenceScore: schema.leads.confidenceScore,
+      propertyTypes: schema.leads.propertyTypes,
+      locations: schema.leads.locations,
+      budgetMin: schema.leads.budgetMin,
+      budgetMax: schema.leads.budgetMax,
+      budgetUsdMin: schema.leads.budgetUsdMin,
+      budgetUsdMax: schema.leads.budgetUsdMax,
+      budgetCurrency: schema.leads.budgetCurrency,
+      contact: schema.leads.contact,
+      latestAppearanceAt: schema.leads.latestAppearanceAt,
+      primaryBody: primary.body,
+      primaryListingTitle: primary.listingTitle,
+      primaryExternalUrl: primary.externalUrl,
+      primarySourceGroup: primary.sourceGroup,
+      primaryPostedAt: primary.postedAt,
+      primaryImages: primary.images,
+      primaryRecordKind: primary.recordKind,
+      primaryScoreReasons: primary.scoreReasons,
+    })
+    .from(schema.leads)
+    .leftJoin(primary, eq(primary.leadId, schema.leads.id))
+    .where(inArray(schema.leads.id, leadIds));
+
+  return rows.map((row) => ({
+    ...row,
+    contact: row.contact ?? {},
+    primaryAppearance: row.primaryPostedAt
+      ? {
+          body: row.primaryBody ?? "",
+          listingTitle: row.primaryListingTitle,
+          externalUrl: row.primaryExternalUrl,
+          sourceGroup: row.primarySourceGroup,
+          postedAt: row.primaryPostedAt,
+          images: row.primaryImages ?? [],
+          recordKind: row.primaryRecordKind ?? "content_post",
+          scoreReasons: row.primaryScoreReasons ?? [],
+        }
+      : null,
+  }));
+}
+
+export interface LeadAppearanceListItem {
+  id: string;
+  recordKind: string;
+  platform: string;
+  sourceGroup: string | null;
+  externalUrl: string | null;
+  body: string;
+  listingTitle: string | null;
+  postedAt: Date;
+  intent: string;
+  intentScore: number;
+  scoreReasons: ScoreReason[];
+  attributes: Record<string, unknown>;
+  duplicateCount: number;
+}
+
+/**
+ * Every source a lead was collected from — backs the detail sheet's "Sources"
+ * list, the concrete answer to "track every source where the lead was
+ * collected." Excludes spam; includes near-duplicate reposts collapsed under
+ * their canonical appearance (via `duplicateCount`), same UI pattern the old
+ * per-post inbox used, just scoped per-person now instead of globally.
+ */
+export async function getLeadAppearances(leadId: string): Promise<LeadAppearanceListItem[]> {
+  const duplicateCount = sql<number>`(
+    SELECT count(*)::int FROM ${schema.leadAppearances} AS dup
+    WHERE dup.canonical_appearance_id = ${schema.leadAppearances.id}
+  )`;
+
+  const rows = await db()
+    .select({
+      id: schema.leadAppearances.id,
+      recordKind: schema.leadAppearances.recordKind,
+      platform: schema.leadAppearances.platform,
+      sourceGroup: schema.leadAppearances.sourceGroup,
+      externalUrl: schema.leadAppearances.externalUrl,
+      body: schema.leadAppearances.body,
+      listingTitle: schema.leadAppearances.listingTitle,
+      postedAt: schema.leadAppearances.postedAt,
+      intent: schema.leadAppearances.intent,
+      intentScore: schema.leadAppearances.intentScore,
+      scoreReasons: schema.leadAppearances.scoreReasons,
+      attributes: schema.leadAppearances.attributes,
+      duplicateCount,
+    })
+    .from(schema.leadAppearances)
+    .where(
+      and(
+        eq(schema.leadAppearances.leadId, leadId),
+        eq(schema.leadAppearances.isSpam, false),
+        isNull(schema.leadAppearances.canonicalAppearanceId),
+      ),
+    )
+    .orderBy(desc(schema.leadAppearances.postedAt));
+
+  return rows;
+}
+
 export interface LeadStats {
   total: number;
   buyers: number;
@@ -263,8 +478,15 @@ export interface LeadStats {
 }
 
 /**
- * Headline numbers for the inbox. `medianTimeToFirstTouch` is the north-star
- * metric — everything else is context for it.
+ * Headline numbers for the inbox — now counting people, not appearances. A
+ * person seen in 5 groups is 1 lead, not 5, directly reflecting "each person
+ * should exist only once."
+ *
+ * `medianTimeToFirstTouch` is the north-star metric — everything else is
+ * context for it. Base is `leads.createdAt` (when this person first became a
+ * lead), not any single appearance's `postedAt` — there's no one "the" post
+ * anymore, and "how long from when we identified them to first contact" is
+ * arguably the more correct read of the metric than before.
  *
  * Cached (unlike `queryLeads`): keyed only on `datasetId`, so the cache key
  * space is bounded (one entry per dataset + "all"), versus the list's
@@ -277,26 +499,29 @@ export async function getLeadStats(datasetId?: string): Promise<LeadStats> {
   cacheLife("minutes");
   cacheTag(leadsTag());
 
-  const scope = datasetId ? eq(schema.leads.datasetId, datasetId) : undefined;
-  const base = and(eq(schema.leads.isSpam, false), isNull(schema.leads.canonicalLeadId), scope);
+  const scope = datasetId
+    ? sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+        WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.datasetId} = ${datasetId})`
+    : undefined;
 
   const [row] = await db()
     .select({
       total: sql<number>`count(*)::int`,
-      buyers: sql<number>`count(*) FILTER (WHERE ${schema.leads.intent} = 'buyer')::int`,
-      hotBuyers: sql<number>`count(*) FILTER (WHERE ${schema.leads.intent} = 'buyer' AND ${schema.leads.intentScore} >= 60)::int`,
+      buyers: sql<number>`count(*) FILTER (WHERE ${schema.leads.leadType} = 'buyer')::int`,
+      hotBuyers: sql<number>`count(*) FILTER (WHERE ${schema.leads.leadType} = 'buyer' AND ${schema.leads.buyerScore} >= 60)::int`,
       unassigned: sql<number>`count(*) FILTER (WHERE ${schema.leadStates.assignedTo} IS NULL)::int`,
-      newLast24h: sql<number>`count(*) FILTER (WHERE ${schema.leads.postedAt} > now() - interval '24 hours')::int`,
+      newLast24h: sql<number>`count(*) FILTER (WHERE ${schema.leads.createdAt} > now() - interval '24 hours')::int`,
       contactable: sql<number>`count(*) FILTER (WHERE ${schema.leads.contact}->>'whatsapp' IS NOT NULL OR ${schema.leads.contact}->>'phone' IS NOT NULL)::int`,
       medianTtft: sql<number | null>`
         percentile_cont(0.5) WITHIN GROUP (
-          ORDER BY EXTRACT(EPOCH FROM (${schema.leadStates.firstContactedAt} - ${schema.leads.postedAt})) / 60
+          ORDER BY EXTRACT(EPOCH FROM (${schema.leadStates.firstContactedAt} - ${schema.leads.createdAt})) / 60
         ) FILTER (WHERE ${schema.leadStates.firstContactedAt} IS NOT NULL)
       `,
     })
     .from(schema.leads)
     .leftJoin(schema.leadStates, eq(schema.leadStates.leadId, schema.leads.id))
-    .where(base);
+    .where(scope);
 
   return {
     total: row.total,
@@ -317,9 +542,13 @@ export interface LeadTrendPoint {
 }
 
 /**
- * Daily lead volume for the Intelligence page's trend chart. Gap-filled in the
- * loop below rather than in SQL — a day with zero leads shouldn't need a
- * `generate_series` join for what's a 30-element array either way.
+ * New unique leads per day for the Intelligence page's trend chart — grouped
+ * on `leads.createdAt` (when a person was first identified), not appearance
+ * volume. This is a genuinely different, arguably more useful metric than the
+ * old per-post version: "how many new people did we find," not "how much
+ * scraping happened." Gap-filled in the loop below rather than in SQL — a day
+ * with zero new leads shouldn't need a `generate_series` join for what's a
+ * 30-element array either way.
  */
 export async function getLeadTrend(datasetId?: string, days = 30): Promise<LeadTrendPoint[]> {
   "use cache";
@@ -327,24 +556,22 @@ export async function getLeadTrend(datasetId?: string, days = 30): Promise<LeadT
   cacheTag(leadsTag());
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  const scope = datasetId ? eq(schema.leads.datasetId, datasetId) : undefined;
-  const base = and(
-    eq(schema.leads.isSpam, false),
-    isNull(schema.leads.canonicalLeadId),
-    gte(schema.leads.postedAt, since),
-    scope,
-  );
+  const scope = datasetId
+    ? sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+        WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.datasetId} = ${datasetId})`
+    : undefined;
 
   const rows = await db()
     .select({
-      date: sql<string>`to_char(date_trunc('day', ${schema.leads.postedAt}), 'YYYY-MM-DD')`,
+      date: sql<string>`to_char(date_trunc('day', ${schema.leads.createdAt}), 'YYYY-MM-DD')`,
       total: sql<number>`count(*)::int`,
-      buyers: sql<number>`count(*) FILTER (WHERE ${schema.leads.intent} = 'buyer')::int`,
+      buyers: sql<number>`count(*) FILTER (WHERE ${schema.leads.leadType} = 'buyer')::int`,
     })
     .from(schema.leads)
-    .where(base)
-    .groupBy(sql`date_trunc('day', ${schema.leads.postedAt})`)
-    .orderBy(sql`date_trunc('day', ${schema.leads.postedAt})`);
+    .where(and(gte(schema.leads.createdAt, since), scope))
+    .groupBy(sql`date_trunc('day', ${schema.leads.createdAt})`)
+    .orderBy(sql`date_trunc('day', ${schema.leads.createdAt})`);
 
   const byDate = new Map(rows.map((row) => [row.date, row]));
   const series: LeadTrendPoint[] = [];
@@ -369,8 +596,11 @@ export async function getBudgetStats(datasetId?: string): Promise<BudgetStats> {
   cacheLife("minutes");
   cacheTag(leadsTag());
 
-  const scope = datasetId ? eq(schema.leads.datasetId, datasetId) : undefined;
-  const base = and(eq(schema.leads.isSpam, false), isNull(schema.leads.canonicalLeadId), scope);
+  const scope = datasetId
+    ? sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+        WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.datasetId} = ${datasetId})`
+    : undefined;
   const stated = sql`coalesce(${schema.leads.budgetUsdMax}, ${schema.leads.budgetUsdMin})`;
 
   const [row] = await db()
@@ -381,7 +611,7 @@ export async function getBudgetStats(datasetId?: string): Promise<BudgetStats> {
       maxUsd: sql<number | null>`max(${schema.leads.budgetUsdMax})`,
     })
     .from(schema.leads)
-    .where(base);
+    .where(scope);
 
   return {
     withBudget: row.withBudget,

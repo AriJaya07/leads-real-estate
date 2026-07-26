@@ -18,6 +18,7 @@ import {
 } from "@/application/leads/lead-status";
 import { DEFAULT_FILTERS } from "@/application/leads/filters.schema";
 import type { LeadListItem } from "@/application/leads/lead-queries";
+import { primaryLeadScore } from "@/domain/lead/ranking";
 import type { LeadStatusValue } from "@/application/leads/sql-helpers";
 import { cn } from "@/lib/utils";
 
@@ -60,8 +61,8 @@ function PipelineCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <GripVertical className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
-          <ScoreBadge score={lead.intentScore} />
-          <IntentBadge intent={lead.intent} />
+          <ScoreBadge score={primaryLeadScore(lead)} />
+          <IntentBadge intent={lead.leadType} />
         </div>
         <button
           type="button"
@@ -76,19 +77,21 @@ function PipelineCard({
       </div>
 
       <div>
-        <p className="truncate font-medium">{lead.authorName ?? "Unknown"}</p>
-        <p className="text-muted-foreground line-clamp-2 text-xs">{lead.body || "(no text)"}</p>
+        <p className="truncate font-medium">{lead.name ?? "Unknown"}</p>
+        <p className="text-muted-foreground line-clamp-2 text-xs">
+          {lead.primaryAppearance?.body || "(no text)"}
+        </p>
       </div>
 
       <span className="text-muted-foreground text-xs">
-        <RelativeTime value={lead.postedAt} />
+        <RelativeTime value={lead.latestAppearanceAt} />
       </span>
 
       <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2">
         <label className="flex items-center gap-1.5 text-xs">
           <span className="text-muted-foreground w-14 shrink-0">Status</span>
           <select
-            aria-label={`Status for ${lead.authorName ?? "lead"}`}
+            aria-label={`Status for ${lead.name ?? "lead"}`}
             value={lead.status}
             disabled={busy}
             onChange={(event) => onChangeStatus(lead.id, event.target.value as LeadStatusValue)}
@@ -104,7 +107,7 @@ function PipelineCard({
         <label className="flex items-center gap-1.5 text-xs">
           <span className="text-muted-foreground w-14 shrink-0">Assignee</span>
           <select
-            aria-label={`Assignee for ${lead.authorName ?? "lead"}`}
+            aria-label={`Assignee for ${lead.name ?? "lead"}`}
             value={lead.assignedTo ?? ""}
             disabled={busy}
             onChange={(event) => onAssign(lead.id, event.target.value || null)}

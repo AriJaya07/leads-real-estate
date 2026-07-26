@@ -291,7 +291,7 @@ export async function syncDataset(
     }
 
     // --- Mapping profile ----------------------------------------------------
-    const { rules, profileId, passthrough, recordKind, isFreshlyAutoApproved } =
+    const { rules, profileId, passthrough, recordKind, platform, isFreshlyAutoApproved } =
       await resolveMappingProfile(datasetId, dataset.mappingProfileId, source.kind, fieldProfiles, log);
 
     // --- Normalize + classify ----------------------------------------------
@@ -304,7 +304,12 @@ export async function syncDataset(
           .from(schema.rawRecords)
           .where(inArray(schema.rawRecords.id, ids));
 
-        const processed = await processRawRecords(records, rules, { passthrough, datasetId, recordKind });
+        const processed = await processRawRecords(records, rules, {
+          passthrough,
+          datasetId,
+          recordKind,
+          platform,
+        });
         leadsCreated += processed.created;
         duplicates += processed.duplicates;
         failed += processed.failed;
@@ -325,11 +330,11 @@ export async function syncDataset(
         const [sample] = await db()
           .select({
             total: sql<number>`count(*)::int`,
-            spam: sql<number>`count(*) FILTER (WHERE ${schema.leads.isSpam})::int`,
-            emptyBody: sql<number>`count(*) FILTER (WHERE ${schema.leads.body} = '')::int`,
+            spam: sql<number>`count(*) FILTER (WHERE ${schema.leadAppearances.isSpam})::int`,
+            emptyBody: sql<number>`count(*) FILTER (WHERE ${schema.leadAppearances.body} = '')::int`,
           })
-          .from(schema.leads)
-          .where(inArray(schema.leads.rawRecordId, newRawRecordIds));
+          .from(schema.leadAppearances)
+          .where(inArray(schema.leadAppearances.rawRecordId, newRawRecordIds));
 
         const assessment = assessMappingQuality({
           total: sample?.total ?? 0,
@@ -503,6 +508,7 @@ async function resolveMappingProfile(
   profileId: string | null;
   passthrough: boolean;
   recordKind: "content_post" | "engagement_like" | "engagement_comment";
+  platform: "facebook" | "instagram" | "other";
   /** True only for a profile both auto-generated *and* newly attached in this call — see mapping-quality.ts. */
   isFreshlyAutoApproved: boolean;
 }> {
@@ -518,6 +524,7 @@ async function resolveMappingProfile(
         profileId: profile.id,
         passthrough: profile.passthrough,
         recordKind: profile.recordKind,
+        platform: profile.platform,
         isFreshlyAutoApproved: false,
       };
     }
@@ -528,6 +535,7 @@ async function resolveMappingProfile(
         profileId: profile.id,
         passthrough: profile.passthrough,
         recordKind: profile.recordKind,
+        platform: profile.platform,
         isFreshlyAutoApproved: false,
       };
     }
@@ -539,6 +547,7 @@ async function resolveMappingProfile(
       profileId: null,
       passthrough: true,
       recordKind: "content_post",
+      platform: "facebook",
       isFreshlyAutoApproved: false,
     };
   }
@@ -570,6 +579,7 @@ async function resolveMappingProfile(
       profileId: claimed.id,
       passthrough: claimed.passthrough,
       recordKind: claimed.recordKind,
+      platform: claimed.platform,
       isFreshlyAutoApproved: false,
     };
   }
@@ -596,6 +606,7 @@ async function resolveMappingProfile(
       profileId: null,
       passthrough: true,
       recordKind: "content_post",
+      platform: "facebook",
       isFreshlyAutoApproved: false,
     };
   }
@@ -613,9 +624,11 @@ async function resolveMappingProfile(
     profileId: profile.id,
     passthrough: true,
     // Auto-proposal has no signal to distinguish an engagement shape from a
-    // content shape — that classification requires a human, same as a curated
-    // profile's matchPaths already does. Always content_post until reviewed.
+    // content shape, or which platform produced it — that classification
+    // requires a human, same as a curated profile's matchPaths already does.
+    // Always content_post/facebook until reviewed.
     recordKind: profile.recordKind,
+    platform: profile.platform,
     isFreshlyAutoApproved: approved,
   };
 }

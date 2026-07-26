@@ -3,7 +3,9 @@
 DreamRue finds people who intend to buy property in Bali, ranks them by how real that
 intent is, and gets a salesperson in front of them fast. n8n and Apify produce raw
 datasets; the platform discovers, ingests, normalizes, scores and serves them without
-ever hardcoding a dataset ID or requiring a deploy to add a source.
+ever hardcoding a dataset ID or requiring a deploy to add a source. A "lead" is a
+**person**, deduplicated across every source they were collected from (Facebook Groups,
+Posts, Comments, Post Likers, Instagram Post Likers, ...) — not a post.
 
 For the product framing and roadmap see [prd.md](prd.md). For business terms see
 [domain.md](domain.md).
@@ -11,7 +13,7 @@ For the product framing and roadmap see [prd.md](prd.md). For business terms see
 ## Data flow
 
 ```
-DISCOVER → PROBE → INGEST → NORMALIZE → DEDUPE → SCORE → SERVE → ALERT
+DISCOVER → PROBE → INGEST → NORMALIZE → CLASSIFY → IDENTIFY → DEDUPE → ROLLUP → SERVE → ALERT
 ```
 
 | Stage | What happens | Where |
@@ -21,15 +23,20 @@ DISCOVER → PROBE → INGEST → NORMALIZE → DEDUPE → SCORE → SERVE → A
 | Ingest | Pull only from the watermark offset, committing per page | [application/sync/sync-dataset.ts](../application/sync/sync-dataset.ts) |
 | Profile | Infer the payload shape, fingerprint it, detect drift | [domain/dataset/schema-inference.ts](../domain/dataset/schema-inference.ts) |
 | Normalize | Project the payload through a declarative mapping profile | [domain/dataset/mapping.ts](../domain/dataset/mapping.ts) |
-| Dedupe | Exact id, content hash, and trigram near-duplicate linking | [application/leads/process-records.ts](../application/leads/process-records.ts) |
-| Score | Intent + quality + reasons, via a swappable classifier port | [domain/scoring/rules-classifier.ts](../domain/scoring/rules-classifier.ts) |
-| Serve | Filtered, faceted, priority-ranked queries | [application/leads/lead-queries.ts](../application/leads/lead-queries.ts) |
+| Classify | Per-appearance intent + quality + reasons, via a swappable classifier port | [domain/scoring/rules-classifier.ts](../domain/scoring/rules-classifier.ts) |
+| Identify | Match the appearance's author to an existing person, or create one | [domain/lead/identity.ts](../domain/lead/identity.ts), [application/leads/identity-resolution.ts](../application/leads/identity-resolution.ts) |
+| Dedupe | Exact id, content hash, and trigram near-duplicate linking (appearance-level repost detection, independent of identity merge) | [application/leads/process-records.ts](../application/leads/process-records.ts) |
+| Rollup | Recompute the person's buyer/seller/investor/confidence scores from every non-spam, non-duplicate appearance they have | [domain/scoring/lead-rollup.ts](../domain/scoring/lead-rollup.ts) |
+| Serve | Filtered, faceted, priority-ranked queries over people | [application/leads/lead-queries.ts](../application/leads/lead-queries.ts) |
 | Alert | DB-defined rules → deduped, throttled digests | [application/alerting/dispatch.ts](../application/alerting/dispatch.ts) |
 
 Raw payloads are stored verbatim in `raw_records`. Changing a mapping profile or
-swapping the classifier re-derives every lead by replaying `raw_records` through
-`processRawRecords` — no upstream re-fetch. That is what makes adding an LLM classifier
-later a backfill job, not a migration.
+swapping the classifier re-derives every appearance by replaying `raw_records` through
+`processRawRecords` — no upstream re-fetch. Identity resolution itself only runs once
+per appearance (at creation, not on replay — see domain.md), but the rollup it feeds is
+just as regenerable: `recomputePersonRollup` can re-run for any person at any time.
+That is what makes adding an LLM classifier — or a smarter rollup — later a backfill
+job, not a migration.
 
 ## Layered dependency rule
 
@@ -39,7 +46,7 @@ domain/           Pure TypeScript. No framework, no I/O. Ports and business rule
   scoring/        Intent lexicon, extractors, rules classifier
   alerting/       Serialisable predicate language
   sync/           Connector ports, adaptive scheduling, health model
-  lead/           Priority ranking
+  lead/           Identity resolution (pure matching/merge rules), priority ranking
 
 application/      Use cases and orchestration. Server actions, Zod boundaries.
 infrastructure/   Adapters: Apify connector, Postgres/Drizzle, notifiers, auth, FX, logging
@@ -106,49 +113,85 @@ dataset nobody has seen before; a hand-verified profile claims a dataset by
 required-path match (`matchPaths`) and always wins over an auto-generated one. A
 confident-but-wrong guess is worse than no mapping, because it looks like it worked.
 
-**`leads` is derived; `lead_states` is sacred.** Everything in the `leads` table
-(intent, score, normalized fields) can be rebuilt from `raw_records` by re-running
-normalize + classify. Agent notes, assignment, status and `firstContactedAt` live in
-`lead_states` and are written only by people — the pipeline creates the row once
-(`onConflictDoNothing`) and never touches it again.
+**`leads`/`lead_appearances` are derived; `lead_states` is sacred.** Two levels of
+derivation now, both freely regenerable: appearance-level fields (intent, score,
+normalized fields on `lead_appearances`) can be rebuilt from `raw_records` by
+re-running normalize + classify, and person-level fields (`leadType`, `buyerScore`,
+...) can be rebuilt from a person's `lead_appearances` rows by re-running
+`recomputePersonRollup`. Agent notes, assignment, status and `firstContactedAt` live in
+`lead_states`, keyed by *person* id, and are written only by people — the pipeline
+creates the row once (`onConflictDoNothing`) and never touches it again.
 
-**Reposts are linked, not deleted.** Near-duplicate detection
-(`findCanonicalDuplicate` in
+**A person exists once — identity resolution is deterministic, never fuzzy.**
+`resolveIdentity` ([application/leads/identity-resolution.ts](../application/leads/identity-resolution.ts))
+matches an appearance's author to an existing person by exact `facebookId`, then
+`instagramId`, then normalized `profileUrl` — in that precedence order, never by
+matching on name. A wrong merge (two different "John Wilson"s collapsed into one lead)
+is worse than a duplicate lead, the same risk posture as "curated beats auto-proposal"
+below. An existing match gets missing personal-info fields filled in but never
+overwritten (`domain/lead/identity.ts::mergePersonalInfo`) — a later appearance with
+stale cached profile data can't silently clobber a correct earlier value. Runs once per
+appearance, at creation, not on every reprocess — an appearance's `leadId` is as stable
+as `lead_states` once set.
+
+**Lead type is a person-level rollup, deliberately a different taxonomy from lead
+intent.** `LeadIntent` (`buyer|seller|agent|other`) is what one appearance's text looks
+like, unchanged by the person/appearance split. `LeadType`
+(`buyer|seller|agent|broker|investor|unknown`) is what a *person* looks like across
+everything they've done — computed by
+[domain/scoring/lead-rollup.ts](../domain/scoring/lead-rollup.ts) from every
+appearance, with `investor`/`broker` fed by additive per-appearance signals
+(`investorScore`/`brokerScore`) that never change an appearance's own `intent` pick.
+Keeping these as two separate enums meant zero risk to the already-tested per-appearance
+classification when the rollup was added — all new taxonomy work happens one layer up.
+
+**Reposts are linked, not deleted — appearance-level, independent of person identity.**
+Near-duplicate detection (`findCanonicalDuplicate` in
 [application/leads/process-records.ts](../application/leads/process-records.ts)) sets
-`canonicalLeadId` on the repost rather than dropping it — repost frequency is itself an
-intent signal, and the UI collapses duplicates under the canonical lead.
+`canonicalAppearanceId` on the repost rather than dropping it — repost frequency is
+itself an intent signal, and the UI collapses duplicates under the canonical
+appearance. This is a different, narrower mechanism than person-level identity merge:
+two appearances from the same `authorExternalId` already resolve to the same person via
+`resolveIdentity` regardless of whether their text happens to match.
 
-**Engagement is not intent.** Likes measure post popularity, not intent to transact.
-`reach` is scored and stored separately from `intentScore` and never enters it — see
-[domain/scoring/rules-classifier.ts](../domain/scoring/rules-classifier.ts).
+**Engagement is not intent — and engagement is not reach either, when it's the whole
+record.** Likes measure post popularity, not intent to transact; `reach` is scored and
+stored separately from `intentScore` and never enters it — see
+[domain/scoring/rules-classifier.ts](../domain/scoring/rules-classifier.ts). The same
+principle applies one level up for engagement-only leads: a `content_post`'s own
+like/comment/share counts never become part of the *liker's* `reach`, since that's the
+target post's popularity, not evidence about the person who liked it.
 
 **Record kind is a content-shape axis, deliberately separate from source kind.**
 `sources.kind` (apify/n8n/webform/manual) models *transport* — how data arrives.
 `recordKind` (`content_post`/`engagement_like`/`engagement_comment`, on
-`mapping_profiles` and carried onto `leads`) models what the record *is*. A "Post
-Likers" scrape produces a person reacting to someone else's post, not a post of their
-own — no body text, so no phrases to classify and no text to dedupe on. Conflating the
-two axes would have broken the curated-mapping-profile-claims-a-dataset mechanism that
-already correctly handles multiple content shapes from the same connector kind; instead
-a mapping profile declares `recordKind` alongside its `matchPaths`, and everything
-downstream (classifier, dedup) branches on it explicitly rather than inferring it from
-an empty body. See [domain.md](domain.md)'s "Record kind" entry and
-[docs/lead-source-scaling-plan.md](lead-source-scaling-plan.md) for the fuller design
-rationale — this shipped `content_post` (every source before this field existed) plus
-the scoring/dedup branches; a curated `engagement_like`/`engagement_comment` mapping
-profile for a real actor still needs to be added from `/admin` once its actual payload
-shape is known, the same way any new curated profile is.
+`mapping_profiles` and carried onto `lead_appearances`) models what the record *is*. A
+"Post Likers" scrape produces a person reacting to someone else's post, not a post of
+their own — no body text, so no phrases to classify and no text to dedupe on.
+Conflating the two axes would have broken the curated-mapping-profile-claims-a-dataset
+mechanism that already correctly handles multiple content shapes from the same
+connector kind; instead a mapping profile declares `recordKind` alongside its
+`matchPaths`, and everything downstream (classifier, dedup) branches on it explicitly
+rather than inferring it from an empty body. `platform` (`facebook`/`instagram`/`other`,
+also on `mapping_profiles`) is a similar third independent axis, needed so identity
+resolution knows whether a scraped author id fills `facebookId` or `instagramId`. See
+[domain.md](domain.md) and [docs/lead-source-scaling-plan.md](lead-source-scaling-plan.md)
+for the fuller design rationale — a curated `engagement_like`/`engagement_comment`
+mapping profile for a real actor still needs to be added from `/admin` once its actual
+payload shape is known, the same way any new curated profile is.
 
-**Scoring is explainable.** Every lead carries `scoreReasons` — the phrases and signals
-that produced the score. Agents act on "82 because it says 'looking to buy' and states a
-budget," not on a naked number.
+**Scoring is explainable.** Every appearance carries `scoreReasons` — the phrases and
+signals that produced its score. Agents act on "82 because it says 'looking to buy' and
+states a budget," not on a naked number. The person-level `aiExplanation` synthesizes
+across a lead's appearances the same way, for the same reason.
 
 **Ranking is not scoring.** `priorityScore`
 ([domain/lead/ranking.ts](../domain/lead/ranking.ts)) folds a recency half-life (18h) and
-an already-worked penalty on top of intent/quality — a 95-score post from three days ago
-has had a dozen replies; an 80-score post from ten minutes ago is still winnable. The
-same formula is duplicated in raw SQL inside `lead-queries.ts`'s `orderBy` so it can
-drive `ORDER BY` and paginate correctly — see [tech-debt.md](tech-debt.md).
+an already-worked penalty on top of a person's `buyerScore`/`confidenceScore` — a person
+with a 95 buyer score last active three days ago has had a dozen replies; one scored 80
+and active ten minutes ago is still winnable. The same formula is duplicated in raw SQL
+inside `priority-sql.ts`'s `prioritySortExpression` so it can drive `ORDER BY` and
+paginate correctly — see [tech-debt.md](tech-debt.md).
 
 **Time-to-first-touch is the north-star metric.** `markContacted` in
 [application/leads/lead.actions.ts](../application/leads/lead.actions.ts) stamps
@@ -243,6 +286,20 @@ Next patches `history` globally.
 its own test file) — chosen over stringly-typed keys specifically because the filtering
 system had to be reliable and easy to maintain, not just quick to wire up.
 
+**Some filters target `leads` directly; appearance-scoped ones become `EXISTS`
+subqueries.** `leadType`, `propertyTypes`, `locations`, budget, `hasContact` are
+rolled-up columns on `leads` and filter with a plain `WHERE`. `datasetId`, `groups`
+(source group), `recordKind`, and `attr.*` (dynamic passthrough attributes) are
+appearance-level concepts — a person isn't scoped to one dataset or group, they can
+have appearances across many — so `application/leads/lead-queries.ts::buildConditions`
+filters those with `EXISTS (SELECT 1 FROM lead_appearances WHERE lead_id = leads.id
+AND ...)` instead. The list/card views also need *some* text/date to show per person
+even though a lead has no single post anymore: `queryLeads` left-joins a `DISTINCT ON
+(lead_id)` subquery (`primaryAppearanceSubquery`) picking each person's
+highest-scoring, most recent non-spam appearance as `primaryAppearance` — the full
+history is a separate query (`getLeadAppearances`, `/api/leads/[leadId]/appearances`),
+fetched only once the detail sheet for that lead is open.
+
 **Facets and stats are keyed on `datasetId` alone, not the full filter set.** This is
 the concrete optimization over the old RSC version, which re-ran every query (list,
 facets, stats) on every filter change: changing sort, page, or search text now only
@@ -281,7 +338,7 @@ not. Several read functions are now actually cached, each `"use cache"` + `cache
 
 | Function | Tag(s) | Why this tag |
 | --- | --- | --- |
-| `listDatasets` (`application/datasets/dataset-queries.ts`) | `datasetsRegistryTag()`, `leadsTag()` | Registry tag for admin dataset actions (read-your-own-writes via `updateTag`); `leadsTag()` too because `leadCount`/`buyerCount` are computed live from `leads` and only a webhook-triggered sync's background `revalidateTag(leadsTag(), "max")` touches those numbers between admin actions |
+| `listDatasets` (`application/datasets/dataset-queries.ts`) | `datasetsRegistryTag()`, `leadsTag()` | Registry tag for admin dataset actions (read-your-own-writes via `updateTag`); `leadsTag()` too because `leadCount`/`buyerCount` are computed live as distinct-person counts over `lead_appearances` (a person seen 5 times in a dataset counts once) and only a webhook-triggered sync's background `revalidateTag(leadsTag(), "max")` touches those numbers between admin actions |
 | `getSyncOverview`, `getRecentSyncRuns` (`application/datasets/dataset-queries.ts`) | `datasetsRegistryTag()`, `leadsTag()` | Same tags as `listDatasets` — both back `/admin/datasets` and `/admin/sync`'s prop-less, dynamic-API-free Suspense children, which need `"use cache"` for a different reason than freshness preference: see the note below on why that combination risks never re-executing at all |
 | `getLeadStats` (`application/leads/lead-queries.ts`) | `leadsTag()` | Same tag every lead mutation (`lead.actions.ts`) already invalidates |
 | `getLeadFacets` / `getDynamicAttributeFacets` (`application/leads/facets.ts`) | `leadsTag()` | Facet counts derive from the same lead rows the stats row does — same invalidation lifecycle, see tech-debt.md on why the narrower `facetsTag()` isn't used yet |
@@ -358,11 +415,11 @@ are plain `next/link` with default (automatic, viewport-triggered) prefetch — 
 `prefetch={false}` anywhere suppressing it. Every dynamic app route already renders as
 a Partial Prerender (`◐` in `next build`'s route table) via `cacheComponents`, so every
 page already gets an instant static-shell paint on navigation without needing
-per-route `loading.tsx` files. The one image in the app (`lead-detail-sheet.tsx`'s post
-photos) deliberately stays a plain `<img>`, not `next/image` — see the comment there:
-these are signed, expiring CDN URLs, and the optimizer would cache a URL that later
-403s. `next.config.ts`'s `images.formats`/`remotePatterns` already cover every image
-host actually in use.
+per-route `loading.tsx` files. The images in the app (`lead-detail-sheet.tsx`'s avatar
+and per-appearance photos) deliberately stay plain `<img>`, not `next/image` — see the
+comments there: these are signed, expiring CDN URLs, and the optimizer would cache a
+URL that later 403s. `next.config.ts`'s `images.formats`/`remotePatterns` already cover
+every image host actually in use.
 
 ## Data-quality and observability additions
 
@@ -392,4 +449,11 @@ a vendor integration.
 See [prd.md](prd.md) for the full roadmap. The highest-impact outstanding item is not
 code: the datasets currently collected are almost entirely seller listings and job
 posts. Finding *buyers* needs a change on the n8n side (buyer-side groups, keyword
-searches, mining commenters on listing posts), not a code change here.
+searches, mining commenters on listing posts), not a code change here — though the
+person-centric lead model (this doc) is exactly what makes mining likers/commenters
+across many sources produce one clean lead per person instead of a flood of duplicates
+once that n8n-side work happens. No curated mapping profile exists yet for a *real*
+Post Likers/IG-likers actor — `recordKind`/`platform` and the scoring/dedup/identity
+branches they drive are built and tested, but writing `matchPaths` against a guessed
+payload shape would be exactly the "confident-but-wrong mapping" this codebase avoids
+elsewhere; that's an `/admin` edit once such an actor is actually wired up.

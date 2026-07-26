@@ -57,21 +57,30 @@ export async function listDatasets(): Promise<DatasetSummary[]> {
       schemaFingerprint: schema.datasets.schemaFingerprint,
       mappingProfileName: schema.mappingProfiles.name,
       mappingApproved: sql<boolean>`${schema.mappingProfiles.approvedAt} IS NOT NULL`,
+      // Counts distinct *people* with a qualifying appearance in this dataset,
+      // not raw appearance rows — a person seen 5 times counts once, same
+      // "each lead exists only once" rule the rest of the app follows.
       leadCount: sql<number>`(
-        SELECT count(*)::int FROM ${schema.leads}
-        WHERE ${schema.leads.datasetId} = ${schema.datasets.id}
-          AND ${schema.leads.canonicalLeadId} IS NULL AND ${schema.leads.isSpam} = false
+        SELECT count(DISTINCT ${schema.leadAppearances.leadId})::int FROM ${schema.leadAppearances}
+        WHERE ${schema.leadAppearances.datasetId} = ${schema.datasets.id}
+          AND ${schema.leadAppearances.canonicalAppearanceId} IS NULL AND ${schema.leadAppearances.isSpam} = false
       )`,
       buyerCount: sql<number>`(
-        SELECT count(*)::int FROM ${schema.leads}
-        WHERE ${schema.leads.datasetId} = ${schema.datasets.id}
-          AND ${schema.leads.canonicalLeadId} IS NULL AND ${schema.leads.isSpam} = false
-          AND ${schema.leads.intent} = 'buyer'
+        SELECT count(DISTINCT ${schema.leadAppearances.leadId})::int FROM ${schema.leadAppearances}
+        INNER JOIN ${schema.leads} ON ${schema.leads.id} = ${schema.leadAppearances.leadId}
+        WHERE ${schema.leadAppearances.datasetId} = ${schema.datasets.id}
+          AND ${schema.leadAppearances.canonicalAppearanceId} IS NULL AND ${schema.leadAppearances.isSpam} = false
+          AND ${schema.leads.leadType} = 'buyer'
       )`,
     })
     .from(schema.datasets)
     .leftJoin(schema.mappingProfiles, eq(schema.mappingProfiles.id, schema.datasets.mappingProfileId))
-    .orderBy(desc(sql`(SELECT count(*) FROM ${schema.leads} WHERE ${schema.leads.datasetId} = ${schema.datasets.id})`));
+    .orderBy(
+      desc(sql`(
+        SELECT count(DISTINCT ${schema.leadAppearances.leadId}) FROM ${schema.leadAppearances}
+        WHERE ${schema.leadAppearances.datasetId} = ${schema.datasets.id}
+      )`),
+    );
 
   return rows.map((row) => ({
     ...row,

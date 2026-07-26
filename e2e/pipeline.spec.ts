@@ -17,12 +17,12 @@ test.describe("pipeline board", () => {
     // already have contacted this same seeded lead earlier in a full suite run.
     await expect(page.getByText(E2E_LEAD_AUTHOR)).toBeVisible();
 
-    await page.getByLabel(`Status for ${E2E_LEAD_AUTHOR}`).selectOption("viewing_booked");
+    await page.getByLabel(`Status for ${E2E_LEAD_AUTHOR}`).selectOption("negotiation");
 
-    // Reappears in Viewing booked once the shared "leads" query cache
+    // Reappears in Negotiation once the shared "leads" query cache
     // invalidates and every column refetches.
-    const viewingColumn = columnByStatus(page, /^viewing booked$/i);
-    await expect(viewingColumn.getByText(E2E_LEAD_AUTHOR)).toBeVisible();
+    const negotiationColumn = columnByStatus(page, /^negotiation$/i);
+    await expect(negotiationColumn.getByText(E2E_LEAD_AUTHOR)).toBeVisible();
   });
 
   test("dragging a card to another column changes its status", async ({ page }) => {

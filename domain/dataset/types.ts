@@ -100,6 +100,12 @@ export interface MappingRules {
   authorUrl?: FieldRule;
   authorAvatarUrl?: FieldRule;
   authorExternalId?: FieldRule;
+  /** Handle/username — distinct from `authorName` (display name), used for display only, never identity merge. */
+  authorUsername?: FieldRule;
+  /** The person's own bio/description, distinct from `body` (what they posted) and `listingTitle`. */
+  authorBio?: FieldRule;
+  /** The person's stated location (profile/bio), distinct from `locationRaw` (a listing's location). */
+  authorLocation?: FieldRule;
   body?: FieldRule;
   listingTitle?: FieldRule;
   images?: FieldRule;
@@ -120,6 +126,9 @@ export const CANONICAL_FIELDS = [
   "authorUrl",
   "authorAvatarUrl",
   "authorExternalId",
+  "authorUsername",
+  "authorBio",
+  "authorLocation",
   "body",
   "listingTitle",
   "images",
@@ -141,6 +150,9 @@ export interface NormalizedRecord {
   authorUrl: string | null;
   authorAvatarUrl: string | null;
   authorExternalId: string | null;
+  authorUsername: string | null;
+  authorBio: string | null;
+  authorLocation: string | null;
   body: string;
   listingTitle: string | null;
   images: string[];

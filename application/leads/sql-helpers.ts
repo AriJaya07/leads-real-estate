@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { leadIntentEnum, leadRecordKindEnum, leadStatusEnum } from "@/infrastructure/db/schema/enums";
+import { leadRecordKindEnum, leadStatusEnum, leadTypeEnum } from "@/infrastructure/db/schema/enums";
 
 /**
  * Builds a genuine `text[]` parameter.
@@ -23,11 +23,11 @@ export function textArray(values: string[]): SQL {
  * string to an enum column makes Postgres raise `invalid input value for enum`,
  * turning a hand-edited query string into a 500.
  */
-export function validIntents(values: string[]): ("buyer" | "seller" | "agent" | "other")[] {
-  const allowed = new Set<string>(leadIntentEnum.enumValues);
-  return values.filter((value): value is "buyer" | "seller" | "agent" | "other" =>
-    allowed.has(value),
-  );
+export type LeadTypeValue = (typeof leadTypeEnum.enumValues)[number];
+
+export function validLeadTypes(values: string[]): LeadTypeValue[] {
+  const allowed = new Set<string>(leadTypeEnum.enumValues);
+  return values.filter((value): value is LeadTypeValue => allowed.has(value));
 }
 
 export type LeadStatusValue = (typeof leadStatusEnum.enumValues)[number];

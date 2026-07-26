@@ -13,11 +13,13 @@ export const metadata: Metadata = { title: "Intelligence" };
 
 type SearchParams = Promise<{ datasetId?: string }>;
 
-const INTENT_COLOR: Record<string, string> = {
+const LEAD_TYPE_COLOR: Record<string, string> = {
   Buyer: "bg-intent-buyer",
   Seller: "bg-intent-seller",
   Agent: "bg-intent-agent",
-  Other: "bg-intent-other",
+  Broker: "bg-intent-broker",
+  Investor: "bg-intent-investor",
+  Unknown: "bg-intent-other",
 };
 
 function breakdownFrom(facets: FacetDescriptor[], key: string, limit = 8): BreakdownItem[] {
@@ -25,7 +27,7 @@ function breakdownFrom(facets: FacetDescriptor[], key: string, limit = 8): Break
   if (!facet || facet.kind !== "enum") return [];
   return facet.options
     .slice(0, limit)
-    .map((option) => ({ label: option.label, count: option.count, colorClassName: INTENT_COLOR[option.label] }));
+    .map((option) => ({ label: option.label, count: option.count, colorClassName: LEAD_TYPE_COLOR[option.label] }));
 }
 
 export default async function IntelligencePage({ searchParams }: { searchParams: SearchParams }) {
@@ -43,25 +45,25 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
     <div className="flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="Intelligence"
-        description="Trends across intent, location, budget and source, over the last 30 days."
+        description="Trends across lead type, location, budget and source, over the last 30 days."
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="Total leads" value={formatCount(stats.total)} />
-        <StatTile label="Buyer intent" value={formatCount(stats.buyers)} hint="Of total leads" />
-        <StatTile label="Hot buyers" value={formatCount(stats.hotBuyers)} hint="Buyer intent ≥ 60" />
+        <StatTile label="Buyer leads" value={formatCount(stats.buyers)} hint="Of total leads" />
+        <StatTile label="Hot buyers" value={formatCount(stats.hotBuyers)} hint="Buyer score ≥ 60" />
         <StatTile label="Contactable" value={formatCount(stats.contactable)} hint="Phone or WhatsApp published" />
       </div>
 
       <div className="border-border flex flex-col gap-3 rounded-xl border p-4">
-        <h2 className="text-sm font-semibold">Leads posted, last 30 days</h2>
+        <h2 className="text-sm font-semibold">New leads, last 30 days</h2>
         <TrendChart points={trend} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="border-border flex flex-col gap-3 rounded-xl border p-4">
-          <h2 className="text-sm font-semibold">Intent</h2>
-          <BreakdownBars items={breakdownFrom(facets, "intent")} />
+          <h2 className="text-sm font-semibold">Lead type</h2>
+          <BreakdownBars items={breakdownFrom(facets, "leadType")} />
         </div>
 
         <div className="border-border flex flex-col gap-3 rounded-xl border p-4">

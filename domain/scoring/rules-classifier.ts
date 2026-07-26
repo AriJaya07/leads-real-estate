@@ -9,7 +9,9 @@ import {
 } from "./extractors";
 import {
   AGENT_PHRASES,
+  BROKER_PHRASES,
   BUYER_PHRASES,
+  INVESTOR_PHRASES,
   RECRUITMENT_PHRASES,
   SELLER_PHRASES,
   SPAM_PHRASES,
@@ -124,6 +126,11 @@ function classifyEngagement(input: ClassifierInput): Classification {
     intent: "buyer",
     intentScore: clamp(intentScore),
     qualityScore: clamp(qualityScore),
+    // No body text to phrase-match investor/broker framing against — an
+    // engagement record's signal is purely behavioral (3.3 in
+    // lead-source-scaling-plan.md), so these stay 0 rather than guessing.
+    investorScore: 0,
+    brokerScore: 0,
     reach: 0,
     isSpam: false,
     propertyTypes,
@@ -164,6 +171,13 @@ export function classifyWithRules(input: ClassifierInput): Classification {
   const buyerHits = matchPhrases(haystack, BUYER_PHRASES);
   const sellerHits = matchPhrases(haystack, SELLER_PHRASES);
   const agentHits = matchPhrases(haystack, AGENT_PHRASES);
+  const investorHits = matchPhrases(haystack, INVESTOR_PHRASES);
+  const brokerHits = matchPhrases(haystack, BROKER_PHRASES);
+  // Additive signals, computed regardless of the primary intent pick — see the
+  // `investorScore`/`brokerScore` doc comment on `Classification`. Zeroed out
+  // below if this record turns out to be spam.
+  const investorScore = clamp(sumWeights(investorHits));
+  const brokerScore = clamp(sumWeights(brokerHits));
 
   const propertyTypes = extractPropertyTypes(haystack);
   const locations = extractLocations(haystack, input.locationRaw);
@@ -204,6 +218,8 @@ export function classifyWithRules(input: ClassifierInput): Classification {
       intent: "other",
       intentScore: 0,
       qualityScore: 0,
+      investorScore: 0,
+      brokerScore: 0,
       reach,
       isSpam: true,
       propertyTypes,
@@ -318,10 +334,29 @@ export function classifyWithRules(input: ClassifierInput): Classification {
   if (haystack.length > 140) qualityScore += 8;
   if (bedrooms !== null) qualityScore += 5;
 
+  if (investorScore > 0) {
+    reasons.push({
+      code: "investor_framing",
+      label: "Investment-framed language",
+      weight: investorScore,
+      evidence: investorHits.map((h) => h.phrase.text).join(", "),
+    });
+  }
+  if (brokerScore > 0) {
+    reasons.push({
+      code: "broker_framing",
+      label: "Licensed-broker/brokerage language",
+      weight: brokerScore,
+      evidence: brokerHits.map((h) => h.phrase.text).join(", "),
+    });
+  }
+
   return {
     intent,
     intentScore: clamp(intentScore),
     qualityScore: clamp(qualityScore),
+    investorScore,
+    brokerScore,
     reach,
     isSpam: false,
     propertyTypes,

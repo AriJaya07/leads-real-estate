@@ -13,15 +13,15 @@ describe("parseLeadFilters", () => {
 
   it("lifts attr.* keys into the attr map, leaving the rest at the top level", () => {
     const filters = parseLeadFilters(
-      new URLSearchParams("intent=buyer&attr.paidPartnership=true&attr.campaign=spring"),
+      new URLSearchParams("leadType=buyer&attr.paidPartnership=true&attr.campaign=spring"),
     );
-    expect(filters.intent).toEqual(["buyer"]);
+    expect(filters.leadType).toEqual(["buyer"]);
     expect(filters.attr).toEqual({ paidPartnership: "true", campaign: "spring" });
   });
 
   it("splits a comma-joined multi-select value", () => {
-    const filters = parseLeadFilters(new URLSearchParams("intent=buyer,seller"));
-    expect(filters.intent).toEqual(["buyer", "seller"]);
+    const filters = parseLeadFilters(new URLSearchParams("leadType=buyer,seller"));
+    expect(filters.leadType).toEqual(["buyer", "seller"]);
   });
 
   it("drops a value that fails schema validation rather than throwing", () => {
@@ -40,15 +40,14 @@ describe("serializeLeadFilters", () => {
       ...DEFAULT_FILTERS,
       q: "villa canggu",
       datasetId: "123e4567-e89b-12d3-a456-426614174000",
-      intent: ["buyer", "agent"],
+      leadType: ["buyer", "agent"],
       status: ["new"],
       recordKind: ["engagement_like"],
       propertyTypes: ["villa"],
       locations: [],
       groups: [],
-      minIntent: 60,
+      minBuyerScore: 60,
       hasContact: true,
-      includeSpam: false,
       sort: "newest",
       view: "cards",
       page: 3,
@@ -67,7 +66,7 @@ describe("serializeLeadFilters", () => {
 
   it("never emits an empty array for an unset multi-select filter", () => {
     const params = serializeLeadFilters(DEFAULT_FILTERS);
-    expect(params.has("intent")).toBe(false);
+    expect(params.has("leadType")).toBe(false);
     expect(params.has("propertyTypes")).toBe(false);
   });
 });

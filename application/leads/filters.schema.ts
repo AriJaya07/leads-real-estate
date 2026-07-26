@@ -8,8 +8,15 @@ import { z } from "zod";
  * data flows through `attr`, an open map validated by shape rather than by a
  * hardcoded list of keys, which is what lets a brand-new upstream field become a
  * working filter with no code change.
+ *
+ * Several fields here are appearance-level concepts (`recordKind`, `groups`,
+ * `datasetId`, `attr`) even though a "lead" is now a person, not a post — they
+ * filter "has a matching appearance" via an `EXISTS` subquery against
+ * `lead_appearances` in `lead-queries.ts::buildConditions`, not a direct column
+ * on `leads`. `propertyTypes`/`locations`/budget/etc are genuine person-level
+ * rollup columns and filter directly.
  */
-const leadSortEnum = z.enum(["priority", "newest", "intent", "quality", "reach", "oldest"]);
+const leadSortEnum = z.enum(["priority", "newest", "oldest", "buyerScore", "confidence"]);
 
 const leadViewEnum = z.enum(["table", "cards"]);
 
@@ -25,28 +32,27 @@ const csv = z
 const leadFiltersSchema = z.object({
   q: z.string().trim().default(""),
   datasetId: z.string().uuid().optional(),
-  intent: csv,
+  leadType: csv,
   status: csv,
   recordKind: csv,
   propertyTypes: csv,
   locations: csv,
   groups: csv,
 
-  minIntent: z.coerce.number().int().min(0).max(100).optional(),
-  minQuality: z.coerce.number().int().min(0).max(100).optional(),
+  minBuyerScore: z.coerce.number().int().min(0).max(100).optional(),
+  minConfidence: z.coerce.number().int().min(0).max(100).optional(),
   budgetMin: z.coerce.number().nonnegative().optional(),
   budgetMax: z.coerce.number().nonnegative().optional(),
 
   hasContact: z.coerce.boolean().optional(),
   assignedTo: z.string().uuid().optional(),
   unassigned: z.coerce.boolean().optional(),
-  includeSpam: z.coerce.boolean().default(false),
-  includeDuplicates: z.coerce.boolean().default(false),
 
+  /** Filters on `leads.latestAppearanceAt` — when this person was last active. */
   postedAfter: z.string().optional(),
   postedBefore: z.string().optional(),
 
-  /** Dynamic, dataset-derived filters: `attr.paidPartnership=true`. */
+  /** Dynamic, appearance-derived filters: `attr.paidPartnership=true`. */
   attr: z.record(z.string(), z.union([z.string(), z.array(z.string())])).default({}),
 
   sort: leadSortEnum.default("priority"),
@@ -82,11 +88,11 @@ export function parseLeadFilters(params: URLSearchParams): LeadFilters {
 }
 
 /**
- * Triage default: new, unworked, buyer-intent, recent. The default view is the
+ * Triage default: new, unworked, buyer-type, recent. The default view is the
  * product — an agent opening the app should already be looking at who to call.
  */
 export function triageFilters(): Partial<LeadFilters> {
-  return { intent: ["buyer"], status: ["new"], sort: "priority" };
+  return { leadType: ["buyer"], status: ["new"], sort: "priority" };
 }
 
 /**
@@ -117,21 +123,19 @@ export function serializeLeadFilters(filters: LeadFilters): URLSearchParams {
 
   put("q", filters.q || undefined);
   put("datasetId", filters.datasetId);
-  put("intent", filters.intent);
+  put("leadType", filters.leadType);
   put("status", filters.status);
   put("recordKind", filters.recordKind);
   put("propertyTypes", filters.propertyTypes);
   put("locations", filters.locations);
   put("groups", filters.groups);
-  put("minIntent", filters.minIntent);
-  put("minQuality", filters.minQuality);
+  put("minBuyerScore", filters.minBuyerScore);
+  put("minConfidence", filters.minConfidence);
   put("budgetMin", filters.budgetMin);
   put("budgetMax", filters.budgetMax);
   put("hasContact", filters.hasContact);
   put("assignedTo", filters.assignedTo);
   put("unassigned", filters.unassigned);
-  put("includeSpam", filters.includeSpam || undefined);
-  put("includeDuplicates", filters.includeDuplicates || undefined);
   put("postedAfter", filters.postedAfter);
   put("postedBefore", filters.postedBefore);
   put("sort", filters.sort === DEFAULT_FILTERS.sort ? undefined : filters.sort);
