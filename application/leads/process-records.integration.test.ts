@@ -152,3 +152,118 @@ describe("processRawRecords", () => {
     expect(result.failed).toBe(0);
   });
 });
+
+const engagementRules: MappingRules = {
+  externalId: { from: ["id"] },
+  authorExternalId: { from: ["likerId"] },
+  authorName: { from: ["likerName"] },
+  engagementContext: {
+    targetPostExternalId: "postId",
+    targetListingTitle: "postTitle",
+  },
+};
+
+describe("processRawRecords — engagement_like identity dedup", () => {
+  beforeAll(async () => {
+    await resetDb();
+  });
+  afterEach(async () => {
+    await resetDb();
+  });
+
+  /**
+   * The bug this fixes: `findCanonicalDuplicate`'s body-similarity gate
+   * (body.length >= 40) never engages for an engagement record, whose body is
+   * always empty — every resync of the same like produced a second, undeduped
+   * lead. Identity-based dedup replaces that gate for `recordKind !==
+   * "content_post"`. See docs/lead-source-scaling-plan.md problem 2b.
+   */
+  it("collapses a re-scraped like on the same post into one lead, not a duplicate", async () => {
+    const datasetId = await seedDataset();
+    const payload = { id: "like-1", likerId: "user-1", likerName: "Ari", postId: "post-1", postTitle: "Villa" };
+
+    const first = await seedRawRecord(datasetId, payload);
+    // A resync re-emits the same like with a different sourceItemId (Apify
+    // doesn't guarantee stable ids across scrapes of the same relationship).
+    const rescrape = await seedRawRecord(datasetId, { ...payload, id: "like-1-rescraped" });
+
+    await processRawRecords([first], engagementRules, {
+      passthrough: true,
+      datasetId,
+      recordKind: "engagement_like",
+    });
+    const result = await processRawRecords([rescrape], engagementRules, {
+      passthrough: true,
+      datasetId,
+      recordKind: "engagement_like",
+    });
+
+    expect(result.duplicates).toBe(1);
+
+    const [rescrapedLead] = await db()
+      .select()
+      .from(schema.leads)
+      .where(eq(schema.leads.rawRecordId, rescrape.id));
+    expect(rescrapedLead.canonicalLeadId).not.toBeNull();
+  });
+
+  it("keeps the same person liking two different posts as two separate leads", async () => {
+    const datasetId = await seedDataset();
+    const first = await seedRawRecord(datasetId, {
+      id: "like-2",
+      likerId: "user-2",
+      likerName: "Ari",
+      postId: "post-a",
+      postTitle: "Villa A",
+    });
+    const second = await seedRawRecord(datasetId, {
+      id: "like-3",
+      likerId: "user-2",
+      likerName: "Ari",
+      postId: "post-b",
+      postTitle: "Villa B",
+    });
+
+    await processRawRecords([first], engagementRules, {
+      passthrough: true,
+      datasetId,
+      recordKind: "engagement_like",
+    });
+    const result = await processRawRecords([second], engagementRules, {
+      passthrough: true,
+      datasetId,
+      recordKind: "engagement_like",
+    });
+
+    // Different posts is real, distinct signal — not a duplicate to collapse.
+    expect(result.duplicates).toBe(0);
+
+    const [secondLead] = await db()
+      .select()
+      .from(schema.leads)
+      .where(eq(schema.leads.rawRecordId, second.id));
+    expect(secondLead.canonicalLeadId).toBeNull();
+    // The second lead's own score should reflect it as the person's 2nd
+    // distinct engagement in the window.
+    expect(secondLead.scoreReasons.some((r) => r.code === "repeat_engagement")).toBe(true);
+  });
+
+  it("stamps recordKind onto the lead row", async () => {
+    const datasetId = await seedDataset();
+    const record = await seedRawRecord(datasetId, {
+      id: "like-4",
+      likerId: "user-4",
+      likerName: "Ari",
+      postId: "post-c",
+    });
+
+    await processRawRecords([record], engagementRules, {
+      passthrough: true,
+      datasetId,
+      recordKind: "engagement_like",
+    });
+
+    const [lead] = await db().select().from(schema.leads).where(eq(schema.leads.rawRecordId, record.id));
+    expect(lead.recordKind).toBe("engagement_like");
+  });
+});

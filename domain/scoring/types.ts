@@ -5,6 +5,29 @@
 
 export type LeadIntent = "buyer" | "seller" | "agent" | "other";
 
+/**
+ * What a record *is*, independent of its intent. `content_post` has body text
+ * to classify; `engagement_*` kinds don't — they're a person's reaction to
+ * someone else's post, scored on what they engaged with instead (see
+ * `EngagementContext`).
+ */
+export type LeadRecordKind = "content_post" | "engagement_like" | "engagement_comment";
+
+/**
+ * What an `engagement_*` record engaged with. Populated from the raw payload's
+ * denormalized snapshot of the target post at scrape time — the target post
+ * itself may never be ingested as its own record.
+ */
+export interface EngagementContext {
+  targetPostExternalId?: string | null;
+  targetPostUrl?: string | null;
+  targetListingTitle?: string | null;
+  targetPriceRaw?: string | null;
+  targetLocationRaw?: string | null;
+  /** How many distinct posts this same person engaged with in the lookback window. */
+  repeatEngagementCount?: number;
+}
+
 export interface ContactInfo {
   phone?: string | null;
   email?: string | null;
@@ -38,6 +61,9 @@ export interface ClassifierInput {
   engagement?: { likes: number; comments: number; shares: number };
   sourceGroup?: string | null;
   postedAt?: Date;
+  /** Defaults to `content_post` when omitted — every source before this field existed. */
+  recordKind?: LeadRecordKind;
+  engagementContext?: EngagementContext;
 }
 
 export interface Classification {

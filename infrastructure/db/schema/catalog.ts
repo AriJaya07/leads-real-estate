@@ -11,7 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { datasetHealthEnum, datasetStatusEnum, sourceKindEnum } from "./enums";
+import { datasetHealthEnum, datasetStatusEnum, leadRecordKindEnum, sourceKindEnum } from "./enums";
 import type { FieldProfile, MappingRules } from "@/domain/dataset/types";
 
 /** A connector instance. Replaces APIFY_ACTOR_ID / APIFY_DATASET_ID env vars. */
@@ -41,6 +41,8 @@ export const mappingProfiles = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
     sourceKind: sourceKindEnum("source_kind").notNull(),
+    /** What the payload *is* — a post, a like, a comment. Carried onto every lead it produces. */
+    recordKind: leadRecordKindEnum("record_kind").notNull().default("content_post"),
     version: integer("version").notNull().default(1),
     rules: jsonb("rules").$type<MappingRules>().notNull(),
     /**

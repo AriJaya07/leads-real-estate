@@ -122,6 +122,23 @@ intent signal, and the UI collapses duplicates under the canonical lead.
 `reach` is scored and stored separately from `intentScore` and never enters it — see
 [domain/scoring/rules-classifier.ts](../domain/scoring/rules-classifier.ts).
 
+**Record kind is a content-shape axis, deliberately separate from source kind.**
+`sources.kind` (apify/n8n/webform/manual) models *transport* — how data arrives.
+`recordKind` (`content_post`/`engagement_like`/`engagement_comment`, on
+`mapping_profiles` and carried onto `leads`) models what the record *is*. A "Post
+Likers" scrape produces a person reacting to someone else's post, not a post of their
+own — no body text, so no phrases to classify and no text to dedupe on. Conflating the
+two axes would have broken the curated-mapping-profile-claims-a-dataset mechanism that
+already correctly handles multiple content shapes from the same connector kind; instead
+a mapping profile declares `recordKind` alongside its `matchPaths`, and everything
+downstream (classifier, dedup) branches on it explicitly rather than inferring it from
+an empty body. See [domain.md](domain.md)'s "Record kind" entry and
+[docs/lead-source-scaling-plan.md](lead-source-scaling-plan.md) for the fuller design
+rationale — this shipped `content_post` (every source before this field existed) plus
+the scoring/dedup branches; a curated `engagement_like`/`engagement_comment` mapping
+profile for a real actor still needs to be added from `/admin` once its actual payload
+shape is known, the same way any new curated profile is.
+
 **Scoring is explainable.** Every lead carries `scoreReasons` — the phrases and signals
 that produced the score. Agents act on "82 because it says 'looking to buy' and states a
 budget," not on a naked number.

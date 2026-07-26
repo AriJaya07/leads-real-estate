@@ -93,6 +93,24 @@ export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor
     });
   }
 
+  const recordKind = await db()
+    .select({ value: schema.leads.recordKind, count: sql<number>`count(*)::int` })
+    .from(schema.leads)
+    .where(scope)
+    .groupBy(schema.leads.recordKind)
+    .orderBy(sql`count(*) DESC`);
+
+  // Not worth a filter chip when every lead is the same kind — the common case
+  // today, until an engagement source is actually wired up.
+  if (recordKind.length > 1) {
+    facets.push({
+      key: "recordKind",
+      label: "Record type",
+      kind: "enum",
+      options: recordKind.map((r) => ({ value: r.value, label: humanize(r.value), count: r.count })),
+    });
+  }
+
   const status = await db()
     .select({ value: schema.leadStates.status, count: sql<number>`count(*)::int` })
     .from(schema.leadStates)

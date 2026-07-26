@@ -41,6 +41,107 @@ function clamp(value: number, min = 0, max = 100): number {
 }
 
 /**
+ * Scores an `engagement_like`/`engagement_comment` record — a person's reaction
+ * to someone else's post, not a post of their own. There is no body text to
+ * phrase-match, so the signal comes from *what they engaged with* instead: the
+ * target listing's price/location/property-type, and how many distinct
+ * listings this same person engaged with recently (`repeatEngagementCount`,
+ * computed by the caller — this function only scores what it's given).
+ *
+ * This is not the "engagement is not intent" leak the content-post branch
+ * guards against — that rule stops a post's *own* like count from inflating
+ * its *own* intent score. Here the engagement *is* the record: a person liking
+ * a for-sale villa listing is itself the behavioral signal being classified,
+ * the same way stated text would be for a content post.
+ */
+function classifyEngagement(input: ClassifierInput): Classification {
+  const reasons: ScoreReason[] = [];
+  const ctx = input.engagementContext ?? {};
+  const haystack = ctx.targetListingTitle ?? "";
+
+  const propertyTypes = extractPropertyTypes(haystack);
+  const locations = extractLocations(haystack, ctx.targetLocationRaw);
+  const budget = extractBudget(haystack, ctx.targetPriceRaw);
+  const bedrooms = extractBedrooms(haystack);
+  const bathrooms = extractBathrooms(haystack);
+  const repeatCount = Math.max(0, ctx.repeatEngagementCount ?? 0);
+
+  const action = input.recordKind === "engagement_comment" ? "Commented on" : "Liked";
+
+  let intentScore = 15;
+  reasons.push({
+    code: "engagement_signal",
+    label: `${action} a property listing`,
+    weight: 15,
+  });
+
+  if (repeatCount > 0) {
+    const weight = Math.min(repeatCount * 8, 30);
+    intentScore += weight;
+    reasons.push({
+      code: "repeat_engagement",
+      label: `Engaged with ${repeatCount + 1} listings recently`,
+      weight,
+    });
+  }
+
+  if (locations.length > 0) {
+    intentScore += 10;
+    reasons.push({
+      code: "location",
+      label: `Engaged with a listing in: ${locations.join(", ")}`,
+      weight: 10,
+    });
+  }
+  if (propertyTypes.length > 0) {
+    intentScore += 8;
+    reasons.push({
+      code: "property_type",
+      label: `Engaged with a listing type: ${propertyTypes.join(", ")}`,
+      weight: 8,
+    });
+  }
+  if (budget) {
+    // Informational, not added to their own budget — this is the *listing's*
+    // price, not something the person stated about themselves.
+    reasons.push({
+      code: "target_price",
+      label: `Listing price band: ${budget.currency} ${budget.min}–${budget.max}`,
+      weight: 0,
+    });
+  }
+
+  // Quality is low by construction: no contact info, no stated budget, no
+  // location/property-type stated by the person themselves — only inferred
+  // from what they engaged with. Reflects that this lead needs enrichment
+  // (a DM, a profile lookup) before it's workable, unlike a content post that
+  // already states contact details directly.
+  let qualityScore = 5;
+  if (locations.length > 0) qualityScore += 8;
+  if (propertyTypes.length > 0) qualityScore += 5;
+
+  return {
+    intent: "buyer",
+    intentScore: clamp(intentScore),
+    qualityScore: clamp(qualityScore),
+    reach: 0,
+    isSpam: false,
+    propertyTypes,
+    locations,
+    // Not the person's stated budget — see the `target_price` reason above.
+    // Storing it on the structured field would let it flow into budget
+    // filtering/sorting as if the person had said it themselves.
+    budget: null,
+    contact: {},
+    bedrooms,
+    bathrooms,
+    reasons: reasons.sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)),
+    classifierId: RULES_CLASSIFIER_ID,
+    classifiedAt: new Date().toISOString(),
+  };
+}
+
+/**
  * Deterministic, explainable intent classification.
  *
  * Two decisions worth stating explicitly:
@@ -51,6 +152,10 @@ function clamp(value: number, min = 0, max = 100): number {
  *    and low quality (no budget, no contact, no location). Agents need both.
  */
 export function classifyWithRules(input: ClassifierInput): Classification {
+  if (input.recordKind === "engagement_like" || input.recordKind === "engagement_comment") {
+    return classifyEngagement(input);
+  }
+
   const haystack = [input.body, input.listingTitle ?? ""].join("\n").trim();
   const reasons: ScoreReason[] = [];
 

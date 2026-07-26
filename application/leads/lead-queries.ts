@@ -5,7 +5,7 @@ import { db, schema } from "@/infrastructure/db/client";
 import { priorityScore } from "@/domain/lead/ranking";
 import { leadsTag } from "@/application/cache-tags";
 import type { LeadFilters } from "./filters.schema";
-import { textArray, validIntents, validStatuses } from "./sql-helpers";
+import { textArray, validIntents, validRecordKinds, validStatuses } from "./sql-helpers";
 import { prioritySortExpression } from "./priority-sql";
 import type { ContactInfo, ScoreReason } from "@/domain/scoring/types";
 
@@ -20,6 +20,7 @@ export interface LeadListItem {
   images: string[];
   postedAt: Date;
   intent: string;
+  recordKind: string;
   intentScore: number;
   qualityScore: number;
   reach: number;
@@ -71,6 +72,9 @@ function buildConditions(filters: LeadFilters): SQL[] {
   // rejects them outright, so a hand-edited query string would 500 the page.
   const intents = validIntents(filters.intent);
   if (intents.length) conditions.push(inArray(schema.leads.intent, intents));
+
+  const recordKinds = validRecordKinds(filters.recordKind);
+  if (recordKinds.length) conditions.push(inArray(schema.leads.recordKind, recordKinds));
 
   const statuses = validStatuses(filters.status);
   if (statuses.length) conditions.push(inArray(schema.leadStates.status, statuses));
@@ -180,6 +184,7 @@ export async function queryLeads(filters: LeadFilters): Promise<LeadPage> {
       images: schema.leads.images,
       postedAt: schema.leads.postedAt,
       intent: schema.leads.intent,
+      recordKind: schema.leads.recordKind,
       intentScore: schema.leads.intentScore,
       qualityScore: schema.leads.qualityScore,
       reach: schema.leads.reach,

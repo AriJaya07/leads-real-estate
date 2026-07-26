@@ -1,5 +1,26 @@
 # Known Tech Debt
 
+## ~~`[object Object]` rendering in the lead detail sheet's passthrough attributes~~ — fixed
+
+`features/leads/components/lead-detail-sheet.tsx`'s "Source fields" panel rendered
+arbitrary passthrough `attributes` values with `String(value)`, which renders the
+literal text `[object Object]` for any attribute whose raw shape is an object or array
+(a real risk for nested payload fields like Facebook's `attachments[].photo_image`).
+Replaced with `formatAttributeValue` (arrays join, objects `JSON.stringify`, primitives
+`String`). Confirmed via review, not a hypothetical — see
+[docs/lead-source-scaling-plan.md](lead-source-scaling-plan.md).
+
+## No curated mapping profile exists yet for a real engagement-shaped actor
+
+`recordKind` (`engagement_like`/`engagement_comment`) and its scoring/dedup branches are
+built and tested (`domain/scoring/rules-classifier.test.ts`,
+`application/leads/process-records.integration.test.ts`), but no curated mapping
+profile claims a real "Post Likers"/IG-likers Apify actor's output yet — there's no
+verified payload sample to write `matchPaths` against, and per architecture.md's
+"curated beats auto-proposal" rule, a guessed-at profile is worse than none. Adding one
+is an `/admin` mapping-profile edit once such an actor is actually wired up on the n8n
+side (see the "buyer-side data collection" gap below) — not a code change.
+
 ## React Query staleness on background (non-actor) changes to leads/datasets
 
 `revalidateTag(tag, "max")` from the Apify webhook invalidates the
@@ -124,6 +145,13 @@ flat heuristics, not adaptive to a given source's normal baseline. See
 `application/sync/sync-dataset.integration.test.ts`'s
 "auto-approved mapping profile quality guardrail" suite for the exact behavior.
 
+**Now `recordKind`-aware.** The empty-body check is skipped entirely for
+`engagement_like`/`engagement_comment` profiles — an engagement record is *supposed* to
+have no body, so without this the guardrail would have revoked every liker mapping
+profile's approval on its first sync. The spam-rate check still applies unconditionally
+(currently a no-op for engagement records, since `classifyEngagement` never sets
+`isSpam`, but left in place in case that changes).
+
 ## Duplicate detection is same-source-kind agnostic but not cross-dataset budget-aware
 
 `findCanonicalDuplicate` in `application/leads/process-records.ts` matches on trigram
@@ -134,6 +162,15 @@ datasets, e.g. Facebook and Instagram mirrors of the same content) but means a
 `similarity()` GIN-trigram scan runs across the whole `leads` table on every new record.
 At current volumes this is fine; if lead volume grows an order of magnitude, this query
 is the first place to look for a performance regression.
+
+**`engagement_*` records no longer go through this path at all — fixed.** They used to:
+the `body.trim().length >= 40` gate meant an engagement record's always-empty body never
+qualified for the similarity check, so every resync of the same like produced a second,
+undeduped lead. `findEngagementDuplicate` now handles `recordKind !== "content_post"`
+separately — an indexed `(authorExternalId, targetPostExternalId)` equality lookup
+(backed by `leads_engagement_author_idx`), cheaper than the trigram scan, not scoped to
+`datasetId` for the same cross-mirror reason as above. See
+[docs/lead-source-scaling-plan.md](lead-source-scaling-plan.md).
 
 ## ~~FX rates have a hardcoded fallback table, never refreshed~~ — fixed
 

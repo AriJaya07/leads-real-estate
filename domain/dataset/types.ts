@@ -73,6 +73,20 @@ export interface EngagementRule {
 }
 
 /**
+ * Plain-path projection of what an `engagement_*` record engaged with — the
+ * target post's identity and a cheap denormalized snapshot (the target post
+ * itself is usually never ingested as its own record). Only meaningful when
+ * the mapping profile's `recordKind` is `engagement_like`/`engagement_comment`.
+ */
+export interface EngagementContextRule {
+  targetPostExternalId?: string;
+  targetPostUrl?: string;
+  targetListingTitle?: string;
+  targetPriceRaw?: string;
+  targetLocationRaw?: string;
+}
+
+/**
  * Canonical target fields. Deliberately a small, stable spine: alerting and
  * scoring must mean something specific by "buyer intent", which is impossible
  * over a fully open schema. Everything outside the spine flows to `attributes`
@@ -95,6 +109,7 @@ export interface MappingRules {
   bedrooms?: FieldRule;
   bathrooms?: FieldRule;
   engagement?: EngagementRule;
+  engagementContext?: EngagementContextRule;
 }
 
 export const CANONICAL_FIELDS = [
@@ -135,5 +150,13 @@ export interface NormalizedRecord {
   bedrooms: number | null;
   bathrooms: number | null;
   engagement: { likes: number; comments: number; shares: number };
+  /** Only populated when the mapping profile declares `engagementContext` rules. */
+  engagementContext: {
+    targetPostExternalId: string | null;
+    targetPostUrl: string | null;
+    targetListingTitle: string | null;
+    targetPriceRaw: string | null;
+    targetLocationRaw: string | null;
+  };
   attributes: Record<string, unknown>;
 }

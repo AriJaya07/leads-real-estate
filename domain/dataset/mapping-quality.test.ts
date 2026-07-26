@@ -32,4 +32,26 @@ describe("assessMappingQuality", () => {
     const result = assessMappingQuality({ total: 10, spam: 6, emptyBody: 0 });
     expect(result.suspect).toBe(false);
   });
+
+  it("does not flag an engagement_like profile for having no body — that's expected, not a mapping error", () => {
+    const result = assessMappingQuality({
+      total: 10,
+      spam: 0,
+      emptyBody: 10,
+      recordKind: "engagement_like",
+    });
+    expect(result.suspect).toBe(false);
+    expect(result.reason).toBeNull();
+  });
+
+  it("still flags an engagement_comment profile for a genuinely high spam rate", () => {
+    const result = assessMappingQuality({
+      total: 10,
+      spam: 8,
+      emptyBody: 10,
+      recordKind: "engagement_comment",
+    });
+    expect(result.suspect).toBe(true);
+    expect(result.reason).toMatch(/spam/);
+  });
 });

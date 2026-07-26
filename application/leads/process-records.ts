@@ -72,6 +72,64 @@ async function findCanonicalDuplicate(
 }
 
 /**
+ * Dedup for `engagement_*` records: identity, not text similarity — there's no
+ * body to compare. The same like re-scraped always resolves to the same lead
+ * (`authorExternalId` + `targetPostExternalId` match); liking a *different*
+ * post stays a separate lead, since that's a distinct, real signal that rolls
+ * up as `repeatEngagementCount` on scoring rather than being deduped away.
+ * Fixes the duplicate-growth bug `findCanonicalDuplicate`'s `body.length >= 40`
+ * gate left engagement records exposed to (see lead-source-scaling-plan.md).
+ */
+async function findEngagementDuplicate(
+  authorExternalId: string | null,
+  targetPostExternalId: string | null,
+  excludeLeadId?: string,
+): Promise<string | null> {
+  if (!authorExternalId || !targetPostExternalId) return null;
+
+  const conditions = [
+    eq(schema.leads.authorExternalId, authorExternalId),
+    sql`${schema.leads.attributes}->'_engagement'->>'targetPostExternalId' = ${targetPostExternalId}`,
+    sql`${schema.leads.canonicalLeadId} IS NULL`,
+  ];
+  if (excludeLeadId) conditions.push(ne(schema.leads.id, excludeLeadId));
+
+  const [match] = await db()
+    .select({ id: schema.leads.id })
+    .from(schema.leads)
+    .where(and(...conditions))
+    .orderBy(schema.leads.postedAt)
+    .limit(1);
+
+  return match?.id ?? null;
+}
+
+/** Distinct listings this person engaged with recently — the repeat-engagement signal. */
+async function countRecentEngagementTargets(
+  authorExternalId: string | null,
+  excludeTargetPostExternalId: string | null,
+): Promise<number> {
+  if (!authorExternalId) return 0;
+
+  const [row] = await db()
+    .select({
+      count: sql<number>`count(distinct ${schema.leads.attributes}->'_engagement'->>'targetPostExternalId')::int`,
+    })
+    .from(schema.leads)
+    .where(
+      and(
+        eq(schema.leads.authorExternalId, authorExternalId),
+        sql`${schema.leads.recordKind} != 'content_post'`,
+        excludeTargetPostExternalId
+          ? sql`${schema.leads.attributes}->'_engagement'->>'targetPostExternalId' != ${excludeTargetPostExternalId}`
+          : sql`true`,
+      ),
+    );
+
+  return row?.count ?? 0;
+}
+
+/**
  * Normalizes, classifies and persists a batch of raw records.
  *
  * Runs on ingest and on backfill alike. Classification happens exactly once per
@@ -81,8 +139,14 @@ async function findCanonicalDuplicate(
 export async function processRawRecords(
   records: RawRecordRow[],
   mappingRules: MappingRules,
-  options: { passthrough: boolean; datasetId: string },
+  options: {
+    passthrough: boolean;
+    datasetId: string;
+    recordKind?: "content_post" | "engagement_like" | "engagement_comment";
+  },
 ): Promise<ProcessResult> {
+  const recordKind = options.recordKind ?? "content_post";
+  const isEngagement = recordKind !== "content_post";
   const result: ProcessResult = {
     created: 0,
     updated: 0,
@@ -98,6 +162,13 @@ export async function processRawRecords(
         passthrough: options.passthrough,
       });
 
+      const repeatEngagementCount = isEngagement
+        ? await countRecentEngagementTargets(
+            normalized.authorExternalId,
+            normalized.engagementContext.targetPostExternalId,
+          )
+        : 0;
+
       const classification = classifyWithRules({
         body: normalized.body,
         listingTitle: normalized.listingTitle,
@@ -108,14 +179,27 @@ export async function processRawRecords(
         engagement: normalized.engagement,
         sourceGroup: normalized.sourceGroup,
         postedAt: normalized.postedAt,
+        recordKind,
+        engagementContext: isEngagement
+          ? { ...normalized.engagementContext, repeatEngagementCount }
+          : undefined,
       });
 
       const budget = classification.budget;
       const rate = budget ? await usdRate(budget.currency) : 0;
 
+      // Reserved key, not a canonical field — keeps `attributes` the queryable
+      // record of what an engagement lead engaged with, and is what the
+      // identity-dedup lookup above matches on (see findEngagementDuplicate).
+      const attributes = { ...normalized.attributes };
+      if (isEngagement && normalized.engagementContext.targetPostExternalId) {
+        attributes._engagement = normalized.engagementContext;
+      }
+
       const values = {
         rawRecordId: record.id,
         datasetId: options.datasetId,
+        recordKind,
         externalId: normalized.externalId,
         externalUrl: normalized.externalUrl,
         sourceGroup: normalized.sourceGroup,
@@ -147,7 +231,7 @@ export async function processRawRecords(
         budgetUsdMin: budget && rate ? Math.round(budget.min! * rate) : null,
         budgetUsdMax: budget && rate ? Math.round(budget.max! * rate) : null,
         contact: classification.contact,
-        attributes: normalized.attributes,
+        attributes,
         isSpam: classification.isSpam,
         updatedAt: new Date(),
       };
@@ -172,12 +256,18 @@ export async function processRawRecords(
       else result.updated += 1;
       if (classification.isSpam) result.spam += 1;
 
-      const canonicalId = await findCanonicalDuplicate(
-        normalized.body,
-        normalized.authorExternalId,
-        normalized.postedAt,
-        lead.id,
-      );
+      const canonicalId = isEngagement
+        ? await findEngagementDuplicate(
+            normalized.authorExternalId,
+            normalized.engagementContext.targetPostExternalId,
+            lead.id,
+          )
+        : await findCanonicalDuplicate(
+            normalized.body,
+            normalized.authorExternalId,
+            normalized.postedAt,
+            lead.id,
+          );
       if (canonicalId) {
         await db()
           .update(schema.leads)

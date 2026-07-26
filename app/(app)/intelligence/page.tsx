@@ -78,6 +78,15 @@ export default async function IntelligencePage({ searchParams }: { searchParams:
           <h2 className="text-sm font-semibold">Source groups</h2>
           <BreakdownBars items={breakdownFrom(facets, "groups")} />
         </div>
+
+        {/* Only present once a non-content-post source (e.g. Post Likers) is
+            wired up — `getLeadFacets` omits this facet entirely otherwise. */}
+        {breakdownFrom(facets, "recordKind").length > 0 && (
+          <div className="border-border flex flex-col gap-3 rounded-xl border p-4">
+            <h2 className="text-sm font-semibold">Record type</h2>
+            <BreakdownBars items={breakdownFrom(facets, "recordKind")} />
+          </div>
+        )}
       </div>
 
       <div className="border-border flex flex-col gap-3 rounded-xl border p-4">

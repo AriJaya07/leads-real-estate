@@ -18,6 +18,26 @@ import type { LeadListItem } from "@/application/leads/lead-queries";
 /** Every status except `spam` — that one is classifier-assigned, not a manual choice. */
 const STATUSES = LEAD_STATUSES.filter((status) => status !== "spam");
 
+interface EngagementContext {
+  targetPostExternalId?: string | null;
+  targetPostUrl?: string | null;
+  targetListingTitle?: string | null;
+  targetPriceRaw?: string | null;
+  targetLocationRaw?: string | null;
+}
+
+/**
+ * Passthrough attribute values are `unknown` — a raw upstream payload can put
+ * an object or array behind any key. `String(value)` on those renders the
+ * literal text "[object Object]"; this formats every shape sensibly instead.
+ */
+function formatAttributeValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (Array.isArray(value)) return value.map(formatAttributeValue).join(", ") || "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
 export function LeadDetailSheet({
   lead,
   onClose,
@@ -36,6 +56,9 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState(lead.notes);
   const [saving, setSaving] = useState(false);
+
+  const isEngagement = lead.recordKind !== "content_post";
+  const engagement = lead.attributes._engagement as EngagementContext | undefined;
 
   async function update(status: (typeof STATUSES)[number]) {
     setSaving(true);
@@ -87,13 +110,39 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
             </div>
           )}
 
-          <section>
-            <h3 className="mb-1.5 text-sm font-semibold">Post</h3>
-            {lead.listingTitle && <p className="mb-1 text-sm font-medium">{lead.listingTitle}</p>}
-            <p className="text-muted-foreground text-sm whitespace-pre-wrap">
-              {lead.body || "(no text)"}
-            </p>
-          </section>
+          {isEngagement ? (
+            <section>
+              <h3 className="mb-1.5 text-sm font-semibold">
+                {lead.recordKind === "engagement_comment" ? "Commented on" : "Liked"}
+              </h3>
+              {engagement?.targetListingTitle && (
+                <p className="mb-1 text-sm font-medium">{engagement.targetListingTitle}</p>
+              )}
+              <p className="text-muted-foreground text-sm">
+                {[engagement?.targetLocationRaw, engagement?.targetPriceRaw]
+                  .filter(Boolean)
+                  .join(" · ") || "No listing details captured for this engagement."}
+              </p>
+              {engagement?.targetPostUrl && (
+                <a
+                  href={engagement.targetPostUrl}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-primary mt-1 inline-block text-xs underline"
+                >
+                  View the post they engaged with
+                </a>
+              )}
+            </section>
+          ) : (
+            <section>
+              <h3 className="mb-1.5 text-sm font-semibold">Post</h3>
+              {lead.listingTitle && <p className="mb-1 text-sm font-medium">{lead.listingTitle}</p>}
+              <p className="text-muted-foreground text-sm whitespace-pre-wrap">
+                {lead.body || "(no text)"}
+              </p>
+            </section>
+          )}
 
           <section>
             <h3 className="mb-1.5 text-sm font-semibold">Why it scored {lead.intentScore}</h3>
@@ -132,7 +181,7 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
             <Field label="Engagement" value={`${lead.reach} reach`} />
           </section>
 
-          {Object.keys(lead.attributes).length > 0 && (
+          {Object.keys(lead.attributes).filter((key) => key !== "_engagement").length > 0 && (
             <section>
               <h3 className="mb-1.5 text-sm font-semibold">Source fields</h3>
               <p className="text-muted-foreground mb-2 text-xs">
@@ -141,11 +190,12 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
               </p>
               <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                 {Object.entries(lead.attributes)
+                  .filter(([key]) => key !== "_engagement")
                   .slice(0, 12)
                   .map(([key, value]) => (
                     <div key={key} className="contents">
                       <dt className="text-muted-foreground truncate">{key}</dt>
-                      <dd className="truncate">{String(value).slice(0, 60)}</dd>
+                      <dd className="truncate">{formatAttributeValue(value).slice(0, 60)}</dd>
                     </div>
                   ))}
               </dl>

@@ -1,4 +1,5 @@
 import type {
+  EngagementContextRule,
   EngagementRule,
   FieldRule,
   MappingRules,
@@ -186,6 +187,21 @@ function readEngagement(payload: Record<string, unknown>, rule?: EngagementRule)
   return { likes: read(rule?.likes), comments: read(rule?.comments), shares: read(rule?.shares) };
 }
 
+function readEngagementContext(payload: Record<string, unknown>, rule?: EngagementContextRule) {
+  const read = (path?: string): string | null => {
+    if (!path) return null;
+    const value = resolvePath(payload, path);
+    return isEmpty(value) ? null : String(value);
+  };
+  return {
+    targetPostExternalId: read(rule?.targetPostExternalId),
+    targetPostUrl: read(rule?.targetPostUrl),
+    targetListingTitle: read(rule?.targetListingTitle),
+    targetPriceRaw: read(rule?.targetPriceRaw),
+    targetLocationRaw: read(rule?.targetLocationRaw),
+  };
+}
+
 /** Paths consumed by the rules — used to decide what passthrough should keep. */
 function mappedRootKeys(rules: MappingRules): Set<string> {
   const keys = new Set<string>();
@@ -198,7 +214,8 @@ function mappedRootKeys(rules: MappingRules): Set<string> {
       const fallback = (value as FieldRule).fallback;
       if (fallback) add(fallback.on);
     } else {
-      for (const path of Object.values(value as EngagementRule)) {
+      // Both EngagementRule and EngagementContextRule are flat { key: path } maps.
+      for (const path of Object.values(value as EngagementRule | EngagementContextRule)) {
         if (path) add(path);
       }
     }
@@ -269,6 +286,7 @@ export function applyMapping(
     bedrooms: num(rules.bedrooms),
     bathrooms: num(rules.bathrooms),
     engagement: readEngagement(payload, rules.engagement),
+    engagementContext: readEngagementContext(payload, rules.engagementContext),
     attributes,
   };
 }

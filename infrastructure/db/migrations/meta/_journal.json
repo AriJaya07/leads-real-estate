@@ -43,6 +43,13 @@
       "when": 1784991301420,
       "tag": "0005_blue_enchantress",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785052510727,
+      "tag": "0006_yellow_rockslide",
+      "breakpoints": true
     }
   ]
 }

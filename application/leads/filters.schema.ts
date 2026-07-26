@@ -27,6 +27,7 @@ const leadFiltersSchema = z.object({
   datasetId: z.string().uuid().optional(),
   intent: csv,
   status: csv,
+  recordKind: csv,
   propertyTypes: csv,
   locations: csv,
   groups: csv,
@@ -118,6 +119,7 @@ export function serializeLeadFilters(filters: LeadFilters): URLSearchParams {
   put("datasetId", filters.datasetId);
   put("intent", filters.intent);
   put("status", filters.status);
+  put("recordKind", filters.recordKind);
   put("propertyTypes", filters.propertyTypes);
   put("locations", filters.locations);
   put("groups", filters.groups);

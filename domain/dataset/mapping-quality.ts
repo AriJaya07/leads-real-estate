@@ -20,6 +20,14 @@ export interface MappingQualitySample {
   total: number;
   spam: number;
   emptyBody: number;
+  /**
+   * Defaults to `content_post`. `engagement_*` records are *supposed* to have
+   * no body text — that's not a mapping error, it's the shape of the content —
+   * so the empty-body check is skipped for them. The spam check still applies
+   * (an engagement record is never classified spam today, so it's a no-op, not
+   * a gap) in case that ever changes.
+   */
+  recordKind?: "content_post" | "engagement_like" | "engagement_comment";
 }
 
 export interface MappingQualityAssessment {
@@ -42,14 +50,17 @@ export function assessMappingQuality(sample: MappingQualitySample): MappingQuali
     };
   }
 
-  const emptyBodyRate = sample.emptyBody / sample.total;
-  if (emptyBodyRate > MAPPING_QUALITY_MAX_EMPTY_BODY_RATE) {
-    return {
-      suspect: true,
-      reason:
-        `${Math.round(emptyBodyRate * 100)}% of the first ${sample.total} records have no body text — ` +
-        `the auto-generated mapping may be pointed at the wrong fields`,
-    };
+  const isEngagement = sample.recordKind === "engagement_like" || sample.recordKind === "engagement_comment";
+  if (!isEngagement) {
+    const emptyBodyRate = sample.emptyBody / sample.total;
+    if (emptyBodyRate > MAPPING_QUALITY_MAX_EMPTY_BODY_RATE) {
+      return {
+        suspect: true,
+        reason:
+          `${Math.round(emptyBodyRate * 100)}% of the first ${sample.total} records have no body text — ` +
+          `the auto-generated mapping may be pointed at the wrong fields`,
+      };
+    }
   }
 
   return { suspect: false, reason: null };

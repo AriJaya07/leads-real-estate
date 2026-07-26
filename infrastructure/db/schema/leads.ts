@@ -15,7 +15,7 @@ import {
 import { datasets } from "./catalog";
 import { users } from "./auth";
 import { rawRecords } from "./sync";
-import { leadEventTypeEnum, leadIntentEnum, leadStatusEnum } from "./enums";
+import { leadEventTypeEnum, leadIntentEnum, leadRecordKindEnum, leadStatusEnum } from "./enums";
 import type { ContactInfo, ScoreReason } from "@/domain/scoring/types";
 
 /**
@@ -35,6 +35,14 @@ export const leads = pgTable(
       .references(() => datasets.id, { onDelete: "cascade" }),
     /** Points at the surviving lead when this one is a near-duplicate. */
     canonicalLeadId: uuid("canonical_lead_id"),
+
+    /**
+     * What this record *is* — a post, a like, a comment. Carried from the mapping
+     * profile that produced it. `engagement_*` kinds have no meaningful `body`;
+     * they're scored on what they engaged with instead (see `attributes._engagement`)
+     * and deduped by identity, not text similarity.
+     */
+    recordKind: leadRecordKindEnum("record_kind").notNull().default("content_post"),
 
     externalId: text("external_id").notNull(),
     externalUrl: text("external_url"),
@@ -87,6 +95,7 @@ export const leads = pgTable(
   (t) => [
     uniqueIndex("leads_raw_record_key").on(t.rawRecordId),
     index("leads_dataset_idx").on(t.datasetId),
+    index("leads_record_kind_idx").on(t.recordKind),
     index("leads_intent_score_idx").on(t.intent, t.intentScore),
     index("leads_posted_at_idx").on(t.postedAt),
     index("leads_canonical_idx").on(t.canonicalLeadId),
@@ -114,6 +123,15 @@ export const leads = pgTable(
     index("leads_active_intent_score_idx")
       .on(t.intent, t.intentScore)
       .where(sql`${t.isSpam} = false AND ${t.canonicalLeadId} IS NULL`),
+    /**
+     * Backs the identity-based dedup lookup for engagement records
+     * (`findCanonicalDuplicate`'s `(authorExternalId, targetPostExternalId)`
+     * path in process-records.ts) — an indexed equality lookup instead of the
+     * trigram scan content posts use, since there's no body to compare.
+     */
+    index("leads_engagement_author_idx")
+      .on(t.authorExternalId)
+      .where(sql`${t.recordKind} != 'content_post'`),
   ],
 );
 

@@ -110,9 +110,9 @@ try {
   const facebookMatchPaths = ["user.name", "groupTitle", "facebookUrl", "text"];
 
   const [profile] = await sql`
-    INSERT INTO mapping_profiles (name, source_kind, version, rules, match_paths, passthrough, auto_generated, confidence, approved_at)
-    VALUES ('apify/facebook-groups-scraper', 'apify', 1, ${sql.json(facebookRules)}, ${facebookMatchPaths}, true, false, 1.0, now())
-    ON CONFLICT (name, version) DO UPDATE SET rules = EXCLUDED.rules, match_paths = EXCLUDED.match_paths, approved_at = now()
+    INSERT INTO mapping_profiles (name, source_kind, record_kind, version, rules, match_paths, passthrough, auto_generated, confidence, approved_at)
+    VALUES ('apify/facebook-groups-scraper', 'apify', 'content_post', 1, ${sql.json(facebookRules)}, ${facebookMatchPaths}, true, false, 1.0, now())
+    ON CONFLICT (name, version) DO UPDATE SET rules = EXCLUDED.rules, match_paths = EXCLUDED.match_paths, record_kind = EXCLUDED.record_kind, approved_at = now()
     RETURNING id, name
   `;
   console.log(`mapping profile: ${profile.name} (${profile.id})`);

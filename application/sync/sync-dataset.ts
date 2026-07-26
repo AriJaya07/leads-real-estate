@@ -291,13 +291,8 @@ export async function syncDataset(
     }
 
     // --- Mapping profile ----------------------------------------------------
-    const { rules, profileId, passthrough, isFreshlyAutoApproved } = await resolveMappingProfile(
-      datasetId,
-      dataset.mappingProfileId,
-      source.kind,
-      fieldProfiles,
-      log,
-    );
+    const { rules, profileId, passthrough, recordKind, isFreshlyAutoApproved } =
+      await resolveMappingProfile(datasetId, dataset.mappingProfileId, source.kind, fieldProfiles, log);
 
     // --- Normalize + classify ----------------------------------------------
     if (rules && newRawRecordIds.length > 0) {
@@ -309,7 +304,7 @@ export async function syncDataset(
           .from(schema.rawRecords)
           .where(inArray(schema.rawRecords.id, ids));
 
-        const processed = await processRawRecords(records, rules, { passthrough, datasetId });
+        const processed = await processRawRecords(records, rules, { passthrough, datasetId, recordKind });
         leadsCreated += processed.created;
         duplicates += processed.duplicates;
         failed += processed.failed;
@@ -340,6 +335,7 @@ export async function syncDataset(
           total: sample?.total ?? 0,
           spam: sample?.spam ?? 0,
           emptyBody: sample?.emptyBody ?? 0,
+          recordKind,
         });
 
         if (assessment.suspect) {
@@ -506,6 +502,7 @@ async function resolveMappingProfile(
   rules: MappingRules | null;
   profileId: string | null;
   passthrough: boolean;
+  recordKind: "content_post" | "engagement_like" | "engagement_comment";
   /** True only for a profile both auto-generated *and* newly attached in this call — see mapping-quality.ts. */
   isFreshlyAutoApproved: boolean;
 }> {
@@ -520,6 +517,7 @@ async function resolveMappingProfile(
         rules: profile.rules,
         profileId: profile.id,
         passthrough: profile.passthrough,
+        recordKind: profile.recordKind,
         isFreshlyAutoApproved: false,
       };
     }
@@ -529,13 +527,20 @@ async function resolveMappingProfile(
         rules: null,
         profileId: profile.id,
         passthrough: profile.passthrough,
+        recordKind: profile.recordKind,
         isFreshlyAutoApproved: false,
       };
     }
   }
 
   if (fieldProfiles.length === 0) {
-    return { rules: null, profileId: null, passthrough: true, isFreshlyAutoApproved: false };
+    return {
+      rules: null,
+      profileId: null,
+      passthrough: true,
+      recordKind: "content_post",
+      isFreshlyAutoApproved: false,
+    };
   }
 
   // A curated, hand-verified profile always wins over an auto-proposal. Claim is
@@ -564,6 +569,7 @@ async function resolveMappingProfile(
       rules: claimed.rules,
       profileId: claimed.id,
       passthrough: claimed.passthrough,
+      recordKind: claimed.recordKind,
       isFreshlyAutoApproved: false,
     };
   }
@@ -585,7 +591,13 @@ async function resolveMappingProfile(
     .returning();
 
   if (!profile) {
-    return { rules: null, profileId: null, passthrough: true, isFreshlyAutoApproved: false };
+    return {
+      rules: null,
+      profileId: null,
+      passthrough: true,
+      recordKind: "content_post",
+      isFreshlyAutoApproved: false,
+    };
   }
 
   log.info(
@@ -600,6 +612,10 @@ async function resolveMappingProfile(
     rules: approved ? proposal.rules : null,
     profileId: profile.id,
     passthrough: true,
+    // Auto-proposal has no signal to distinguish an engagement shape from a
+    // content shape — that classification requires a human, same as a curated
+    // profile's matchPaths already does. Always content_post until reviewed.
+    recordKind: profile.recordKind,
     isFreshlyAutoApproved: approved,
   };
 }

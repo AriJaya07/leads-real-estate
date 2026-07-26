@@ -36,6 +36,21 @@ freely regenerable: reprocessing (new mapping, new classifier) recomputes every 
 here without re-hitting the upstream API. Points at a `canonicalLeadId` when it's a
 detected repost/duplicate of an earlier lead.
 
+**Record kind** (`leads.recordKind`, `mapping_profiles.recordKind`) — what a record
+*is*, independent of intent: `content_post` (has body text — the default, and every
+source before this field existed) or `engagement_like`/`engagement_comment` (a person's
+reaction to someone else's post — a Facebook/Instagram "Post Likers" scrape, say — with
+no body text of their own). Declared on the mapping profile that claims a dataset
+(alongside its `matchPaths`) and carried onto every lead it produces. This is a
+transport-independent axis from `sources.kind` (apify/n8n/webform/manual, which models
+*how* data arrives, not *what shape* it is) — see architecture.md's "Key design
+decisions". An `engagement_*` lead is scored on what it engaged with
+(`domain/scoring/rules-classifier.ts::classifyEngagement`, via
+`attributes._engagement` — see below) rather than phrase-matched, and deduped by
+`(authorExternalId, targetPostExternalId)` identity rather than text similarity, since
+there's no body to compare (`findEngagementDuplicate` in
+`application/leads/process-records.ts`).
+
 **Lead state** (`lead_states` table) — the human side of a lead: `status`, `assignedTo`,
 `priority`, `notes`, `tags`, `bookmarked`, `firstContactedAt`. Created once
 (`onConflictDoNothing`) the first time a lead is touched by the pipeline or a person, and
@@ -91,6 +106,20 @@ filters (`facetable`) in the admin UI without a code change.
 `priorityScore` (`domain/lead/ranking.ts`) is a third, separate thing again — it answers
 "who should I call next," not "how good is this lead," by folding in recency and
 already-worked status on top of intent/quality.
+
+**Engagement context** (`leads.attributes._engagement`, a reserved key — not a
+canonical column) — for an `engagement_*` lead, a denormalized snapshot of the post it
+engaged with (`targetPostExternalId`, `targetPostUrl`, `targetListingTitle`,
+`targetPriceRaw`, `targetLocationRaw`), projected by an optional
+`engagementContext` block on the mapping profile's rules
+(`domain/dataset/types.ts::EngagementContextRule`), parallel to the existing
+`engagement` block used for like/comment/share counts. The target post itself is
+usually never ingested as its own record — this is deliberately a cheap snapshot, not a
+join. `repeatEngagementCount` (how many distinct posts the same person engaged with in
+the lookback window) is computed at classify time and is *not* stored — it only exists
+as classifier input, expressed as a `scoreReasons` entry on the lead it produced.
+Liking the same post twice (a resync) collapses to one lead; liking two different posts
+stays two leads, each contributing to the other's repeat-engagement count.
 
 ## Predicate language (alerting)
 

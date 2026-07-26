@@ -105,6 +105,60 @@ describe("applyMapping", () => {
   });
 });
 
+describe("applyMapping — engagementContext", () => {
+  const LIKER_PAYLOAD = {
+    id: "like-1",
+    likerId: "pfbid0LIKER",
+    likerName: "Someone Who Liked",
+    postId: "post-99",
+    postUrl: "https://www.facebook.com/groups/x/posts/99",
+    postTitle: "3 beds · 3 bath · Villa",
+    postPrice: "$400k",
+    postLocation: "Canggu, Bali",
+  };
+
+  const LIKER_RULES: MappingRules = {
+    externalId: { from: ["id"] },
+    authorExternalId: { from: ["likerId"] },
+    authorName: { from: ["likerName"] },
+    engagementContext: {
+      targetPostExternalId: "postId",
+      targetPostUrl: "postUrl",
+      targetListingTitle: "postTitle",
+      targetPriceRaw: "postPrice",
+      targetLocationRaw: "postLocation",
+    },
+  };
+
+  it("projects engagementContext paths independent of the canonical spine", () => {
+    const result = applyMapping(LIKER_PAYLOAD, LIKER_RULES, { passthrough: true });
+    expect(result.engagementContext).toEqual({
+      targetPostExternalId: "post-99",
+      targetPostUrl: "https://www.facebook.com/groups/x/posts/99",
+      targetListingTitle: "3 beds · 3 bath · Villa",
+      targetPriceRaw: "$400k",
+      targetLocationRaw: "Canggu, Bali",
+    });
+  });
+
+  it("excludes engagementContext-consumed paths from passthrough attributes", () => {
+    const result = applyMapping(LIKER_PAYLOAD, LIKER_RULES, { passthrough: true });
+    expect(result.attributes).not.toHaveProperty("postId");
+    expect(result.attributes).not.toHaveProperty("postTitle");
+  });
+
+  it("returns all-null engagementContext when no rule is declared", () => {
+    const result = applyMapping(REAL_POST, RULES, { passthrough: true });
+    expect(result.engagementContext).toEqual({
+      targetPostExternalId: null,
+      targetPostUrl: null,
+      targetListingTitle: null,
+      targetPriceRaw: null,
+      targetLocationRaw: null,
+    });
+  });
+});
+
 describe("parseMoney", () => {
   it.each([
     ["IDR2,222", 2222],

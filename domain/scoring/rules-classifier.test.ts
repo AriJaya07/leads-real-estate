@@ -113,3 +113,92 @@ describe("classifyWithRules — scoring axes", () => {
     expect(result.contact.phone).toBeNull();
   });
 });
+
+describe("classifyWithRules — engagement_like / engagement_comment", () => {
+  /**
+   * A "Post Likers" scrape produces a person, not a post — no body text to
+   * phrase-match. Before this branch existed, that meant intent="other",
+   * score=0, empty reasons, indistinguishable from a genuinely irrelevant
+   * record. See docs/lead-source-scaling-plan.md problem 2c.
+   */
+  it("scores a bare like on a listing via what it engaged with, not body text", () => {
+    const result = classifyWithRules({
+      body: "",
+      recordKind: "engagement_like",
+      engagementContext: {
+        targetListingTitle: "3 beds · 3 bath · Villa",
+        targetPriceRaw: "$400k",
+        targetLocationRaw: "Canggu, Bali",
+        repeatEngagementCount: 0,
+      },
+    });
+
+    expect(result.intent).toBe("buyer");
+    expect(result.intentScore).toBeGreaterThan(0);
+    expect(result.isSpam).toBe(false);
+    expect(result.locations).toContain("canggu");
+    expect(result.propertyTypes).toContain("villa");
+    expect(result.reasons.some((r) => r.code === "engagement_signal")).toBe(true);
+  });
+
+  it("never returns a silent zero-signal result — the bug this branch fixes", () => {
+    const result = classifyWithRules({ body: "", recordKind: "engagement_like", engagementContext: {} });
+    expect(result.reasons.length).toBeGreaterThan(0);
+    expect(result.intent).not.toBe("other");
+  });
+
+  it("boosts the score for repeat engagement across multiple listings", () => {
+    const once = classifyWithRules({
+      body: "",
+      recordKind: "engagement_like",
+      engagementContext: { repeatEngagementCount: 0 },
+    });
+    const repeat = classifyWithRules({
+      body: "",
+      recordKind: "engagement_like",
+      engagementContext: { repeatEngagementCount: 3 },
+    });
+    expect(repeat.intentScore).toBeGreaterThan(once.intentScore);
+    expect(repeat.reasons.some((r) => r.code === "repeat_engagement")).toBe(true);
+  });
+
+  /**
+   * Not the same "engagement is not intent" leak the content-post branch
+   * guards against — that rule stops a post's *own* like count inflating its
+   * *own* intent. This is the same principle on the reach axis instead: the
+   * target post's popularity isn't this *person's* reach.
+   */
+  it("does not attribute the target post's own like/comment/share counts as this lead's reach", () => {
+    const result = classifyWithRules({
+      body: "",
+      recordKind: "engagement_like",
+      engagement: { likes: 500, comments: 40, shares: 10 },
+      engagementContext: {},
+    });
+    expect(result.reach).toBe(0);
+  });
+
+  it("never states a budget the person didn't state themselves — the listing's price is informational only", () => {
+    const result = classifyWithRules({
+      body: "",
+      recordKind: "engagement_like",
+      engagementContext: { targetPriceRaw: "$400k" },
+    });
+    expect(result.budget).toBeNull();
+    expect(result.reasons.find((r) => r.code === "target_price")?.weight).toBe(0);
+  });
+
+  it("returns no contact info — nothing was published by the person in an engagement record", () => {
+    const result = classifyWithRules({ body: "", recordKind: "engagement_like", engagementContext: {} });
+    expect(result.contact).toEqual({});
+  });
+
+  it("labels a comment differently from a like", () => {
+    const comment = classifyWithRules({
+      body: "",
+      recordKind: "engagement_comment",
+      engagementContext: {},
+    });
+    expect(comment.reasons.some((r) => r.label.startsWith("Commented on"))).toBe(true);
+  });
+});

@@ -2,6 +2,18 @@ import { pgEnum } from "drizzle-orm/pg-core";
 
 export const sourceKindEnum = pgEnum("source_kind", ["apify", "n8n", "webform", "manual"]);
 
+/**
+ * What *shape* a record is, independent of `sourceKindEnum` (which models
+ * transport — apify/n8n/webform — not content). A "Post Likers" scrape produces
+ * a person, not a post: no body text, no phrases to classify, a different dedup
+ * identity. `content_post` is the default and covers every source today.
+ */
+export const leadRecordKindEnum = pgEnum("lead_record_kind", [
+  "content_post",
+  "engagement_like",
+  "engagement_comment",
+]);
+
 export const datasetStatusEnum = pgEnum("dataset_status", [
   "active",
   "paused",
