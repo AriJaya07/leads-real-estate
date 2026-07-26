@@ -2,7 +2,7 @@
 
 DreamRue has no public REST API. There are three kinds of server entry points: **server
 actions** (all user-facing mutations, called directly from client components), a small
-set of **system route handlers** (`app/api/**`) for cron ticks and the Apify webhook,
+set of **system route handlers** (`app/api/**`) — currently just the Apify webhook —
 and a small set of **internal read route handlers** that exist only to back the leads
 search/filter surface's React Query hooks (see
 [architecture.md](architecture.md)'s "Search, filtering, and client-side data
@@ -59,7 +59,8 @@ Rules, all illustrated in `application/leads/lead.actions.ts`:
   `leadEventTypeEnum`.
 - **Invalidate the right tags, the right way.** Use `updateTag()` (immediate — the actor
   must see their own change) inside actions; use `revalidateTag(tag, "max")`
-  (background/SWR) from cron and webhook routes. See `application/cache-tags.ts` for the
+  (background/SWR) from webhook and other machine-triggered routes, where nobody is
+  actively waiting on the write. See `application/cache-tags.ts` for the
   tag vocabulary — always go through those helper functions (`leadTag(id)`,
   `datasetTag(id)`, etc.), never hand-write a tag string.
 - **Errors are user-facing strings, not stack traces.** Throw `ActionError(message)` for
@@ -89,21 +90,30 @@ async function contact() {
 
 ### System routes
 
-Each of these is a system-to-system endpoint, not a public API:
+One system-to-system endpoint exists, and it is not a public API:
 
 | Route | Method | Auth | Purpose |
 | --- | --- | --- | --- |
-| `/api/cron/discover` | GET | `Authorization: Bearer $CRON_SECRET` | Runs `discoverAllSources()` |
-| `/api/cron/sync` | GET | `Authorization: Bearer $CRON_SECRET` | Runs `syncDataset()` for datasets whose adaptive interval is due |
-| `/api/cron/fx` | GET | `Authorization: Bearer $CRON_SECRET` | Runs `refreshFxRates()` once daily |
-| `/api/cron/retention` | GET | `Authorization: Bearer $CRON_SECRET` | Prunes append-only tables past their retention window |
 | `/api/webhooks/apify` | POST | `x-webhook-secret` or `Authorization: Bearer $APIFY_WEBHOOK_SECRET` | Accelerates a sync for one dataset; falls back to full discovery if the dataset is unknown |
 
-Pattern for a new one, if you ever add one:
+**There used to be four `GET /api/cron/*` routes** (discover, sync, fx, retention),
+scheduled from `vercel.json` and authenticated with a `CRON_SECRET`. All of them, the
+`vercel.json`, and the `CRON_SECRET` env var are gone — scheduling is being moved to
+n8n. The use-case functions they wrapped (`discoverAllSources()`, `dueDatasets()` +
+`syncDataset()`, `refreshFxRates()`, `pruneOldRows()`) are all still there and still
+tested; only the HTTP triggers were removed. See `docs/tech-debt.md`'s "no scheduled
+trigger" entry for what that currently costs, and re-read this section before
+re-adding trigger endpoints — the pattern below is what they should look like.
+
+Pattern for a new one, if you add one:
 
 ```ts
-export async function GET(request: Request) {
-  if (!secretsMatch(readBearer(request), serverEnv().CRON_SECRET)) {
+export async function POST(request: Request) {
+  const provided =
+    request.headers.get("x-webhook-secret") ??
+    request.headers.get("authorization")?.replace(/^Bearer /, "");
+
+  if (!secretsMatch(provided, serverEnv().APIFY_WEBHOOK_SECRET)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   // ... do the work ...
@@ -114,20 +124,19 @@ export async function GET(request: Request) {
 - Always compare secrets with `secretsMatch()`
   (`application/http/verify-secret.ts`) — never `===` on a raw header value (timing
   attack surface on the shared secret).
-- Cron routes read `CRON_SECRET`; the Apify webhook reads its own
-  `APIFY_WEBHOOK_SECRET` — do not conflate the two secrets or let one authenticate the
-  other's route.
-- These routes are excluded from `proxy.ts`'s matcher — they carry their own auth and
-  must never be gated behind the session cookie check.
+- Give a new trigger endpoint **its own** secret env var rather than reusing
+  `APIFY_WEBHOOK_SECRET` — one secret per caller, so revoking n8n's access doesn't
+  also break Apify's.
+- This route is excluded from `proxy.ts`'s matcher — it carries its own auth and must
+  never be gated behind the session cookie check. Do the same for a new one.
 - Long-running or "fire and forget" work inside a webhook uses `after()` from
   `next/server` so the HTTP response returns immediately (Apify retries slow webhooks) —
   see `app/api/webhooks/apify/route.ts`.
-- `maxDuration` is set explicitly on routes expected to run long (`export const
-  maxDuration = 300;` in the sync cron) — set this deliberately, don't rely on the
-  platform default, when adding a route that processes multiple datasets in a loop.
+- Set `maxDuration` explicitly (`export const maxDuration = 300;`) on any route that
+  processes multiple datasets in a loop — don't rely on the platform default.
 - Return a small JSON summary (`{ ok, processed, outcomes }`), not the full internal
-  state — these responses are consumed by Vercel's cron log and by curl during manual
-  testing (see the README's manual-trigger snippet), not by a UI.
+  state — these responses are consumed by a scheduler's run log and by curl during
+  manual testing, not by a UI.
 
 ### Internal read routes
 
@@ -170,8 +179,8 @@ server actions, where `authActionClient` blocks writes for exactly that flag). D
   `processRawRecords` catches per-record and increments `result.failed` rather than
   aborting the whole sync run on one bad record — a poison record must not block 499
   good ones. `syncDataset` similarly wraps the whole per-dataset run in try/catch,
-  recording `errorSummary` and backing off the schedule rather than throwing to the
-  cron route.
+  recording `errorSummary` and backing off the schedule rather than throwing to its
+  caller.
 - **Route handlers**: 401 on auth failure, otherwise 200 with a result summary — these
   are polled/scheduled endpoints, not RPCs a caller branches on HTTP status for beyond
   auth.

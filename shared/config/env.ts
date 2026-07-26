@@ -13,7 +13,6 @@ const serverEnvSchema = z.object({
   APIFY_API_TOKEN: z.string().min(1, "APIFY_API_TOKEN is required"),
   APIFY_WEBHOOK_SECRET: z.string().min(16, "APIFY_WEBHOOK_SECRET must be at least 16 chars"),
 
-  CRON_SECRET: z.string().min(16, "CRON_SECRET must be at least 16 chars"),
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 chars"),
 
   RESEND_API_KEY: z.string().optional(),

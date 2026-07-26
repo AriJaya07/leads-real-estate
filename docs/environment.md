@@ -17,7 +17,6 @@ Copy `.env.example` to `.env` and fill in:
 | `DATABASE_URL` | yes | Postgres 14+. Neon and Supabase both confirmed working. |
 | `APIFY_API_TOKEN` | yes | `apify_api_...` — read access to `/v2/datasets`. |
 | `APIFY_WEBHOOK_SECRET` | yes | Min 16 chars. Shared secret checked on `POST /api/webhooks/apify`. |
-| `CRON_SECRET` | yes | Min 16 chars. Bearer secret checked on `GET /api/cron/*`. |
 | `AUTH_SECRET` | yes | Min 32 chars. Signs session JWTs (`jose`, HS256). Rotating it invalidates every session. |
 | `AUTH_ALLOWED_EMAILS` | no | Comma-separated. Bootstrap guard only — restricts which address may claim the instance as first admin. Empty = anyone claims it. Not consulted after bootstrap; team members are added from `/admin/team` instead. |
 | `RESEND_API_KEY` | no | Only used for lead-alert emails. Sign-in never needs it. Without it, alerts log a warning instead of sending and the app runs fine. |
@@ -50,24 +49,38 @@ there create the first **admin** account. No email provider is involved in signi
 Add teammates from **Admin → Team**: enter their email, the app generates a temporary
 password shown once, you relay it to them; they're forced to change it on first sign-in.
 
-To pull data immediately without waiting for the Vercel cron:
-
-```bash
-CRON=$(grep '^CRON_SECRET=' .env | cut -d= -f2)
-curl -H "Authorization: Bearer $CRON" localhost:3000/api/cron/discover   # find datasets
-curl -H "Authorization: Bearer $CRON" localhost:3000/api/cron/sync       # ingest + score
-```
+To pull data in, use **Admin → Datasets**: "Discover datasets" enumerates what the
+source exposes, and each row's sync button ingests + scores it. Those buttons call the
+same `discoverAllSources()`/`syncDataset()` functions any scheduler would.
 
 ## Scheduled jobs
 
-Declared in `vercel.json`: discovery every 15 minutes, sync every 5, FX rates once daily
-at 03:00 UTC. Discovery/sync's 15/5-minute figures are the *base* rate — per-dataset
-sync intervals adapt on top of it (faster after new items, backing off when quiet,
-tightened on weekends Bali time). See `domain/sync/scheduling.ts::nextIntervalSeconds`.
-FX rates don't need that adaptive treatment — see
-`application/fx/refresh-fx-rates.ts`. When deploying somewhere other than Vercel,
-replicate this cron schedule by hitting the same three GET routes with the bearer
-secret.
+**There are none right now.** The app previously declared four Vercel crons in
+`vercel.json` (discovery every 15 min, sync every 5, FX daily, retention weekly), each
+hitting a `GET /api/cron/*` route behind a `CRON_SECRET`. All of that — routes,
+`vercel.json`, and the env var — was removed in favour of triggering from n8n, which
+is not wired up yet.
+
+What survived, and is what an n8n workflow should call into once there are endpoints
+again:
+
+| Work | Function | Was scheduled |
+| --- | --- | --- |
+| Dataset discovery | `application/sync/discovery.ts::discoverAllSources` | every 15 min |
+| Incremental sync | `application/sync/sync-dataset.ts::dueDatasets` → `syncDataset` | every 5 min |
+| FX refresh | `application/fx/refresh-fx-rates.ts::refreshFxRates` | daily 03:00 UTC |
+| Retention pruning | `application/maintenance/prune-old-rows.ts::pruneOldRows` | weekly |
+
+Note the sync pair specifically: per-dataset intervals still adapt (faster after new
+items, backing off when quiet, tightened on weekends Bali time — see
+`domain/sync/scheduling.ts::nextIntervalSeconds`), and `syncDataset` still writes the
+resulting `nextSyncDueAt` watermark that `dueDatasets()` reads. So an external
+scheduler can tick on a plain fixed interval and still get adaptive per-dataset
+behaviour for free — it should call `dueDatasets()` and sync only what that returns,
+not sync everything on every tick.
+
+See `docs/tech-debt.md`'s "no scheduled trigger" entry for what's currently degraded
+while this gap is open.
 
 ## Third-party services
 
@@ -80,9 +93,9 @@ secret.
 | n8n | Upstream data producer (writes into Apify datasets) | Entirely external, not part of this repo | N/A |
 
 There is no test/staging Apify token distinct from production configured anywhere in
-this repo — be careful running `npm run db:seed` or triggering `/api/cron/sync` against
-a real `APIFY_API_TOKEN` from a local machine, since it will actually pull and persist
-live data into whatever `DATABASE_URL` you've pointed at.
+this repo — be careful running `npm run db:seed` or triggering a sync from
+**Admin → Datasets** against a real `APIFY_API_TOKEN` from a local machine, since it
+will actually pull and persist live data into whatever `DATABASE_URL` you've pointed at.
 
 ## Local Postgres extension requirement
 

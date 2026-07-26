@@ -36,13 +36,10 @@ password and shows it once, and you pass it to them directly. They are prompted 
 it on first sign-in. Passwords are hashed with scrypt (N=16384, per-user salt) and
 compared in constant time.
 
-To pull data in immediately, without waiting for cron:
-
-```bash
-CRON=$(grep '^CRON_SECRET=' .env | cut -d= -f2)
-curl -H "Authorization: Bearer $CRON" localhost:3000/api/cron/discover   # find datasets
-curl -H "Authorization: Bearer $CRON" localhost:3000/api/cron/sync       # ingest + score
-```
+Discovery and sync are triggered externally (n8n) rather than on a built-in schedule —
+there is no cron job in this app. To pull data in immediately from **Admin → Datasets**,
+use the "Discover datasets" button and each dataset's sync action; both call the same
+`discoverAllSources()`/`syncDataset()` functions an external scheduler would.
 
 ---
 

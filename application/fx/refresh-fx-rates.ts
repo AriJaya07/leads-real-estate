@@ -21,8 +21,12 @@ export interface FxRefreshResult {
  * Any failure — network, upstream shape change, missing currency — leaves the
  * existing rows untouched rather than throwing. A stale rate is a minor budget-
  * filtering accuracy issue; a broken refresh must never be allowed to break
- * ingestion or crash the cron tick that calls it, matching the same
+ * ingestion or crash whatever triggered it, matching the same
  * degrade-gracefully rule every other adapter in this codebase follows.
+ *
+ * Nothing calls this today — it used to run from `/api/cron/fx`, removed along
+ * with the rest of the cron routes in favour of external (n8n) scheduling. See
+ * `docs/tech-debt.md`'s "no scheduled trigger" entry.
  */
 export async function refreshFxRates(
   provider: FxRateProvider = frankfurterFxProvider,

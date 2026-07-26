@@ -49,7 +49,6 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dreamrue_test
       APIFY_API_TOKEN: test-token
       APIFY_WEBHOOK_SECRET: test-webhook-secret-min16
-      CRON_SECRET: test-cron-secret-min16
       AUTH_SECRET: test-auth-secret-at-least-32-characters-long
     steps:
       - uses: actions/checkout@v4
@@ -82,7 +81,6 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dreamrue_e2e
       APIFY_API_TOKEN: test-token
       APIFY_WEBHOOK_SECRET: test-webhook-secret-min16
-      CRON_SECRET: test-cron-secret-min16
       AUTH_SECRET: test-auth-secret-at-least-32-characters-long
       AUTH_ALLOWED_EMAILS: e2e@dreamrue.test
     steps:

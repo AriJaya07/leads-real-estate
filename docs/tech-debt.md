@@ -2,9 +2,9 @@
 
 ## React Query staleness on background (non-actor) changes to leads/datasets
 
-`revalidateTag(tag, "max")` from `/api/cron/sync` and the Apify webhook invalidates the
+`revalidateTag(tag, "max")` from the Apify webhook invalidates the
 RSC tag cache in the background, which is correct for that cache — nobody's actively
-waiting on a cron-triggered write. But a browser tab with `/leads` or the topbar
+waiting on a webhook-triggered write. But a browser tab with `/leads` or the topbar
 already open won't see that change until React Query's own `staleTime` elapses and a
 refetch is triggered (window refocus, remount, or the next explicit
 `invalidateQueries` call from a user-initiated mutation): 30s for the leads list
@@ -141,10 +141,10 @@ is the first place to look for a performance regression.
 last-resort default, but `fx_rates` is no longer seed-once-and-forget.
 `application/fx/refresh-fx-rates.ts` refreshes every currency already tracked in
 `fx_rates` from `infrastructure/fx/fx-rate.provider.ts` (ECB rates via
-frankfurter.dev, free, no API key), and `GET /api/cron/fx` runs it once daily (see
-`vercel.json`). A failed refresh — network error, upstream shape change — leaves the
-existing rows untouched and logs via the structured logger rather than throwing;
-budget filtering degrades to "stale" in that case, never to "broken."
+frankfurter.dev, free, no API key). A failed refresh — network error, upstream shape
+change — leaves the existing rows untouched and logs via the structured logger rather
+than throwing; budget filtering degrades to "stale" in that case, never to "broken."
+Nothing calls this on a schedule today — see "no scheduled trigger" below.
 
 ## No LLM classifier yet — `LeadClassifier` port is unused beyond `rules@2`
 
@@ -181,10 +181,35 @@ instead of relying on Vercel's own log output.
 
 `application/auth/login-attempts.ts` records every sign-in attempt (success or
 failure) to throttle brute-forcing (`domain/auth/rate-limit.ts`,
-`LOGIN_MAX_FAILED_ATTEMPTS = 5` within a 15-minute window). `GET /api/cron/retention`
-(daily) now prunes both `login_attempts` and `sync_events` past their retention window
-via `application/maintenance/prune-old-rows.ts` — `sync_runs` and `lead_events` are
-deliberately excluded (audit trail, not append-only noise).
+`LOGIN_MAX_FAILED_ATTEMPTS = 5` within a 15-minute window).
+`application/maintenance/prune-old-rows.ts::pruneOldRows` prunes both `login_attempts`
+and `sync_events` past their retention window — `sync_runs` and `lead_events` are
+deliberately excluded (audit trail, not append-only noise). Nothing calls it on a
+schedule today — see "no scheduled trigger" below.
+
+## No scheduled trigger for discovery, sync, FX refresh, or retention pruning
+
+Four `GET /api/cron/*` routes used to run these on a Vercel cron schedule
+(`vercel.json`): discovery every 15 min, sync every 5 min, FX refresh daily, retention
+weekly. All four routes, `vercel.json`, and the `CRON_SECRET` env var were removed —
+scheduling is moving to n8n, which is not wired up yet. The underlying functions are
+untouched and still fully tested:
+
+| Function | Was scheduled |
+| --- | --- |
+| `application/sync/discovery.ts::discoverAllSources` | every 15 min |
+| `application/sync/sync-dataset.ts::dueDatasets` + `syncDataset` | every 5 min |
+| `application/fx/refresh-fx-rates.ts::refreshFxRates` | daily |
+| `application/maintenance/prune-old-rows.ts::pruneOldRows` | weekly |
+
+**Current effect of the gap**: dataset-API traffic from n8n (the majority of it — see
+architecture.md's "Polling was the primary change signal" note) is not picked up at
+all until either someone clicks "Sync" in `/admin/datasets` or an actor-run webhook
+fires. FX rates and old rows just don't refresh/prune. None of this corrupts data —
+everything degrades to "stale," not "wrong" — but it is a real gap, not a cosmetic one,
+until n8n (or something) calls these functions again. The fix is new trigger
+endpoints (see api-patterns.md's System routes section for the pattern to follow) once
+the n8n side is ready — not restoring the cron routes.
 
 ## The product-level gap: buyer-side data collection
 

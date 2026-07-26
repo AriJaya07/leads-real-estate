@@ -15,9 +15,12 @@ export interface RetentionResult {
 /**
  * Deletes rows past their retention window from the two tables nothing else
  * prunes (see the comment on the retention constants for why `sync_runs` and
- * `lead_events` are excluded). Run daily from `/api/cron/retention` — see
- * `docs/tech-debt.md`'s former "grows forever" entries for `login_attempts` and
- * the sync-events observability note in `docs/architecture.md`.
+ * `lead_events` are excluded).
+ *
+ * Nothing calls this today: it used to run from `/api/cron/retention`, removed
+ * along with the rest of the cron routes in favour of external (n8n)
+ * scheduling. It stays because the retention need it addresses is real — see
+ * `docs/tech-debt.md`'s "no scheduled trigger" entry.
  */
 export async function pruneOldRows(now: Date = new Date()): Promise<RetentionResult> {
   const syncEventsCutoff = new Date(now.getTime() - SYNC_EVENTS_RETENTION_DAYS * DAY_MS);

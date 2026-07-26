@@ -71,7 +71,7 @@ sync engine never learns a vendor's name. Same pattern for notification channels
 ## Why config lives in the database, not the environment
 
 `.env` holds secrets and deployment identity only: `DATABASE_URL`, `APIFY_API_TOKEN`,
-`CRON_SECRET`, `AUTH_SECRET`, `RESEND_API_KEY`. There is no `APIFY_DATASET_ID`. Which
+`APIFY_WEBHOOK_SECRET`, `AUTH_SECRET`, `RESEND_API_KEY`. There is no `APIFY_DATASET_ID`. Which
 datasets sync, how often, who gets alerted, and what counts as a hot lead are rows in
 `sources`, `datasets`, `mapping_profiles`, and `alert_rules`, edited from `/admin`. A
 dataset that appears upstream is picked up by the next discovery pass with no human
@@ -80,17 +80,22 @@ action and no deploy — see `discoverDatasets` in
 
 ## Key design decisions
 
-**Polling is the primary change signal; webhooks only accelerate it.** n8n pushes items
-into named Apify datasets through the Dataset API rather than by running an actor, so a
-"Run Succeeded" webhook never fires for that traffic
-([app/api/webhooks/apify/route.ts](../app/api/webhooks/apify/route.ts)). The poller in
-`/api/cron/sync` is what guarantees delivery. A missed webhook costs one poll cycle, not
-the data.
+**Polling was the primary change signal; there is no poller right now.** n8n pushes
+items into named Apify datasets through the Dataset API rather than by running an actor,
+so a "Run Succeeded" webhook never fires for that traffic
+([app/api/webhooks/apify/route.ts](../app/api/webhooks/apify/route.ts)) — which is
+exactly why polling, not the webhook, was the delivery guarantee. The `GET
+/api/cron/sync` poller that provided it was removed in favour of triggering from n8n,
+which isn't wired up yet, so today ingestion only happens on an actor-run webhook or a
+manual sync from `/admin/datasets`. See [tech-debt.md](tech-debt.md)'s "no scheduled
+trigger" entry — this is the single most consequential open gap in the system.
 
-**Adaptive polling, not a fixed cron.** `vercel.json` ticks discovery every 15 minutes
-and sync every 5, but each dataset's actual interval tightens after producing new items,
-backs off when quiet, and tightens again on weekends (Bali time — that's when consumers
-browse property). See `nextIntervalSeconds` in
+**Adaptive polling intervals, computed but not currently acted on.** Each dataset's
+interval tightens after producing new items, backs off when quiet, and tightens again on
+weekends (Bali time — that's when consumers browse property). `syncDataset` still
+computes this and writes the `nextSyncDueAt` watermark, and `dueDatasets()` still reads
+it, so whatever ends up driving the tick gets adaptive per-dataset behaviour for free by
+calling `dueDatasets()` rather than syncing everything. See `nextIntervalSeconds` in
 [domain/sync/scheduling.ts](../domain/sync/scheduling.ts).
 
 **Curated mapping profiles beat auto-proposals.** `proposeMapping`
@@ -174,9 +179,10 @@ layout covers it.
 ## Cache invalidation
 
 `updateTag` is used where a user must see the effect of their own action immediately
-(e.g. `setLeadStatus` in `lead.actions.ts`). `revalidateTag(tag, "max")` is used from the
-cron/webhook routes for stale-while-revalidate — the dashboard keeps serving instantly
-while aggregates rebuild in the background. Tag vocabulary is centralized in
+(e.g. `setLeadStatus` in `lead.actions.ts`). `revalidateTag(tag, "max")` is used from
+machine-triggered routes (currently just the Apify webhook) for stale-while-revalidate —
+the dashboard keeps serving instantly while aggregates rebuild in the background. Tag
+vocabulary is centralized in
 [application/cache-tags.ts](../application/cache-tags.ts) and is per-dataset, so syncing
 one dataset never invalidates another's cached aggregates.
 
@@ -256,12 +262,12 @@ not. Four read functions are now actually cached, each `"use cache"` + `cacheLif
 
 | Function | Tag(s) | Why this tag |
 | --- | --- | --- |
-| `listDatasets` (`application/datasets/dataset-queries.ts`) | `datasetsRegistryTag()`, `leadsTag()` | Registry tag for admin dataset actions (read-your-own-writes via `updateTag`); `leadsTag()` too because `leadCount`/`buyerCount` are computed live from `leads` and only cron sync's background `revalidateTag(leadsTag(), "max")` touches those numbers between admin actions |
+| `listDatasets` (`application/datasets/dataset-queries.ts`) | `datasetsRegistryTag()`, `leadsTag()` | Registry tag for admin dataset actions (read-your-own-writes via `updateTag`); `leadsTag()` too because `leadCount`/`buyerCount` are computed live from `leads` and only a webhook-triggered sync's background `revalidateTag(leadsTag(), "max")` touches those numbers between admin actions |
 | `getLeadStats` (`application/leads/lead-queries.ts`) | `leadsTag()` | Same tag every lead mutation (`lead.actions.ts`) already invalidates |
 | `getLeadFacets` / `getDynamicAttributeFacets` (`application/leads/facets.ts`) | `leadsTag()` | Facet counts derive from the same lead rows the stats row does — same invalidation lifecycle, see tech-debt.md on why the narrower `facetsTag()` isn't used yet |
 
 All four use the `"minutes"` profile (`stale` 5m client / `revalidate` 1m server /
-`expire` 1h) — short enough that a background cron change surfaces within a minute even
+`expire` 1h) — short enough that a background change surfaces within a minute even
 if nothing explicitly invalidates it, long enough that repeated navigations and
 `router.refresh()` calls (every mutation triggers one) hit the cache instead of
 Postgres. `updateTag()` bypasses all of this for the actor's own change regardless —
@@ -333,11 +339,11 @@ spam-flagged or empty-body), `syncDataset` revokes the profile's approval so the
 sync treats it as awaiting review instead of silently continuing to normalize through a
 wrong mapping. See [tech-debt.md](tech-debt.md) for what this does and doesn't catch.
 
-**FX refresh.** `GET /api/cron/fx` (daily, `vercel.json`) runs
-`application/fx/refresh-fx-rates.ts`, which refreshes every currency already tracked in
-`fx_rates` from `infrastructure/fx/fx-rate.provider.ts` (ECB rates via frankfurter.dev).
-A failed refresh leaves existing rows untouched — same "degrade gracefully" rule as
-every other adapter here.
+**FX refresh.** `application/fx/refresh-fx-rates.ts` refreshes every currency already
+tracked in `fx_rates` from `infrastructure/fx/fx-rate.provider.ts` (ECB rates via
+frankfurter.dev). A failed refresh leaves existing rows untouched — same "degrade
+gracefully" rule as every other adapter here. Nothing calls it on a schedule today — see
+tech-debt.md's "no scheduled trigger" entry.
 
 **Structured logging.** `infrastructure/observability/logger.ts` gives every log line
 outside `sync_events` a consistent JSON shape (`{ level, scope, message, ...fields,

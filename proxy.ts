@@ -24,8 +24,8 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /**
-     * App routes only. Auth routes, cron/webhook endpoints (which carry their own
-     * bearer secrets), and static assets are excluded.
+     * App routes only. Auth routes, the Apify webhook (which carries its own
+     * bearer secret), and static assets are excluded.
      */
     "/",
     "/leads/:path*",

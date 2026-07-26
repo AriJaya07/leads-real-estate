@@ -32,7 +32,7 @@ function label(name: string | null, title: string | null, externalId: string): s
  * more often than a dataset actually changes. `updateTag(datasetsRegistryTag())`
  * (dataset.actions.ts) gives an admin's own change read-your-own-writes
  * immediacy regardless of this cache; `leadsTag()` is the backstop for
- * `leadCount`/`buyerCount` drifting from routine cron syncs, which only
+ * `leadCount`/`buyerCount` drifting from webhook-triggered syncs, which only
  * revalidate `leadsTag()` in the background — see api-patterns.md.
  */
 export async function listDatasets(): Promise<DatasetSummary[]> {

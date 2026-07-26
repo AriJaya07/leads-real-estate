@@ -13,13 +13,15 @@ import { createLogger } from "@/infrastructure/observability/logger";
 const log = createLogger("webhook:apify");
 
 /**
- * Webhook accelerant — *not* the primary change signal.
- *
  * n8n pushes items into named Apify datasets via the Dataset API rather than by
- * running an actor, so a "Run Succeeded" webhook never fires for that traffic.
- * The poller in /api/cron/sync is what guarantees delivery; this endpoint only
- * shortens the latency when a webhook does arrive, and a missed delivery costs
- * one poll cycle rather than the data.
+ * running an actor, so a "Run Succeeded" webhook never fires for that traffic —
+ * only an actor-run webhook (which carries `resource.defaultDatasetId`) reaches
+ * this handler at all.
+ *
+ * There is no cron poller anymore (removed in favor of external scheduling —
+ * see docs/tech-debt.md). Until something external triggers sync directly,
+ * this webhook and a manual "Sync" click in Admin → Datasets are the only ways
+ * ingestion happens.
  */
 export async function POST(request: Request) {
   const provided =

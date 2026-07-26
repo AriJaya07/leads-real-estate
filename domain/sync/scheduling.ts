@@ -10,10 +10,16 @@ import {
 /**
  * Adaptive polling.
  *
- * A fixed cron is wrong in both directions: it hammers datasets that never
+ * A fixed schedule is wrong in both directions: it hammers datasets that never
  * change and under-polls the ones that do. Intervals therefore tighten when a
  * dataset produced new items and back off when it is quiet — and tighten again
  * at weekends, which is when consumers actually browse property.
+ *
+ * `syncDataset` writes the resulting `nextSyncDueAt` watermark on every run and
+ * `dueDatasets()` reads it, so an external scheduler (n8n) can tick frequently
+ * and still respect per-dataset backoff instead of syncing everything every
+ * time. That division of labour is why removing the cron routes didn't remove
+ * this: the *policy* lives here, only the *tick* was external-ised.
  */
 
 export function isWeekendInBali(now: Date = new Date()): boolean {

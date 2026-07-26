@@ -175,7 +175,7 @@ export const savedViews = pgTable(
   (t) => [index("saved_views_owner_idx").on(t.ownerId)],
 );
 
-/** Daily rollup for currency normalisation; refreshed by the sync cron. */
+/** Daily rollup for currency normalisation; refreshed by `refreshFxRates()`. */
 export const fxRates = pgTable("fx_rates", {
   currency: text("currency").primaryKey(),
   usdPerUnit: real("usd_per_unit").notNull(),

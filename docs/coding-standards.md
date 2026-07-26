@@ -13,10 +13,10 @@ codebase, so don't "fix" them back to the old API:
   presence check); it is never the security boundary.
 - **`updateTag` vs `revalidateTag`.** `updateTag(tag)` is used inside a server action
   when the actor must see their own change immediately (no stale-while-revalidate).
-  `revalidateTag(tag, "max")` — note the second argument — is used from cron/webhook
+  `revalidateTag(tag, "max")` — note the second argument — is used from machine-triggered
   routes for background refresh with SWR semantics. Pick based on who needs the fresh
   data and when: see `application/leads/lead.actions.ts` vs.
-  `app/api/cron/sync/route.ts`.
+  `app/api/webhooks/apify/route.ts`.
 - **`after()` from `next/server`** is used in the Apify webhook route to ack
   immediately and do the sync in the background, since Apify retries on slow webhook
   responses. See `app/api/webhooks/apify/route.ts`.
@@ -65,9 +65,10 @@ convention explicit so it doesn't erode as more tables/use-cases are added:
     `.inputSchema(zodSchema)` through `authActionClient`/`adminActionClient` (see
     [api-patterns.md](api-patterns.md)).
   - a plain `.ts` module with no `"use server"` — internal orchestration called from a
-    cron/webhook route or another service, not directly from the UI (`sync-dataset.ts`,
-    `discovery.ts`, `dispatch.ts`, `refresh-fx-rates.ts`, `process-records.ts`). This is
-    where multi-step orchestration across several repositories/adapters belongs.
+    webhook route, an external trigger, or another service, not directly from the UI
+    (`sync-dataset.ts`, `discovery.ts`, `dispatch.ts`, `refresh-fx-rates.ts`,
+    `process-records.ts`). This is where multi-step orchestration across several
+    repositories/adapters belongs.
 - When adding a new use-case, decide which service shape it is first — "does the UI call
   this directly" vs. "does a route or another service call this" — rather than
   defaulting everything into `*.actions.ts`.
@@ -227,7 +228,7 @@ not `` log.error(`failed to X: ${leadId}`) ``.
 ## Security patterns already established — reuse, don't reinvent
 
 - Constant-time secret/password comparison (`timingSafeEqual`) everywhere a secret is
-  checked: `application/http/verify-secret.ts` (cron/webhook bearer tokens),
+  checked: `application/http/verify-secret.ts` (webhook bearer tokens),
   `infrastructure/auth/password.ts` (login).
 - `fakeVerify()` burns the same time as a real password check so a nonexistent account
   doesn't respond faster than a wrong password — preserve this when touching auth flows.
