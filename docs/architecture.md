@@ -48,6 +48,8 @@ features/         Feature-scoped UI — one folder per application/ counterpart:
   datasets/       ↔ application/datasets (dataset registry, sync, discovery)
   team/           ↔ application/auth/team.actions.ts
   auth/           ↔ application/auth (login)
+  pipeline/       ↔ application/leads (kanban view — same lead-status data, different UI)
+  intelligence/   ↔ application/leads (aggregate/trend view — no application-layer counterpart of its own)
   shell/          App chrome: sidebar, topbar, theme toggle — not paired 1:1
 hooks/            Shared client hooks (useUrlFilters, useServerAction) — see coding-standards.md
 components/       ui/ primitives · common/ composed · brand/ custom SVG
@@ -257,16 +259,33 @@ of.
 `application/cache-tags.ts` and every `updateTag`/`revalidateTag` call already existed
 (prior round), but nothing had ever opted into Cache Components' `"use cache"` — so
 every `/leads` load and every `/leads`-adjacent read route hit Postgres fresh, tags or
-not. Four read functions are now actually cached, each `"use cache"` + `cacheLife`
+not. Several read functions are now actually cached, each `"use cache"` + `cacheLife`
 + `cacheTag`, keyed on their own (small, bounded) arguments:
 
 | Function | Tag(s) | Why this tag |
 | --- | --- | --- |
 | `listDatasets` (`application/datasets/dataset-queries.ts`) | `datasetsRegistryTag()`, `leadsTag()` | Registry tag for admin dataset actions (read-your-own-writes via `updateTag`); `leadsTag()` too because `leadCount`/`buyerCount` are computed live from `leads` and only a webhook-triggered sync's background `revalidateTag(leadsTag(), "max")` touches those numbers between admin actions |
+| `getSyncOverview`, `getRecentSyncRuns` (`application/datasets/dataset-queries.ts`) | `datasetsRegistryTag()`, `leadsTag()` | Same tags as `listDatasets` — both back `/admin/datasets` and `/admin/sync`'s prop-less, dynamic-API-free Suspense children, which need `"use cache"` for a different reason than freshness preference: see the note below on why that combination risks never re-executing at all |
 | `getLeadStats` (`application/leads/lead-queries.ts`) | `leadsTag()` | Same tag every lead mutation (`lead.actions.ts`) already invalidates |
 | `getLeadFacets` / `getDynamicAttributeFacets` (`application/leads/facets.ts`) | `leadsTag()` | Facet counts derive from the same lead rows the stats row does — same invalidation lifecycle, see tech-debt.md on why the narrower `facetsTag()` isn't used yet |
+| `getLeadTrend`, `getBudgetStats` (`application/leads/lead-queries.ts`) | `leadsTag()` | Back `/intelligence`'s trend chart and budget stat tiles — same lifecycle as `getLeadStats` |
 
-All four use the `"minutes"` profile (`stale` 5m client / `revalidate` 1m server /
+**A Suspense child with no dynamic-API access and no dynamic props is eligible to be
+frozen into the static build shell — this bit `/admin/sync` for real.** Every
+prefetched read elsewhere in the app sits downstream of an awaited `searchParams` (or
+a dynamic route `params`), which is what makes the surrounding component — and
+everything it calls — genuinely per-request. `/admin/sync/page.tsx`'s `Overview`/
+`RecentActivity` take no props and call neither `searchParams` nor `cookies()`, so
+under Cache Components they qualified for the static shell and, without `"use cache"`,
+would have been baked in at build time and never re-run — a sync triggered afterward
+would never show up. `"use cache"` plus a tag the relevant mutations already invalidate
+(same table above) is the fix, and it's the same fix `listDatasets` already needed for
+`/admin/datasets`'s identically-shaped `Overview`/`Registry`. **Rule of thumb**: any
+Suspense-wrapped read component that doesn't itself touch a dynamic API needs an
+explicit `"use cache"` on what it calls — don't rely on "it's inside a dynamic page" to
+make it fresh.
+
+All of the above use the `"minutes"` profile (`stale` 5m client / `revalidate` 1m server /
 `expire` 1h) — short enough that a background change surfaces within a minute even
 if nothing explicitly invalidates it, long enough that repeated navigations and
 `router.refresh()` calls (every mutation triggers one) hit the cache instead of

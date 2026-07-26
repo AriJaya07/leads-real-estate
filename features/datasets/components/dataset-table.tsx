@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Archive, Pause, Play, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -90,7 +91,9 @@ export function DatasetTable({ datasets }: { datasets: DatasetSummary[] }) {
                 )}
               >
                 <td className="px-3 py-2.5">
-                  <div className="font-medium">{dataset.label}</div>
+                  <Link href={`/admin/sync/${dataset.id}`} className="font-medium hover:underline">
+                    {dataset.label}
+                  </Link>
                   <div className="text-muted-foreground font-mono text-xs">
                     {dataset.externalId}
                     {dataset.status !== "active" && ` · ${dataset.status}`}

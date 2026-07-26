@@ -123,6 +123,66 @@ export async function getDatasetDetail(datasetId: string) {
   };
 }
 
+export interface RecentSyncRun {
+  id: string;
+  datasetId: string;
+  datasetLabel: string;
+  trigger: string;
+  status: string;
+  itemsSeen: number;
+  itemsNew: number;
+  leadsCreated: number;
+  errorSummary: string | null;
+  durationMs: number | null;
+  startedAt: Date;
+  finishedAt: Date | null;
+}
+
+/**
+ * The "recent runs across all datasets" query `docs/tech-debt.md` flagged as
+ * the missing piece for a cross-dataset activity feed — everything else
+ * (`getDatasetDetail`, `getSyncEvents`) already existed unused.
+ *
+ * Cached like `listDatasets`, and for the same reason that matters more here
+ * than it looks: `/admin/sync`'s `RecentActivity` component takes no props
+ * and calls no dynamic API (no `searchParams`/`cookies`), so under Cache
+ * Components it's eligible to be baked into the static build shell and never
+ * re-run — `"use cache"` plus a tag `runSync`/`setDatasetStatus` already
+ * invalidate is what keeps it live instead of frozen at build time.
+ */
+export async function getRecentSyncRuns(limit = 50): Promise<RecentSyncRun[]> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag(datasetsRegistryTag(), leadsTag());
+
+  const rows = await db()
+    .select({
+      id: schema.syncRuns.id,
+      datasetId: schema.syncRuns.datasetId,
+      name: schema.datasets.name,
+      title: schema.datasets.title,
+      externalId: schema.datasets.externalId,
+      trigger: schema.syncRuns.trigger,
+      status: schema.syncRuns.status,
+      itemsSeen: schema.syncRuns.itemsSeen,
+      itemsNew: schema.syncRuns.itemsNew,
+      leadsCreated: schema.syncRuns.leadsCreated,
+      errorSummary: schema.syncRuns.errorSummary,
+      durationMs: schema.syncRuns.durationMs,
+      startedAt: schema.syncRuns.startedAt,
+      finishedAt: schema.syncRuns.finishedAt,
+    })
+    .from(schema.syncRuns)
+    .innerJoin(schema.datasets, eq(schema.datasets.id, schema.syncRuns.datasetId))
+    .orderBy(desc(schema.syncRuns.startedAt))
+    .limit(limit);
+
+  return rows.map((row) => ({
+    ...row,
+    datasetLabel: label(row.name, row.title, row.externalId),
+  }));
+}
+
 export async function getSyncEvents(syncRunId: string) {
   return db()
     .select()
@@ -131,8 +191,17 @@ export async function getSyncEvents(syncRunId: string) {
     .orderBy(schema.syncEvents.at);
 }
 
-/** Global sync posture for the admin monitor. */
+/**
+ * Global sync posture for the admin monitor. Cached for the same reason as
+ * `getRecentSyncRuns` — this backs a prop-less, dynamic-API-free Suspense
+ * child on both `/admin/datasets` and `/admin/sync`, which needs `"use cache"`
+ * to avoid being frozen into the static build shell.
+ */
 export async function getSyncOverview() {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag(datasetsRegistryTag(), leadsTag());
+
   const [row] = await db()
     .select({
       datasets: sql<number>`count(*)::int`,

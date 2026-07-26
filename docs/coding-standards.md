@@ -265,5 +265,6 @@ a dedicated cleanup pass. Before deleting anything it flags:
   keyword dropped (see the Types section's "export only what's used outside the file"
   rule), not deletion — check whether it's used *within* its own file first. A genuinely
   dead export tied to real backend capability (a schema column, a workflow) ahead of
-  its UI — `getDatasetDetail`, `assignLead`, etc. — belongs in `docs/tech-debt.md` as
-  intentional, not deleted; see that file for the running list.
+  its UI belongs in `docs/tech-debt.md` as intentional, not deleted, until the UI catches
+  up — `getDatasetDetail`/`assignLead`/etc. were exactly this for a while (see
+  `docs/tech-debt.md`'s git history) before `/pipeline` and `/admin/sync` wired them in.

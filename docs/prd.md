@@ -51,6 +51,15 @@ tool.
 - Sign-in requires no external email provider; the first person to sign in on a fresh
   instance becomes the admin, and admins add teammates with a one-time temporary
   password.
+- As an agent, I can see and move every lead through its pipeline on a kanban board
+  (`/pipeline`) — drag a card to another column, or use its status/assignee dropdowns —
+  without leaving the board to open each lead individually.
+- As an agent or admin, I can see intent, location, property-type, source-group and
+  budget trends across the last 30 days (`/intelligence`), not just the current inbox
+  filter's slice.
+- As an admin, I can see every sync run across every dataset in one feed, drill into a
+  single run's log, accept a drifted schema version, and approve an auto-generated
+  mapping profile — all from `/admin/sync`.
 
 ## North-star metric
 
@@ -83,9 +92,10 @@ In rough priority order as understood from the codebase and README:
    feeds are almost entirely seller listings and job posts. Needs buyer-side Facebook
    groups, keyword searches, and mining commenters on listing posts. See
    [tech-debt.md](tech-debt.md).
-2. **Pipeline kanban / intelligence dashboards / dataset comparison UI / visual mapping
-   editor** — none of these exist; mapping profiles are currently edited as JSON rows,
-   not through a UI editor.
+2. **Visual mapping editor** — mapping profiles are still edited as JSON rows, not
+   through a UI. (The pipeline kanban, intelligence dashboards, and cross-dataset sync
+   activity feed that used to be listed here are built — `/pipeline`, `/intelligence`,
+   `/admin/sync`.)
 3. **LLM classifier** behind the existing `LeadClassifier` port, shadow-mode validated
    against the rules classifier before cutover.
 4. **WhatsApp notifier** — `alertChannelEnum` already includes `whatsapp`, and the

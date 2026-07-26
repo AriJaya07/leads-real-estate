@@ -18,6 +18,7 @@ import { markContacted } from "@/application/leads/lead.actions";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { useLeadFacetsQuery, useLeadsQuery } from "@/features/leads/queries";
 import { parseLeadFilters, type LeadFilters } from "@/application/leads/filters.schema";
+import { leadStatusLabel } from "@/application/leads/lead-status";
 import type { LeadListItem } from "@/application/leads/lead-queries";
 import { cn } from "@/lib/utils";
 import { formatCompact, formatCount } from "@/shared/format";
@@ -163,7 +164,7 @@ const LeadCard = memo(function LeadCard({
           )}
           {lead.status !== "new" && (
             <span className="bg-muted rounded px-1.5 py-0.5 text-[11px]">
-              {lead.status.replace(/_/g, " ")}
+              {leadStatusLabel(lead.status)}
             </span>
           )}
         </div>
@@ -227,7 +228,7 @@ const LeadRow = memo(function LeadRow({
           )}
           {lead.status !== "new" && (
             <span className="bg-muted rounded px-1.5 py-0.5 text-[11px]">
-              {lead.status.replace(/_/g, " ")}
+              {leadStatusLabel(lead.status)}
             </span>
           )}
         </div>

@@ -124,3 +124,16 @@ export async function listTeamMembers() {
     .from(schema.users)
     .orderBy(schema.users.createdAt);
 }
+
+/**
+ * Narrower than `listTeamMembers()`: name/email only, no `mustChangePassword`/
+ * `lastSeenAt`/`role`. `/admin/team` is admin-only and needs the full record;
+ * the pipeline board's assignee picker is agent-accessible and only needs
+ * enough to label a dropdown option, not a teammate's account-security state.
+ */
+export async function listAssignableTeamMembers() {
+  return db()
+    .select({ id: schema.users.id, name: schema.users.name, email: schema.users.email })
+    .from(schema.users)
+    .orderBy(schema.users.name, schema.users.email);
+}

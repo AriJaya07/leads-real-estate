@@ -12,17 +12,11 @@ import { IntentBadge } from "@/components/common/intent-badge";
 import { ScoreBadge } from "@/components/common/score-badge";
 import { Spinner } from "@/components/common/spinner";
 import { saveLeadNotes, setLeadStatus } from "@/application/leads/lead.actions";
+import { LEAD_STATUSES, leadStatusLabel } from "@/application/leads/lead-status";
 import type { LeadListItem } from "@/application/leads/lead-queries";
 
-const STATUSES = [
-  "new",
-  "contacted",
-  "qualified",
-  "viewing_booked",
-  "converted",
-  "lost",
-  "archived",
-] as const;
+/** Every status except `spam` — that one is classifier-assigned, not a manual choice. */
+const STATUSES = LEAD_STATUSES.filter((status) => status !== "spam");
 
 export function LeadDetailSheet({
   lead,
@@ -169,7 +163,7 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
                   disabled={saving}
                   onClick={() => void update(status)}
                 >
-                  {status.replace(/_/g, " ")}
+                  {leadStatusLabel(status)}
                 </Button>
               ))}
             </div>

@@ -304,3 +304,84 @@ export async function getLeadStats(datasetId?: string): Promise<LeadStats> {
       row.medianTtft === null ? null : Math.round(Number(row.medianTtft)),
   };
 }
+
+export interface LeadTrendPoint {
+  date: string;
+  total: number;
+  buyers: number;
+}
+
+/**
+ * Daily lead volume for the Intelligence page's trend chart. Gap-filled in the
+ * loop below rather than in SQL — a day with zero leads shouldn't need a
+ * `generate_series` join for what's a 30-element array either way.
+ */
+export async function getLeadTrend(datasetId?: string, days = 30): Promise<LeadTrendPoint[]> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag(leadsTag());
+
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const scope = datasetId ? eq(schema.leads.datasetId, datasetId) : undefined;
+  const base = and(
+    eq(schema.leads.isSpam, false),
+    isNull(schema.leads.canonicalLeadId),
+    gte(schema.leads.postedAt, since),
+    scope,
+  );
+
+  const rows = await db()
+    .select({
+      date: sql<string>`to_char(date_trunc('day', ${schema.leads.postedAt}), 'YYYY-MM-DD')`,
+      total: sql<number>`count(*)::int`,
+      buyers: sql<number>`count(*) FILTER (WHERE ${schema.leads.intent} = 'buyer')::int`,
+    })
+    .from(schema.leads)
+    .where(base)
+    .groupBy(sql`date_trunc('day', ${schema.leads.postedAt})`)
+    .orderBy(sql`date_trunc('day', ${schema.leads.postedAt})`);
+
+  const byDate = new Map(rows.map((row) => [row.date, row]));
+  const series: LeadTrendPoint[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const row = byDate.get(date);
+    series.push({ date, total: row?.total ?? 0, buyers: row?.buyers ?? 0 });
+  }
+  return series;
+}
+
+export interface BudgetStats {
+  withBudget: number;
+  medianUsd: number | null;
+  minUsd: number | null;
+  maxUsd: number | null;
+}
+
+/** Budget signal across active leads — USD-normalized, same fields `queryLeads` filters on. */
+export async function getBudgetStats(datasetId?: string): Promise<BudgetStats> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag(leadsTag());
+
+  const scope = datasetId ? eq(schema.leads.datasetId, datasetId) : undefined;
+  const base = and(eq(schema.leads.isSpam, false), isNull(schema.leads.canonicalLeadId), scope);
+  const stated = sql`coalesce(${schema.leads.budgetUsdMax}, ${schema.leads.budgetUsdMin})`;
+
+  const [row] = await db()
+    .select({
+      withBudget: sql<number>`count(*) FILTER (WHERE ${stated} IS NOT NULL)::int`,
+      medianUsd: sql<number | null>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${stated})`,
+      minUsd: sql<number | null>`min(${schema.leads.budgetUsdMin})`,
+      maxUsd: sql<number | null>`max(${schema.leads.budgetUsdMax})`,
+    })
+    .from(schema.leads)
+    .where(base);
+
+  return {
+    withBudget: row.withBudget,
+    medianUsd: row.medianUsd === null ? null : Math.round(Number(row.medianUsd)),
+    minUsd: row.minUsd === null ? null : Math.round(Number(row.minUsd)),
+    maxUsd: row.maxUsd === null ? null : Math.round(Number(row.maxUsd)),
+  };
+}

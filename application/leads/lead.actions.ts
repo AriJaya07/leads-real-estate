@@ -6,17 +6,7 @@ import { updateTag } from "next/cache";
 import { db, schema } from "@/infrastructure/db/client";
 import { authActionClient } from "@/application/safe-action";
 import { leadTag, leadsTag } from "@/application/cache-tags";
-
-const leadStatusValues = [
-  "new",
-  "contacted",
-  "qualified",
-  "viewing_booked",
-  "converted",
-  "lost",
-  "archived",
-  "spam",
-] as const;
+import { LEAD_STATUSES } from "./lead-status";
 
 async function ensureState(leadId: string) {
   await db().insert(schema.leadStates).values({ leadId }).onConflictDoNothing();
@@ -32,7 +22,7 @@ function invalidate(leadId: string) {
 }
 
 export const setLeadStatus = authActionClient
-  .inputSchema(z.object({ leadId: z.string().uuid(), status: z.enum(leadStatusValues) }))
+  .inputSchema(z.object({ leadId: z.string().uuid(), status: z.enum(LEAD_STATUSES) }))
   .action(async ({ parsedInput, ctx }) => {
     await ensureState(parsedInput.leadId);
     await db()
