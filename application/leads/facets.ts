@@ -69,16 +69,20 @@ async function arrayFacet(
  * scoping is an `EXISTS` against `lead_appearances` (a person isn't scoped to
  * one dataset), not a direct column.
  */
-export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor[]> {
+export async function getLeadFacets(companyId: string, datasetId?: string): Promise<FacetDescriptor[]> {
   "use cache";
   cacheLife("minutes");
   cacheTag(leadsTag());
 
-  const scope = datasetId
-    ? sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
-        WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
-        AND ${schema.leadAppearances.datasetId} = ${datasetId})`
-    : undefined;
+  const scope = and(
+    eq(schema.leads.companyId, companyId),
+    datasetId
+      ? sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+          WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+          AND ${schema.leadAppearances.companyId} = ${companyId}
+          AND ${schema.leadAppearances.datasetId} = ${datasetId})`
+      : undefined,
+  );
 
   const facets: FacetDescriptor[] = [];
 
@@ -95,6 +99,22 @@ export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor
       label: "Lead type",
       kind: "enum",
       options: leadType.map((r) => ({ value: r.value, label: humanize(r.value), count: r.count })),
+    });
+  }
+
+  const dataQuality = await db()
+    .select({ value: schema.leads.dataQualityTier, count: sql<number>`count(*)::int` })
+    .from(schema.leads)
+    .where(scope)
+    .groupBy(schema.leads.dataQualityTier)
+    .orderBy(sql`count(*) DESC`);
+
+  if (dataQuality.length > 0) {
+    facets.push({
+      key: "dataQuality",
+      label: "Data quality",
+      kind: "enum",
+      options: dataQuality.map((r) => ({ value: r.value, label: humanize(r.value), count: r.count })),
     });
   }
 
@@ -130,6 +150,7 @@ export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor
   // people* per value (a person seen 5 times in one group counts once), from
   // `lead_appearances` directly rather than `leads`.
   const appearanceScope = and(
+    eq(schema.leadAppearances.companyId, companyId),
     eq(schema.leadAppearances.isSpam, false),
     sql`${schema.leadAppearances.canonicalAppearanceId} IS NULL`,
     datasetId ? eq(schema.leadAppearances.datasetId, datasetId) : undefined,
@@ -156,6 +177,32 @@ export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor
         label: r.value ?? "Unknown",
         count: r.count,
       })),
+    });
+  }
+
+  // Which connector/platform (Apify, n8n, ...) produced each lead's appearances —
+  // "Data source" in the dashboard's filter panel. Joined through `datasets`
+  // since `lead_appearances` only carries `datasetId`, not `sourceId` directly.
+  const sources = await db()
+    .select({
+      value: schema.sources.id,
+      label: schema.sources.name,
+      count: sql<number>`count(distinct ${schema.leadAppearances.leadId})::int`,
+    })
+    .from(schema.leadAppearances)
+    .innerJoin(schema.datasets, eq(schema.datasets.id, schema.leadAppearances.datasetId))
+    .innerJoin(schema.sources, eq(schema.sources.id, schema.datasets.sourceId))
+    .where(appearanceScope)
+    .groupBy(schema.sources.id, schema.sources.name)
+    .orderBy(sql`count(distinct ${schema.leadAppearances.leadId}) DESC`)
+    .limit(FACETABLE_MAX_CARDINALITY);
+
+  if (sources.length > 0) {
+    facets.push({
+      key: "sourceIds",
+      label: "Data source",
+      kind: "enum",
+      options: sources.map((r) => ({ value: r.value, label: r.label, count: r.count })),
     });
   }
 
@@ -212,7 +259,10 @@ export async function getLeadFacets(datasetId?: string): Promise<FacetDescriptor
  * (`attributes` lives on `lead_appearances`), counting distinct people per
  * value rather than raw appearance rows.
  */
-export async function getDynamicAttributeFacets(datasetId: string): Promise<FacetDescriptor[]> {
+export async function getDynamicAttributeFacets(
+  companyId: string,
+  datasetId: string,
+): Promise<FacetDescriptor[]> {
   "use cache";
   cacheLife("minutes");
   cacheTag(leadsTag());
@@ -220,45 +270,51 @@ export async function getDynamicAttributeFacets(datasetId: string): Promise<Face
   const catalog = await db()
     .select()
     .from(schema.fieldCatalog)
-    .where(eq(schema.fieldCatalog.datasetId, datasetId));
+    .where(and(eq(schema.fieldCatalog.companyId, companyId), eq(schema.fieldCatalog.datasetId, datasetId)));
 
   const facetable = catalog.filter((f) => f.facetableOverride ?? f.facetable);
   if (facetable.length === 0) return [];
 
-  const descriptors: FacetDescriptor[] = [];
+  // One DB round trip per candidate field, run concurrently rather than
+  // sequentially — a dataset with a dozen facetable fields previously meant a
+  // dozen serial awaits (each waiting on the full latency of the last) before
+  // the facet panel could render at all.
+  const descriptors = await Promise.all(
+    facetable
+      // Only top-level keys survive passthrough into `attributes`.
+      .filter((field) => !field.path.includes(".") && !field.path.includes("[]"))
+      .map(async (field): Promise<FacetDescriptor | null> => {
+        const key = field.path.split(".")[0].replace(/\[\]$/, "");
 
-  for (const field of facetable) {
-    // Only top-level keys survive passthrough into `attributes`.
-    const key = field.path.split(".")[0].replace(/\[\]$/, "");
-    if (field.path.includes(".") || field.path.includes("[]")) continue;
+        const rows = await db()
+          .select({
+            value: sql<string>`${schema.leadAppearances.attributes}->>${key}`,
+            count: sql<number>`count(distinct ${schema.leadAppearances.leadId})::int`,
+          })
+          .from(schema.leadAppearances)
+          .where(
+            and(
+              eq(schema.leadAppearances.companyId, companyId),
+              eq(schema.leadAppearances.datasetId, datasetId),
+              eq(schema.leadAppearances.isSpam, false),
+              sql`${schema.leadAppearances.attributes} ? ${key}`,
+            ),
+          )
+          .groupBy(sql`${schema.leadAppearances.attributes}->>${key}`)
+          .orderBy(sql`count(distinct ${schema.leadAppearances.leadId}) DESC`)
+          .limit(FACETABLE_MAX_CARDINALITY);
 
-    const rows = await db()
-      .select({
-        value: sql<string>`${schema.leadAppearances.attributes}->>${key}`,
-        count: sql<number>`count(distinct ${schema.leadAppearances.leadId})::int`,
-      })
-      .from(schema.leadAppearances)
-      .where(
-        and(
-          eq(schema.leadAppearances.datasetId, datasetId),
-          eq(schema.leadAppearances.isSpam, false),
-          sql`${schema.leadAppearances.attributes} ? ${key}`,
-        ),
-      )
-      .groupBy(sql`${schema.leadAppearances.attributes}->>${key}`)
-      .orderBy(sql`count(distinct ${schema.leadAppearances.leadId}) DESC`)
-      .limit(FACETABLE_MAX_CARDINALITY);
+        const options = rows.filter((r) => r.value !== null && r.value !== "");
+        if (options.length < 2) return null;
 
-    const options = rows.filter((r) => r.value !== null && r.value !== "");
-    if (options.length < 2) continue;
+        return {
+          key: `attr.${key}`,
+          label: humanize(key),
+          kind: "enum",
+          options: options.map((r) => ({ value: r.value, label: humanize(r.value), count: r.count })),
+        };
+      }),
+  );
 
-    descriptors.push({
-      key: `attr.${key}`,
-      label: humanize(key),
-      kind: "enum",
-      options: options.map((r) => ({ value: r.value, label: humanize(r.value), count: r.count })),
-    });
-  }
-
-  return descriptors;
+  return descriptors.filter((d): d is FacetDescriptor => d !== null);
 }

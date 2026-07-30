@@ -12,3 +12,5 @@ export const leadFacetsQueryKey = (datasetId?: string) =>
 export const leadStatsQueryKey = (datasetId?: string) =>
   ["leads", "stats", datasetId ?? null] as const;
 export const leadAppearancesQueryKey = (leadId: string) => ["leads", "appearances", leadId] as const;
+export const leadAffiliationsQueryKey = (leadId: string) => ["leads", "affiliations", leadId] as const;
+export const leadValidationQueryKey = (leadId: string) => ["leads", "validation", leadId] as const;

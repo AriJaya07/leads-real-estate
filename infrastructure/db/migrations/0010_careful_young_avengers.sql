@@ -1,0 +1,2 @@
+CREATE INDEX "leads_location_trgm_idx" ON "leads" USING gin ("location" gin_trgm_ops);--> statement-breakpoint
+CREATE INDEX "target_companies_name_trgm_idx" ON "target_companies" USING gin ("name" gin_trgm_ops);

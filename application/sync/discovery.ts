@@ -1,9 +1,13 @@
 import "server-only";
-import { and, eq, inArray, notInArray } from "drizzle-orm";
+import { and, count, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
 import { getConnector } from "@/infrastructure/connectors/registry";
 import { DEFAULT_SYNC_INTERVAL_SECONDS } from "@/shared/constants";
+import { getCompanyPlan } from "@/application/billing/usage";
+import { createLogger } from "@/infrastructure/observability/logger";
 import type { RemoteDataset } from "@/domain/sync/ports";
+
+const log = createLogger("discovery");
 
 export interface DiscoveryResult {
   sourceId: string;
@@ -56,13 +60,14 @@ async function discoverDatasets(sourceId: string): Promise<DiscoveryResult> {
     return result;
   }
   if (!source.enabled) return result;
+  const companyId = source.companyId;
 
   const connector = getConnector(source.kind);
   const config = (source.config ?? {}) as SourceConfig;
 
   let remote: RemoteDataset[];
   try {
-    remote = await connector.listDatasets();
+    remote = await connector.listDatasets({ companyId });
   } catch (error) {
     result.errors.push(error instanceof Error ? error.message : String(error));
     return result;
@@ -85,13 +90,38 @@ async function discoverDatasets(sourceId: string): Promise<DiscoveryResult> {
   const byExternalId = new Map(existing.map((d) => [d.externalId, d]));
   const now = new Date();
 
+  // Checked once up front, tracked as a running count through the loop —
+  // discovery can add several new datasets in one pass, and this runs
+  // unattended (system trigger or admin click), so a limit hit degrades to
+  // "skip and log," never a thrown error. See application/billing/usage.ts.
+  const plan = await getCompanyPlan(companyId);
+  let activeDatasetCount = plan
+    ? (
+        await db()
+          .select({ value: count() })
+          .from(schema.datasets)
+          .where(and(eq(schema.datasets.companyId, companyId), sql`${schema.datasets.status} != 'archived'`))
+      )[0].value
+    : 0;
+
   for (const dataset of tracked) {
     const current = byExternalId.get(dataset.externalId);
 
     if (!current) {
+      if (plan && activeDatasetCount >= plan.maxDatasets) {
+        log.warn("dataset limit reached, skipping new dataset", {
+          companyId,
+          externalId: dataset.externalId,
+          limit: plan.maxDatasets,
+        });
+        result.errors.push(`Dataset limit reached (${plan.maxDatasets}) — "${dataset.externalId}" not tracked`);
+        continue;
+      }
+
       await db()
         .insert(schema.datasets)
         .values({
+          companyId,
           sourceId,
           externalId: dataset.externalId,
           name: dataset.name,
@@ -108,6 +138,7 @@ async function discoverDatasets(sourceId: string): Promise<DiscoveryResult> {
         })
         .onConflictDoNothing();
       result.added += 1;
+      activeDatasetCount += 1;
       continue;
     }
 
@@ -154,11 +185,22 @@ async function discoverDatasets(sourceId: string): Promise<DiscoveryResult> {
   return result;
 }
 
-export async function discoverAllSources(): Promise<DiscoveryResult[]> {
+/**
+ * Sweeps sources and reconciles their datasets. `companyId`, when provided
+ * (an admin clicking "Discover" from `/admin/datasets`), scopes the sweep to
+ * that company's own sources only. Omitted, it sweeps every company's
+ * sources — the system trigger route (`/api/trigger/discover`) relies on
+ * exactly this to drain the whole platform in one scheduled tick.
+ */
+export async function discoverAllSources(companyId?: string): Promise<DiscoveryResult[]> {
   const sources = await db()
     .select({ id: schema.sources.id })
     .from(schema.sources)
-    .where(eq(schema.sources.enabled, true));
+    .where(
+      companyId
+        ? and(eq(schema.sources.enabled, true), eq(schema.sources.companyId, companyId))
+        : eq(schema.sources.enabled, true),
+    );
 
   const results: DiscoveryResult[] = [];
   for (const source of sources) {

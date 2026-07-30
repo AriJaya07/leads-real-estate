@@ -4,18 +4,33 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { ExternalLink } from "lucide-react";
+import { toast } from "sonner";
+import { ExternalLink, X } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { IntentBadge } from "@/components/common/intent-badge";
 import { ScoreBadge } from "@/components/common/score-badge";
+import { PotentialPill } from "@/components/common/potential-pill";
 import { Spinner } from "@/components/common/spinner";
 import { saveLeadNotes, setLeadStatus } from "@/application/leads/lead.actions";
+import {
+  linkLeadToCompany,
+  linkLeadToExistingCompany,
+  unlinkLeadFromCompany,
+} from "@/application/companies/target-company.actions";
 import { LEAD_STATUSES, leadStatusLabel } from "@/application/leads/lead-status";
-import { useLeadAppearancesQuery } from "@/features/leads/queries";
+import {
+  useLeadAffiliationsQuery,
+  useLeadAppearancesQuery,
+  useLeadValidationQuery,
+  useTargetCompanySearchQuery,
+} from "@/features/leads/queries";
 import type { LeadAppearanceListItem, LeadListItem } from "@/application/leads/lead-queries";
 import { primaryLeadScore } from "@/domain/lead/ranking";
+
+const AFFILIATION_ROLES = ["unknown", "owner", "agent", "employee"] as const;
 
 interface EngagementContext {
   targetPostExternalId?: string | null;
@@ -129,6 +144,8 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
             <p className="text-muted-foreground text-sm">{lead.aiExplanation || "No signal yet."}</p>
           </section>
 
+          <LeadValidationSection leadId={lead.id} />
+
           <section className="grid grid-cols-2 gap-3 text-sm">
             <Field label="Wants" value={lead.propertyTypes.join(", ") || "—"} />
             <Field label="Where" value={lead.locations.join(", ") || "—"} />
@@ -166,6 +183,8 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
               </ul>
             )}
           </section>
+
+          <AffiliatedCompanies leadId={lead.id} />
 
           <section>
             <h3 className="mb-1.5 text-sm font-semibold">Status</h3>
@@ -289,6 +308,173 @@ function AppearanceCard({ appearance }: { appearance: LeadAppearanceListItem }) 
         </Button>
       )}
     </li>
+  );
+}
+
+/**
+ * Customer data validation and lead scoring (domain/scoring/lead-validation.ts)
+ * — a different question from the "AI analysis" panel above: that one asks
+ * "what does this person's text say" (buyer/seller/investor intent), this one
+ * asks "how much should we trust and prioritize this record" by grading the
+ * data itself (completeness, contactability, relevance, industry, location,
+ * engagement, business potential). Fetched lazily, same as appearances/affiliations.
+ */
+function LeadValidationSection({ leadId }: { leadId: string }) {
+  const { data: validation, isLoading } = useLeadValidationQuery(leadId);
+
+  return (
+    <section>
+      <h3 className="mb-1.5 text-sm font-semibold">Data validation &amp; lead score</h3>
+      {isLoading || !validation ? (
+        <p className="text-muted-foreground text-sm">Loading…</p>
+      ) : (
+        <>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <PotentialPill potential={validation.validationResult} />
+            <ScoreBadge score={validation.leadScore} label="lead score" />
+          </div>
+          <ul className="mb-2 flex flex-wrap gap-3 text-xs">
+            {(Object.keys(validation.breakdown) as (keyof typeof validation.breakdown)[]).map((key) => (
+              <li key={key} className="flex items-center gap-1">
+                <ScoreBadge score={validation.breakdown[key]} label={key} />
+                <span className="text-muted-foreground capitalize">{key.replace(/([A-Z])/g, " $1")}</span>
+              </li>
+            ))}
+          </ul>
+          <ul className="text-muted-foreground flex flex-col gap-1 text-sm">
+            {validation.reasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Manual linking only — genuinely new scope, not wired into ingestion. See
+ * docs/saas-database-schema.md's `target_companies` section for why.
+ */
+function AffiliatedCompanies({ leadId }: { leadId: string }) {
+  const queryClient = useQueryClient();
+  const { data: affiliations = [] } = useLeadAffiliationsQuery(leadId);
+  const [query, setQuery] = useState("");
+  const [role, setRole] = useState<(typeof AFFILIATION_ROLES)[number]>("unknown");
+  const [linking, setLinking] = useState(false);
+  const { data: suggestions = [] } = useTargetCompanySearchQuery(query);
+
+  function invalidate() {
+    void queryClient.invalidateQueries({ queryKey: ["leads", "affiliations", leadId] });
+    void queryClient.invalidateQueries({ queryKey: ["target-companies"] });
+  }
+
+  async function linkExisting(targetCompanyId: string) {
+    setLinking(true);
+    const result = await linkLeadToExistingCompany({ leadId, targetCompanyId, role });
+    setLinking(false);
+    if (result?.serverError || result?.validationErrors) {
+      toast.error(result?.serverError ?? "Could not link that company");
+      return;
+    }
+    setQuery("");
+    invalidate();
+  }
+
+  async function linkNew() {
+    if (!query.trim()) return;
+    setLinking(true);
+    const result = await linkLeadToCompany({ leadId, companyName: query.trim(), role });
+    setLinking(false);
+    if (result?.serverError || result?.validationErrors) {
+      toast.error(result?.serverError ?? "Could not link that company");
+      return;
+    }
+    setQuery("");
+    invalidate();
+  }
+
+  async function unlink(affiliationId: string) {
+    const result = await unlinkLeadFromCompany({ leadId, affiliationId });
+    if (result?.serverError) {
+      toast.error(result.serverError);
+      return;
+    }
+    invalidate();
+  }
+
+  const exactMatch = suggestions.find((s) => s.name.toLowerCase() === query.trim().toLowerCase());
+
+  return (
+    <section>
+      <h3 className="mb-1.5 text-sm font-semibold">Affiliated companies</h3>
+      {affiliations.length > 0 && (
+        <ul className="mb-2 flex flex-wrap gap-1.5">
+          {affiliations.map((affiliation) => (
+            <li
+              key={affiliation.id}
+              className="border-border bg-muted/40 flex items-center gap-1.5 rounded-full border py-0.5 pr-1 pl-2.5 text-xs"
+            >
+              {affiliation.targetCompany.name}
+              <span className="text-muted-foreground capitalize">· {affiliation.role}</span>
+              <button
+                type="button"
+                aria-label={`Unlink ${affiliation.targetCompany.name}`}
+                onClick={() => void unlink(affiliation.id)}
+                className="text-muted-foreground hover:text-foreground rounded-full p-0.5"
+              >
+                <X className="size-3" aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search or add a company…"
+          className="h-8 max-w-52 text-xs"
+        />
+        <select
+          value={role}
+          onChange={(event) => setRole(event.target.value as (typeof AFFILIATION_ROLES)[number])}
+          className="border-input bg-background h-8 rounded-md border px-2 text-xs capitalize"
+        >
+          {AFFILIATION_ROLES.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={linking || !query.trim()}
+          onClick={() => void (exactMatch ? linkExisting(exactMatch.id) : linkNew())}
+        >
+          {linking && <Spinner className="size-3.5" />}
+          Link
+        </Button>
+      </div>
+
+      {query.trim() && suggestions.length > 0 && (
+        <ul className="border-border bg-popover mt-1.5 flex max-w-64 flex-col gap-0.5 rounded-md border p-1">
+          {suggestions.map((suggestion) => (
+            <li key={suggestion.id}>
+              <button
+                type="button"
+                onClick={() => void linkExisting(suggestion.id)}
+                className="hover:bg-muted w-full rounded px-2 py-1 text-left text-xs"
+              >
+                {suggestion.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

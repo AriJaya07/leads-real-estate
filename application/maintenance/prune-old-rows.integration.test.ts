@@ -7,19 +7,23 @@ import { LOGIN_ATTEMPTS_RETENTION_DAYS, SYNC_EVENTS_RETENTION_DAYS } from "@/sha
 const DAY_MS = 86_400_000;
 
 async function seedSyncRun() {
+  const [company] = await db()
+    .insert(schema.companies)
+    .values({ name: `Retention Test Co ${crypto.randomUUID()}`, slug: `retention-${crypto.randomUUID()}` })
+    .returning();
   const [source] = await db()
     .insert(schema.sources)
-    .values({ kind: "manual", name: `retention-test-source-${crypto.randomUUID()}` })
+    .values({ companyId: company.id, kind: "manual", name: `retention-test-source-${crypto.randomUUID()}` })
     .returning();
   const [dataset] = await db()
     .insert(schema.datasets)
-    .values({ sourceId: source.id, externalId: "retention-dataset-1" })
+    .values({ companyId: company.id, sourceId: source.id, externalId: "retention-dataset-1" })
     .returning();
   const [run] = await db()
     .insert(schema.syncRuns)
-    .values({ datasetId: dataset.id, trigger: "manual", status: "succeeded" })
+    .values({ companyId: company.id, datasetId: dataset.id, trigger: "manual", status: "succeeded" })
     .returning();
-  return run.id;
+  return { companyId: company.id, syncRunId: run.id };
 }
 
 describe("pruneOldRows", () => {
@@ -32,15 +36,15 @@ describe("pruneOldRows", () => {
 
   it("deletes sync_events and login_attempts past their retention window, keeps recent ones", async () => {
     const now = new Date();
-    const syncRunId = await seedSyncRun();
+    const { companyId, syncRunId } = await seedSyncRun();
 
     const oldEvent = new Date(now.getTime() - (SYNC_EVENTS_RETENTION_DAYS + 1) * DAY_MS);
     const recentEvent = new Date(now.getTime() - (SYNC_EVENTS_RETENTION_DAYS - 1) * DAY_MS);
     await db()
       .insert(schema.syncEvents)
       .values([
-        { syncRunId, stage: "test", message: "old", at: oldEvent },
-        { syncRunId, stage: "test", message: "recent", at: recentEvent },
+        { companyId, syncRunId, stage: "test", message: "old", at: oldEvent },
+        { companyId, syncRunId, stage: "test", message: "recent", at: recentEvent },
       ]);
 
     const oldAttempt = new Date(now.getTime() - (LOGIN_ATTEMPTS_RETENTION_DAYS + 1) * DAY_MS);
@@ -65,8 +69,8 @@ describe("pruneOldRows", () => {
   });
 
   it("is a no-op when nothing is past the retention window", async () => {
-    const syncRunId = await seedSyncRun();
-    await db().insert(schema.syncEvents).values({ syncRunId, stage: "test", message: "fresh" });
+    const { companyId, syncRunId } = await seedSyncRun();
+    await db().insert(schema.syncEvents).values({ companyId, syncRunId, stage: "test", message: "fresh" });
     await db().insert(schema.loginAttempts).values({ email: "fresh@example.com", succeeded: true });
 
     const result = await pruneOldRows();

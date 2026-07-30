@@ -1,8 +1,9 @@
 import { BrandMark } from "@/components/brand/brand-mark";
+import type { Role } from "@/domain/auth/permissions";
 import { NavContent } from "./nav-content";
 
 /** Desktop only (`md:flex`) — below that, `MobileNav` covers the same nav via a drawer. */
-export function AppSidebar({ role }: { role: "admin" | "agent" }) {
+export function AppSidebar({ role }: { role: Role }) {
   return (
     <aside
       aria-label="Main navigation"

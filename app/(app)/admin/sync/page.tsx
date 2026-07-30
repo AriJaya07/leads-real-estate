@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { requireAdmin } from "@/application/auth/current-user";
+import { requireManager } from "@/application/auth/current-user";
 import { getRecentSyncRuns, getSyncOverview } from "@/application/datasets/dataset-queries";
 import { PageHeader } from "@/components/common/page-header";
 import { StatTile } from "@/components/common/stat-tile";
@@ -10,8 +10,8 @@ import { SyncRunsTable } from "@/features/datasets/components/sync-runs-table";
 
 export const metadata: Metadata = { title: "Sync activity" };
 
-async function Overview() {
-  const overview = await getSyncOverview();
+async function Overview({ companyId }: { companyId: string }) {
+  const overview = await getSyncOverview(companyId);
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
       <StatTile label="Datasets" value={overview.datasets} hint={`${overview.active} active`} />
@@ -33,13 +33,13 @@ async function Overview() {
   );
 }
 
-async function RecentActivity() {
-  const runs = await getRecentSyncRuns(50);
+async function RecentActivity({ companyId }: { companyId: string }) {
+  const runs = await getRecentSyncRuns(companyId, 50);
   return <SyncRunsTable runs={runs} showDataset />;
 }
 
 export default async function AdminSyncPage() {
-  await requireAdmin();
+  const user = await requireManager();
 
   return (
     <div className="flex flex-col gap-6 p-4 sm:p-6">
@@ -49,11 +49,11 @@ export default async function AdminSyncPage() {
       />
 
       <Suspense fallback={<StatRowSkeleton />}>
-        <Overview />
+        <Overview companyId={user.companyId} />
       </Suspense>
 
       <Suspense fallback={<TableSkeleton />}>
-        <RecentActivity />
+        <RecentActivity companyId={user.companyId} />
       </Suspense>
     </div>
   );

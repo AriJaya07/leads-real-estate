@@ -19,21 +19,26 @@ const rulesWithIdentity: MappingRules = {
 };
 
 async function seedDataset() {
+  const [company] = await db()
+    .insert(schema.companies)
+    .values({ name: `Process Records Test Co ${crypto.randomUUID()}`, slug: `process-records-${crypto.randomUUID()}` })
+    .returning();
   const [source] = await db()
     .insert(schema.sources)
-    .values({ kind: "manual", name: `test-source-${crypto.randomUUID()}` })
+    .values({ companyId: company.id, kind: "manual", name: `test-source-${crypto.randomUUID()}` })
     .returning();
   const [dataset] = await db()
     .insert(schema.datasets)
-    .values({ sourceId: source.id, externalId: "ds-1" })
+    .values({ companyId: company.id, sourceId: source.id, externalId: "ds-1" })
     .returning();
-  return dataset.id;
+  return { companyId: company.id, datasetId: dataset.id };
 }
 
-async function seedRawRecord(datasetId: string, payload: Record<string, unknown>) {
+async function seedRawRecord(companyId: string, datasetId: string, payload: Record<string, unknown>) {
   const [record] = await db()
     .insert(schema.rawRecords)
     .values({
+      companyId,
       datasetId,
       sourceItemId: String(payload.id),
       payload,
@@ -53,18 +58,18 @@ describe("processRawRecords", () => {
   });
 
   it("upserts on rawRecordId, so reprocessing the same record never creates a second appearance or a second person", async () => {
-    const datasetId = await seedDataset();
-    const record = await seedRawRecord(datasetId, {
+    const { companyId, datasetId } = await seedDataset();
+    const record = await seedRawRecord(companyId, datasetId, {
       id: "post-1",
       text: "Looking to buy a villa in Canggu, budget $300k",
       time: "2026-01-01T00:00:00.000Z",
     });
 
-    const first = await processRawRecords([record], rules, { passthrough: true, datasetId });
+    const first = await processRawRecords([record], rules, { companyId, passthrough: true, datasetId });
     expect(first.created).toBe(1);
     expect(first.failed).toBe(0);
 
-    const second = await processRawRecords([record], rules, { passthrough: true, datasetId });
+    const second = await processRawRecords([record], rules, { companyId, passthrough: true, datasetId });
     expect(second.updated).toBe(1);
 
     const appearances = await db()
@@ -83,14 +88,14 @@ describe("processRawRecords", () => {
   });
 
   it("rolls up the created person's AI-analysis fields from the appearance's classification", async () => {
-    const datasetId = await seedDataset();
-    const record = await seedRawRecord(datasetId, {
+    const { companyId, datasetId } = await seedDataset();
+    const record = await seedRawRecord(companyId, datasetId, {
       id: "post-1b",
       text: "Looking to buy a villa in Canggu, budget $300k",
       time: "2026-01-01T00:00:00.000Z",
     });
 
-    await processRawRecords([record], rules, { passthrough: true, datasetId });
+    await processRawRecords([record], rules, { companyId, passthrough: true, datasetId });
 
     const [appearance] = await db()
       .select()
@@ -104,15 +109,37 @@ describe("processRawRecords", () => {
     expect(lead.aiExplanation.length).toBeGreaterThan(0);
   });
 
+  it("also computes and persists the data-validation lead score and quality tier", async () => {
+    const { companyId, datasetId } = await seedDataset();
+    const record = await seedRawRecord(companyId, datasetId, {
+      id: "post-1c",
+      text: "Looking to buy a villa in Canggu, budget $300k",
+      time: "2026-01-01T00:00:00.000Z",
+    });
+
+    await processRawRecords([record], rules, { companyId, passthrough: true, datasetId });
+
+    const [appearance] = await db()
+      .select()
+      .from(schema.leadAppearances)
+      .where(eq(schema.leadAppearances.rawRecordId, record.id));
+    const [lead] = await db().select().from(schema.leads).where(eq(schema.leads.id, appearance.leadId));
+
+    // domain/scoring/lead-validation.ts's composite — distinct from buyerScore,
+    // computed at the same rollup point (application/leads/identity-resolution.ts).
+    expect(lead.leadScore).toBeGreaterThan(0);
+    expect(["high_potential", "medium_potential", "low_potential"]).toContain(lead.dataQualityTier);
+  });
+
   it("creates a lead_states row exactly once, and never overwrites it on reprocess", async () => {
-    const datasetId = await seedDataset();
-    const record = await seedRawRecord(datasetId, {
+    const { companyId, datasetId } = await seedDataset();
+    const record = await seedRawRecord(companyId, datasetId, {
       id: "post-2",
       text: "cari villa di Canggu",
       time: "2026-01-01T00:00:00.000Z",
     });
 
-    await processRawRecords([record], rules, { passthrough: true, datasetId });
+    await processRawRecords([record], rules, { companyId, passthrough: true, datasetId });
     const [appearance] = await db()
       .select()
       .from(schema.leadAppearances)
@@ -124,7 +151,7 @@ describe("processRawRecords", () => {
       .where(eq(schema.leadStates.leadId, appearance.leadId));
 
     // Reprocessing (e.g. a remap) must not clobber the human-owned state row.
-    await processRawRecords([record], rules, { passthrough: true, datasetId });
+    await processRawRecords([record], rules, { companyId, passthrough: true, datasetId });
 
     const [state] = await db()
       .select()
@@ -135,23 +162,23 @@ describe("processRawRecords", () => {
   });
 
   it("links a near-duplicate repost to the canonical appearance instead of creating a second inbox item", async () => {
-    const datasetId = await seedDataset();
+    const { companyId, datasetId } = await seedDataset();
     const body =
       "Relocating to Bali and looking to buy a 3 bedroom villa in Canggu, budget around $400k, please DM me";
 
-    const first = await seedRawRecord(datasetId, {
+    const first = await seedRawRecord(companyId, datasetId, {
       id: "post-3a",
       text: body,
       time: "2026-01-01T00:00:00.000Z",
     });
-    const repost = await seedRawRecord(datasetId, {
+    const repost = await seedRawRecord(companyId, datasetId, {
       id: "post-3b",
       text: body,
       time: "2026-01-01T01:00:00.000Z",
     });
 
-    await processRawRecords([first], rules, { passthrough: true, datasetId });
-    const result = await processRawRecords([repost], rules, { passthrough: true, datasetId });
+    await processRawRecords([first], rules, { companyId, passthrough: true, datasetId });
+    const result = await processRawRecords([repost], rules, { companyId, passthrough: true, datasetId });
 
     expect(result.duplicates).toBe(1);
 
@@ -163,8 +190,8 @@ describe("processRawRecords", () => {
   });
 
   it("keeps processing remaining records when one record in the batch fails", async () => {
-    const datasetId = await seedDataset();
-    const good = await seedRawRecord(datasetId, {
+    const { companyId, datasetId } = await seedDataset();
+    const good = await seedRawRecord(companyId, datasetId, {
       id: "post-4",
       text: "looking to buy a house",
       time: "2026-01-01T00:00:00.000Z",
@@ -173,13 +200,14 @@ describe("processRawRecords", () => {
     // input), so this asserts the batch loop's per-record try/catch runs for real
     // by processing two independent good records — neither one aborts the batch
     // for the other, matching the "one bad record can't fail the whole page" rule.
-    const alsoGood = await seedRawRecord(datasetId, {
+    const alsoGood = await seedRawRecord(companyId, datasetId, {
       id: "post-5",
       text: "want to buy land",
       time: "2026-01-01T00:00:00.000Z",
     });
 
     const result = await processRawRecords([good, alsoGood], rules, {
+      companyId,
       passthrough: true,
       datasetId,
     });
@@ -203,15 +231,15 @@ describe("processRawRecords — person identity merge", () => {
    * different raw records) merges into one person, not two separate leads.
    */
   it("merges two appearances from the same authorExternalId into one person", async () => {
-    const datasetId = await seedDataset();
-    const first = await seedRawRecord(datasetId, {
+    const { companyId, datasetId } = await seedDataset();
+    const first = await seedRawRecord(companyId, datasetId, {
       id: "post-a",
       authorId: "fb-same-person",
       authorName: "Jane Doe",
       text: "Looking to buy a villa in Canggu",
       time: "2026-01-01T00:00:00.000Z",
     });
-    const second = await seedRawRecord(datasetId, {
+    const second = await seedRawRecord(companyId, datasetId, {
       id: "post-b",
       authorId: "fb-same-person",
       authorName: "Jane Doe",
@@ -219,8 +247,8 @@ describe("processRawRecords — person identity merge", () => {
       time: "2026-01-05T00:00:00.000Z",
     });
 
-    await processRawRecords([first], rulesWithIdentity, { passthrough: true, datasetId });
-    await processRawRecords([second], rulesWithIdentity, { passthrough: true, datasetId });
+    await processRawRecords([first], rulesWithIdentity, { companyId, passthrough: true, datasetId });
+    await processRawRecords([second], rulesWithIdentity, { companyId, passthrough: true, datasetId });
 
     const allLeads = await db().select().from(schema.leads);
     expect(allLeads).toHaveLength(1);
@@ -235,15 +263,15 @@ describe("processRawRecords — person identity merge", () => {
   });
 
   it("does not merge two different authorExternalIds into the same person", async () => {
-    const datasetId = await seedDataset();
-    const first = await seedRawRecord(datasetId, {
+    const { companyId, datasetId } = await seedDataset();
+    const first = await seedRawRecord(companyId, datasetId, {
       id: "post-c",
       authorId: "fb-person-1",
       authorName: "Jane Doe",
       text: "Looking to buy a villa",
       time: "2026-01-01T00:00:00.000Z",
     });
-    const second = await seedRawRecord(datasetId, {
+    const second = await seedRawRecord(companyId, datasetId, {
       id: "post-d",
       authorId: "fb-person-2",
       authorName: "John Smith",
@@ -251,25 +279,25 @@ describe("processRawRecords — person identity merge", () => {
       time: "2026-01-01T00:00:00.000Z",
     });
 
-    await processRawRecords([first], rulesWithIdentity, { passthrough: true, datasetId });
-    await processRawRecords([second], rulesWithIdentity, { passthrough: true, datasetId });
+    await processRawRecords([first], rulesWithIdentity, { companyId, passthrough: true, datasetId });
+    await processRawRecords([second], rulesWithIdentity, { companyId, passthrough: true, datasetId });
 
     const allLeads = await db().select().from(schema.leads);
     expect(allLeads).toHaveLength(2);
   });
 
   it("fills in a missing personal-info field on merge without overwriting an existing one", async () => {
-    const datasetId = await seedDataset();
+    const { companyId, datasetId } = await seedDataset();
     const rulesWithBio: MappingRules = { ...rulesWithIdentity, authorBio: { from: ["bio"] } };
 
-    const first = await seedRawRecord(datasetId, {
+    const first = await seedRawRecord(companyId, datasetId, {
       id: "post-e",
       authorId: "fb-bio-test",
       authorName: "Jane Doe",
       text: "Looking to buy a villa",
       time: "2026-01-01T00:00:00.000Z",
     });
-    const second = await seedRawRecord(datasetId, {
+    const second = await seedRawRecord(companyId, datasetId, {
       id: "post-f",
       authorId: "fb-bio-test",
       authorName: "Someone Else Entirely",
@@ -278,8 +306,8 @@ describe("processRawRecords — person identity merge", () => {
       time: "2026-01-02T00:00:00.000Z",
     });
 
-    await processRawRecords([first], rulesWithBio, { passthrough: true, datasetId });
-    await processRawRecords([second], rulesWithBio, { passthrough: true, datasetId });
+    await processRawRecords([first], rulesWithBio, { companyId, passthrough: true, datasetId });
+    await processRawRecords([second], rulesWithBio, { companyId, passthrough: true, datasetId });
 
     const [lead] = await db()
       .select()
@@ -290,6 +318,33 @@ describe("processRawRecords — person identity merge", () => {
     expect(lead.name).toBe("Jane Doe");
     // bio was missing — filled in by the second appearance.
     expect(lead.bio).toBe("Relocating from Australia");
+  });
+
+  it("never merges two different companies' appearances sharing the same authorExternalId", async () => {
+    const { companyId: companyA, datasetId: datasetA } = await seedDataset();
+    const { companyId: companyB, datasetId: datasetB } = await seedDataset();
+
+    const first = await seedRawRecord(companyA, datasetA, {
+      id: "post-shared-1",
+      authorId: "fb-shared-across-companies",
+      authorName: "Jane Doe",
+      text: "Looking to buy a villa",
+      time: "2026-01-01T00:00:00.000Z",
+    });
+    const second = await seedRawRecord(companyB, datasetB, {
+      id: "post-shared-2",
+      authorId: "fb-shared-across-companies",
+      authorName: "Jane Doe",
+      text: "Looking to buy a villa",
+      time: "2026-01-01T00:00:00.000Z",
+    });
+
+    await processRawRecords([first], rulesWithIdentity, { companyId: companyA, passthrough: true, datasetId: datasetA });
+    await processRawRecords([second], rulesWithIdentity, { companyId: companyB, passthrough: true, datasetId: datasetB });
+
+    // Same facebookId, but different companies — two people, not one.
+    const allLeads = await db().select().from(schema.leads);
+    expect(allLeads).toHaveLength(2);
   });
 });
 
@@ -319,20 +374,22 @@ describe("processRawRecords — engagement_like identity dedup", () => {
    * "content_post"`. See docs/lead-source-scaling-plan.md problem 2b.
    */
   it("collapses a re-scraped like on the same post into one appearance, not a duplicate", async () => {
-    const datasetId = await seedDataset();
+    const { companyId, datasetId } = await seedDataset();
     const payload = { id: "like-1", likerId: "user-1", likerName: "Ari", postId: "post-1", postTitle: "Villa" };
 
-    const first = await seedRawRecord(datasetId, payload);
+    const first = await seedRawRecord(companyId, datasetId, payload);
     // A resync re-emits the same like with a different sourceItemId (Apify
     // doesn't guarantee stable ids across scrapes of the same relationship).
-    const rescrape = await seedRawRecord(datasetId, { ...payload, id: "like-1-rescraped" });
+    const rescrape = await seedRawRecord(companyId, datasetId, { ...payload, id: "like-1-rescraped" });
 
     await processRawRecords([first], engagementRules, {
+      companyId,
       passthrough: true,
       datasetId,
       recordKind: "engagement_like",
     });
     const result = await processRawRecords([rescrape], engagementRules, {
+      companyId,
       passthrough: true,
       datasetId,
       recordKind: "engagement_like",
@@ -348,15 +405,15 @@ describe("processRawRecords — engagement_like identity dedup", () => {
   });
 
   it("keeps the same person liking two different posts as two separate appearances under one person", async () => {
-    const datasetId = await seedDataset();
-    const first = await seedRawRecord(datasetId, {
+    const { companyId, datasetId } = await seedDataset();
+    const first = await seedRawRecord(companyId, datasetId, {
       id: "like-2",
       likerId: "user-2",
       likerName: "Ari",
       postId: "post-a",
       postTitle: "Villa A",
     });
-    const second = await seedRawRecord(datasetId, {
+    const second = await seedRawRecord(companyId, datasetId, {
       id: "like-3",
       likerId: "user-2",
       likerName: "Ari",
@@ -365,11 +422,13 @@ describe("processRawRecords — engagement_like identity dedup", () => {
     });
 
     await processRawRecords([first], engagementRules, {
+      companyId,
       passthrough: true,
       datasetId,
       recordKind: "engagement_like",
     });
     const result = await processRawRecords([second], engagementRules, {
+      companyId,
       passthrough: true,
       datasetId,
       recordKind: "engagement_like",
@@ -398,8 +457,8 @@ describe("processRawRecords — engagement_like identity dedup", () => {
   });
 
   it("stamps recordKind onto the appearance row", async () => {
-    const datasetId = await seedDataset();
-    const record = await seedRawRecord(datasetId, {
+    const { companyId, datasetId } = await seedDataset();
+    const record = await seedRawRecord(companyId, datasetId, {
       id: "like-4",
       likerId: "user-4",
       likerName: "Ari",
@@ -407,6 +466,7 @@ describe("processRawRecords — engagement_like identity dedup", () => {
     });
 
     await processRawRecords([record], engagementRules, {
+      companyId,
       passthrough: true,
       datasetId,
       recordKind: "engagement_like",

@@ -1,5 +1,54 @@
 # Known Tech Debt
 
+## `storage_kb` usage counter only grows — nothing decrements it on delete/prune
+
+`incrementStorageUsage` (`application/billing/usage.ts`) adds to a company's storage
+counter every time a sync ingests new raw records, but nothing subtracts from it when
+`application/maintenance/prune-old-rows.ts` (or a manual dataset/company deletion)
+removes rows. Over a long enough time horizon a company's *reported* storage usage
+will overstate what's actually on disk, eventually blocking a plan downgrade
+(`application/billing/plan.actions.ts::changePlan`) that would otherwise be valid.
+Low urgency: storage limits are generous (see docs/pricing-strategy.md) and retention
+pruning is itself a slow, bounded process — revisit by adding a matching decrement in
+the retention job once real customers are hitting storage ceilings, or replace the
+incremental counter with a periodic recompute (`SUM(octet_length(payload))` over
+`raw_records`) if drift becomes a real problem.
+
+## Multi-tenant isolation is app-layer only — no Postgres RLS yet
+
+Every query in `application/` is scoped by `companyId` (audited file by file, proven by
+`e2e/multi-tenant.spec.ts` — see docs/saas-platform-architecture.md), but there is no
+database-level backstop: `infrastructure/db/client.ts`'s `db()` is a single shared
+connection-pool singleton with zero per-request scoping, so a real Postgres
+Row-Level-Security policy would need `SET LOCAL app.current_company_id` inside a
+per-request transaction — a structural change to `db()`'s contract touching every one
+of the ~20 files that import it directly, deliberately not attempted in the same pass
+as the query-scoping audit itself (see the retrofit's plan). Until this exists, a
+*new* query added later that forgets its `companyId` condition fails open (returns
+cross-tenant data) rather than failing closed. Revisit once there's a concrete need
+for defense-in-depth beyond "every query was audited once" — e.g. before onboarding a
+customer with real compliance requirements.
+
+## `/admin/sync`'s activity feed can show stale data right after a triggered sync — pre-existing, not tenant-scoping related
+
+Found while verifying the multi-tenant retrofit's `e2e/sync-activity.spec.ts`, confirmed
+unrelated to `companyId` scoping: `getRecentSyncRuns`/`getSyncOverview`
+(`application/datasets/dataset-queries.ts`) are correct — a raw SQL query with the exact
+same `WHERE company_id = ...` clause returns the just-completed run immediately after
+`runSync` commits. The UI still shows "No sync runs yet," because the sidebar's `next/link`
+to `/admin/sync` (viewport-triggered automatic prefetch, per architecture.md's Navigation
+section) renders and caches that page **before** the sync starts — confirmed by timestamp:
+the cached `getRecentSyncRuns` call logged ~1.5s earlier than the `sync_runs` row's own
+`started_at`. `runSync`'s `updateTag(datasetsRegistryTag())`/`updateTag(leadsTag())` calls
+(unchanged by this retrofit) don't appear to reach that prefetched cache entry, so
+navigating to `/admin/sync` right after triggering a sync reuses the stale empty result —
+even across a full page reload, so it isn't purely a client-side prefetch cache either.
+Not fixed here: root-causing it needs reading `node_modules/next/dist/docs/` on this Next
+16 version's exact prefetch + `"use cache"` + `updateTag` interaction (per AGENTS.md), which
+is a different, pre-existing class of bug from anything this retrofit touched — the
+underlying data layer is provably correct. Reproduce with `npx playwright test
+e2e/sync-activity.spec.ts`.
+
 ## ~~`[object Object]` rendering in the lead detail sheet's passthrough attributes~~ — fixed
 
 `features/leads/components/lead-detail-sheet.tsx`'s "Source fields" panel rendered
@@ -39,19 +88,19 @@ revalidation. If that lag ever needs to shrink for a live-updating surface, the 
 a shorter `staleTime` on the specific query (and a shorter `cacheLife` on its
 server-side counterpart), not a global one.
 
-## Admin table row memoization (`DatasetTable`, `TeamTable`) not applied
+## ~~Admin table row memoization (`DatasetTable`, `TeamTable`) not applied~~ — fixed
 
 `LeadInbox`'s row components (`LeadCard`, `LeadRow`) are `React.memo`'d because
 `isFetching`/`isPlaceholderData` toggling is a *wrapper*-level state change — every row
-was re-rendering for a prop set that hadn't actually changed. `DatasetTable` has a
-similar shape (`busyId` state, one row's `disabled={busyId === dataset.id}` flips while
-every other row's `disabled` prop evaluates to the same `false` before and after), so
-the same fix would save the same kind of wasted re-render. Left as-is because dataset
-and team lists are small (tens of rows, not a paginated hundreds-deep list like leads)
-and the win is marginal at that size — worth doing if either table's row count grows
-enough to matter; the recipe is `features/leads/components/lead-inbox.tsx`'s `LeadRow`.
-`TeamTable` doesn't have this issue at all — its `busy` flag legitimately changes every
-row's `disabled` prop simultaneously, so memoizing its rows wouldn't skip any work.
+was re-rendering for a prop set that hadn't actually changed. `DatasetTable` had the
+same shape (`busyId` state, one row's `disabled={busyId === dataset.id}` flips while
+every other row's `disabled` prop evaluates to the same `false` before and after) —
+its `DatasetRow` is now memoized the same way, as is `ActorTemplateManager`'s
+`TemplateRow` (`features/collection/components/actor-template-manager.tsx`), which has
+the identical `busyId`-toggle shape. `TeamTable` doesn't have this issue at all — its
+`busy` flag legitimately changes every row's `disabled` prop simultaneously, so
+memoizing its rows wouldn't skip any work; left un-memoized deliberately, not an
+oversight.
 
 ## `facetsTag()` (`application/cache-tags.ts`) is defined but unused
 
@@ -187,17 +236,25 @@ change — leaves the existing rows untouched and logs via the structured logger
 than throwing; budget filtering degrades to "stale" in that case, never to "broken."
 Nothing calls this on a schedule today — see "no scheduled trigger" below.
 
-## No LLM classifier or rollup yet — `LeadClassifier`/`LeadIntelligence` ports are unused beyond the rules implementations
+## LLM classifier is shadow-mode scaffolding only — rollup still has no second implementation
 
-`domain/scoring/types.ts::LeadClassifier` (`RULES_CLASSIFIER_ID = "rules@2"`) and
+`infrastructure/ai/llm-classifier.ts` now implements `domain/scoring/types.ts::LeadClassifier`
+(`LLM_CLASSIFIER_ID = "llm@shadow-1"`) via the Anthropic Messages API, and
+`application/leads/shadow-classify.ts::runShadowClassification` fires it alongside
+`classifyWithRules` (`RULES_CLASSIFIER_ID = "rules@2"`) from `process-records.ts`,
+purely for comparison logging — gated behind `LLM_SHADOW_CLASSIFY_ENABLED` +
+`ANTHROPIC_API_KEY`, both optional and off by default, so this is a no-op for any
+deployment that hasn't opted in. Nothing persists the LLM result anywhere and there is
+no cutover path — the rules classifier remains the only thing that ever determines a
+persisted `lead_appearances.intent`/score. Before anyone considers a cutover: the
+shadow logs need to actually be evaluated against real lead volume, which hasn't
+happened yet (this scaffold shipped with no production traffic to compare against).
+
 `domain/scoring/lead-rollup.ts::LeadIntelligence` (`RULES_ROLLUP_ID = "rules-rollup@1"`)
-are explicitly designed as seams for a future ML/LLM implementation each (shadow-mode
-validated per the README), but only the rules-based versions exist. Both `classifierId`
-columns (`lead_appearances.classifierId` per appearance, `leads.classifierId` for the
-person rollup) are stored specifically so a future swap can be measured/rolled out
-incrementally, but there is no A/B or shadow-mode plumbing built yet — just the columns.
-An engagement-only lead (no body text anywhere) is the concrete case where an LLM
-rollup would earn its keep first — see domain.md's "AI analysis" section.
+still has no second implementation — only the appearance-level classifier got a
+scaffold this round. An engagement-only lead (no body text anywhere) is the concrete
+case where an LLM rollup would earn its keep first — see domain.md's "AI analysis"
+section.
 
 ## `buyerScore`/`sellerScore`/`investorScore`/`confidenceScore` are first-pass heuristics, not calibrated
 
@@ -261,29 +318,30 @@ and `sync_events` past their retention window — `sync_runs` and `lead_events` 
 deliberately excluded (audit trail, not append-only noise). Nothing calls it on a
 schedule today — see "no scheduled trigger" below.
 
-## No scheduled trigger for discovery, sync, FX refresh, or retention pruning
+## ~~No scheduled trigger for discovery, sync, FX refresh, or retention pruning~~ — fixed
 
 Four `GET /api/cron/*` routes used to run these on a Vercel cron schedule
 (`vercel.json`): discovery every 15 min, sync every 5 min, FX refresh daily, retention
-weekly. All four routes, `vercel.json`, and the `CRON_SECRET` env var were removed —
-scheduling is moving to n8n, which is not wired up yet. The underlying functions are
-untouched and still fully tested:
+weekly. All four routes, `vercel.json`, and the `CRON_SECRET` env var were removed in
+favour of n8n-triggered endpoints. Replaced by four `POST /api/trigger/*` routes (see
+[api-patterns.md](api-patterns.md)'s System routes table), each guarded by
+`N8N_TRIGGER_SECRET`, calling the same underlying functions that survived the removal
+untouched:
 
-| Function | Was scheduled |
+| Function | Route |
 | --- | --- |
-| `application/sync/discovery.ts::discoverAllSources` | every 15 min |
-| `application/sync/sync-dataset.ts::dueDatasets` + `syncDataset` | every 5 min |
-| `application/fx/refresh-fx-rates.ts::refreshFxRates` | daily |
-| `application/maintenance/prune-old-rows.ts::pruneOldRows` | weekly |
+| `application/sync/discovery.ts::discoverAllSources` | `POST /api/trigger/discover` |
+| `application/sync/sync-dataset.ts::dueDatasets` + `syncDataset` | `POST /api/trigger/sync` |
+| `application/fx/refresh-fx-rates.ts::refreshFxRates` | `POST /api/trigger/fx` |
+| `application/maintenance/prune-old-rows.ts::pruneOldRows` | `POST /api/trigger/retention` |
 
-**Current effect of the gap**: dataset-API traffic from n8n (the majority of it — see
-architecture.md's "Polling was the primary change signal" note) is not picked up at
-all until either someone clicks "Sync" in `/admin/datasets` or an actor-run webhook
-fires. FX rates and old rows just don't refresh/prune. None of this corrupts data —
-everything degrades to "stale," not "wrong" — but it is a real gap, not a cosmetic one,
-until n8n (or something) calls these functions again. The fix is new trigger
-endpoints (see api-patterns.md's System routes section for the pattern to follow) once
-the n8n side is ready — not restoring the cron routes.
+This closes the code-side half of the gap — the routes exist, are auth-gated, and are
+ready to be called. It does **not** by itself fix ingestion cadence: nothing calls
+these routes until an actual n8n workflow is built to hit them on a schedule (that's
+external, n8n-side configuration, not something this repo can do on its own — see
+`docs/environment.md`'s "Scheduled jobs" section for the suggested cadence per route).
+Until that n8n workflow exists, the practical effect is unchanged from before: ingestion
+still only happens via an actor-run webhook or a manual "Sync" click.
 
 ## Migration history was collapsed once, during the person-centric refactor
 
@@ -296,6 +354,22 @@ time held data worth preserving (confirmed before doing it, not assumed) — dev
 Postgres instances were reset (`DROP SCHEMA public CASCADE`) and rebuilt from the new
 baseline. If this repository ever has real data to preserve, do not repeat this move —
 hand-write an incremental migration instead, however tedious.
+
+## Lead search's `locations`/`propertyTypes` branches are unindexed
+
+`application/leads/lead-queries.ts::buildConditions`'s `q` free-text search matches
+against `leads.locations`/`leads.propertyTypes` (the "Location"/"Category" parts of
+Section 8's search — see the dashboard work) via `EXISTS (SELECT 1 FROM
+unnest(...) WHERE ... ILIKE ...)`, which cannot use an index — it's a per-row scan.
+The scalar `leads.name`/`leads.location` branches of the same search *are* indexed
+(`leads_name_trgm_idx`, `leads_location_trgm_idx`, both GIN trigram). The natural fix —
+a functional GIN trigram index on `array_to_string(locations, ' ')` — was attempted and
+reverted: Postgres's `array_to_string()` is not marked `IMMUTABLE`, so a functional
+index on it is rejected outright at `CREATE INDEX` time (see the reverted migration
+history around `0010`). Revisit with either a small custom `IMMUTABLE` SQL wrapper
+function, or a generated/denormalized text column kept in sync at write time, if this
+ever shows up as a real bottleneck — low risk today at this app's per-company row
+counts.
 
 ## The product-level gap: buyer-side data collection
 

@@ -13,6 +13,7 @@ type Level = "debug" | "info" | "warn" | "error";
  */
 export class SyncLogger {
   private buffer: {
+    companyId: string;
     syncRunId: string;
     level: Level;
     stage: string;
@@ -20,10 +21,13 @@ export class SyncLogger {
     context?: Record<string, unknown>;
   }[] = [];
 
-  constructor(private readonly syncRunId: string) {}
+  constructor(
+    private readonly companyId: string,
+    private readonly syncRunId: string,
+  ) {}
 
   private push(level: Level, stage: string, message: string, context?: Record<string, unknown>) {
-    this.buffer.push({ syncRunId: this.syncRunId, level, stage, message, context });
+    this.buffer.push({ companyId: this.companyId, syncRunId: this.syncRunId, level, stage, message, context });
     if (this.buffer.length >= 50) void this.flush();
   }
 

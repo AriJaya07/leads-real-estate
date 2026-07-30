@@ -18,6 +18,6 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const filters = parseLeadFilters(request.nextUrl.searchParams);
-  const page = await queryLeads(filters);
+  const page = await queryLeads(user.companyId, filters);
   return NextResponse.json({ page });
 }

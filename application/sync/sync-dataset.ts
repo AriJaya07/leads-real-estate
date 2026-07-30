@@ -24,6 +24,7 @@ import {
 import { processRawRecords } from "@/application/leads/process-records";
 import { SyncLogger } from "./sync-logger";
 import { dispatchAlertsForLeads } from "@/application/alerting/dispatch";
+import { incrementRawRecordUsage, incrementStorageUsage, isWithinMonthlyBudget } from "@/application/billing/usage";
 
 interface SyncCursor {
   lastOffset?: number;
@@ -91,6 +92,26 @@ export async function syncDataset(
   if (dataset.status === "archived" || dataset.status === "missing") {
     return { datasetId, status: "skipped", reason: `Dataset is ${dataset.status}`, itemsSeen: 0, itemsNew: 0, leadsCreated: 0 };
   }
+  // Read off the dataset row already loaded above, not threaded in as a
+  // separate parameter — every write below (sync_runs, raw_records,
+  // dataset_versions, field_catalog, leads/lead_appearances via
+  // processRawRecords) tags itself with this.
+  const companyId = dataset.companyId;
+
+  // Checked before any Apify call this run makes (including the probe just
+  // below) — a company already over its monthly request budget shouldn't
+  // spend even one more call finding that out. Non-throwing: a background
+  // cron context degrades to "skip and log," never an uncaught failure.
+  if (!(await isWithinMonthlyBudget(companyId, "apifyRequests"))) {
+    return {
+      datasetId,
+      status: "skipped",
+      reason: "Monthly Apify request budget reached for this plan",
+      itemsSeen: 0,
+      itemsNew: 0,
+      leadsCreated: 0,
+    };
+  }
 
   const [source] = await db()
     .select()
@@ -108,7 +129,7 @@ export async function syncDataset(
   let remoteItemCount = dataset.itemCount;
   let remoteModifiedAt = dataset.remoteModifiedAt;
   try {
-    const remote = await connector.getDataset(dataset.externalId);
+    const remote = await connector.getDataset(dataset.externalId, { companyId });
     if (remote) {
       remoteItemCount = remote.itemCount;
       remoteModifiedAt = remote.modifiedAt;
@@ -147,10 +168,10 @@ export async function syncDataset(
   const startedAt = Date.now();
   const [run] = await db()
     .insert(schema.syncRuns)
-    .values({ datasetId, trigger, status: "running", startCursor: { ...cursor } })
+    .values({ companyId, datasetId, trigger, status: "running", startCursor: { ...cursor } })
     .returning({ id: schema.syncRuns.id });
 
-  const log = new SyncLogger(run.id);
+  const log = new SyncLogger(companyId, run.id);
   log.info("start", `Sync started (${trigger})`, {
     externalId: dataset.externalId,
     fromOffset: cursor.lastOffset ?? 0,
@@ -180,12 +201,13 @@ export async function syncDataset(
 
   try {
     for (let page = 0; page < SYNC_MAX_PAGES_PER_RUN; page++) {
-      const result = await connector.fetchItems(dataset.externalId, offset, SYNC_PAGE_SIZE);
+      const result = await connector.fetchItems(dataset.externalId, offset, SYNC_PAGE_SIZE, { companyId });
       if (result.items.length === 0) break;
 
       itemsSeen += result.items.length;
 
       const rows = result.items.map((payload, index) => ({
+        companyId,
         datasetId,
         sourceItemId: guessItemId(payload, offset + index),
         payload,
@@ -215,14 +237,26 @@ export async function syncDataset(
         })
         .returning({ id: schema.rawRecords.id, firstSeenAt: schema.rawRecords.firstSeenAt });
 
-      for (const row of inserted) {
+      let newRecordBytes = 0;
+      inserted.forEach((row, index) => {
         if (Date.now() - row.firstSeenAt.getTime() < 5_000) {
           itemsNew += 1;
           newRawRecordIds.push(row.id);
+          // Only newly-inserted rows count toward storage — an
+          // `onConflictDoUpdate` overwrite doesn't meaningfully grow it the
+          // way a fresh row does.
+          newRecordBytes += Buffer.byteLength(JSON.stringify(rows[index].payload));
         } else {
           itemsUpdated += 1;
         }
-      }
+      });
+
+      // "Data fetch" counts everything pulled this page, new or updated —
+      // Apify/the upstream source was queried for all of it regardless of
+      // dedup outcome. Storage counts new rows only. Neither throws or
+      // blocks the run; a billing-metric failure must never break ingestion.
+      await incrementRawRecordUsage(companyId, result.items.length);
+      if (newRecordBytes > 0) await incrementStorageUsage(companyId, newRecordBytes);
 
       offset += result.items.length;
 
@@ -266,6 +300,7 @@ export async function syncDataset(
         await db()
           .insert(schema.datasetVersions)
           .values({
+            companyId,
             datasetId,
             versionNo: (previousVersion?.versionNo ?? 0) + 1,
             itemCount: remoteItemCount,
@@ -283,7 +318,7 @@ export async function syncDataset(
         });
       }
 
-      await upsertFieldCatalog(datasetId, fieldProfiles);
+      await upsertFieldCatalog(companyId, datasetId, fieldProfiles);
       await db()
         .update(schema.datasets)
         .set({ schemaFingerprint: fingerprint })
@@ -305,6 +340,7 @@ export async function syncDataset(
           .where(inArray(schema.rawRecords.id, ids));
 
         const processed = await processRawRecords(records, rules, {
+          companyId,
           passthrough,
           datasetId,
           recordKind,
@@ -315,7 +351,7 @@ export async function syncDataset(
         failed += processed.failed;
 
         if (processed.leadIds.length > 0) {
-          const alerted = await dispatchAlertsForLeads(processed.leadIds);
+          const alerted = await dispatchAlertsForLeads(companyId, processed.leadIds);
           if (alerted.sent > 0) {
             log.info("alert", `Dispatched ${alerted.sent} alert(s)`, { rules: alerted.ruleNames });
           }
@@ -454,10 +490,15 @@ export async function syncDataset(
   return { datasetId, status, reason: errorSummary ?? undefined, itemsSeen, itemsNew, leadsCreated, syncRunId: run.id };
 }
 
-async function upsertFieldCatalog(datasetId: string, profiles: FieldProfile[]): Promise<void> {
+async function upsertFieldCatalog(
+  companyId: string,
+  datasetId: string,
+  profiles: FieldProfile[],
+): Promise<void> {
   if (profiles.length === 0) return;
 
   const rows = profiles.map((profile) => ({
+    companyId,
     datasetId,
     path: profile.path,
     inferredType: profile.type,

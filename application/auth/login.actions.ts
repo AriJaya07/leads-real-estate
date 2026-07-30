@@ -3,7 +3,6 @@
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/infrastructure/db/client";
-import { allowedEmails } from "@/shared/config/env";
 import {
   MIN_PASSWORD_LENGTH,
   fakeVerify,
@@ -19,6 +18,7 @@ import {
 import { countRecentFailedAttempts, recordLoginAttempt } from "./login-attempts";
 import { bumpSessionVersion } from "./session-version";
 import { isLoginRateLimited } from "@/domain/auth/rate-limit";
+import type { Role } from "@/domain/auth/permissions";
 
 const credentialsSchema = z.object({
   email: z.string().email().transform((value) => value.trim().toLowerCase()),
@@ -28,11 +28,13 @@ const credentialsSchema = z.object({
 /** Deliberately identical for "no such user" and "wrong password". */
 const INVALID_CREDENTIALS = "Email or password is incorrect.";
 
-async function startSession(user: {
+/** Exported for `signup.actions.ts::signUp` — same "issue a real session" step, new account or not. */
+export async function startSession(user: {
   id: string;
   email: string;
-  role: "admin" | "agent";
+  role: Role;
   sessionVersion: number;
+  companyId: string;
 }) {
   await db().update(schema.users).set({ lastSeenAt: new Date() }).where(eq(schema.users.id, user.id));
   const token = await signSession({
@@ -40,82 +42,72 @@ async function startSession(user: {
     email: user.email,
     role: user.role,
     sessionVersion: user.sessionVersion,
+    companyId: user.companyId,
   });
   await setSessionCookie(token);
 }
 
 /**
- * Email + password sign-in.
- *
- * When the instance has no users yet, the first sign-in claims it as admin and
- * sets that password — so a fresh deployment needs no email provider, no seed
- * user and no CLI step. `AUTH_ALLOWED_EMAILS`, when set, restricts who may do
- * that; afterwards, accounts are created by an admin from /admin/team.
+ * Email + password sign-in. A fresh instance has no "claim the instance"
+ * bootstrap anymore — every account belongs to a company created via
+ * `signup.actions.ts::signUp`; accounts for an existing company are created by
+ * an admin from /admin/team.
  */
 export const signIn = actionClient.inputSchema(credentialsSchema).action(async ({ parsedInput }) => {
   const { email, password } = parsedInput;
 
-  const [{ count }] = await db()
-    .select({ count: sql<number>`count(*)::int` })
-    .from(schema.users);
+  // The whole check-verify-record sequence runs inside one transaction,
+  // serialized per email via a Postgres advisory lock held for the
+  // transaction's lifetime (`pg_advisory_xact_lock`, released automatically
+  // on commit/rollback). Holding it only around the *count check* isn't
+  // enough — the race is that concurrent requests each read "under the
+  // limit" before any of them has recorded its own failure, and password
+  // verification (the slow step) sits between those two things. Serializing
+  // the whole sequence per email is what actually closes it: a second
+  // concurrent `signIn` for the same email blocks until the first's attempt
+  // (success or failure) has been recorded. Different emails hash to
+  // different lock keys and never block each other, and outcomes are
+  // returned rather than thrown from inside the callback, since throwing
+  // would roll back the failed-attempt row this is trying to persist.
+  const outcome = await db().transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${email}))`);
 
-  if (count === 0) {
-    const allowed = allowedEmails();
-    if (allowed.length > 0 && !allowed.includes(email)) {
-      throw new ActionError(
-        "That address is not allowed to claim this instance. Check AUTH_ALLOWED_EMAILS.",
-      );
+    if (isLoginRateLimited(await countRecentFailedAttempts(email, tx))) {
+      return { status: "rate_limited" as const };
     }
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      throw new ActionError(
-        `Choose a password of at least ${MIN_PASSWORD_LENGTH} characters — this is the first admin account.`,
-      );
+
+    const [user] = await tx.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
+
+    if (!user?.passwordHash) {
+      // Same cost as a real check, so a missing account is indistinguishable.
+      await fakeVerify();
+      await recordLoginAttempt(email, false, tx);
+      return { status: "invalid" as const };
     }
 
-    const [created] = await db()
-      .insert(schema.users)
-      .values({
-        email,
-        role: "admin",
-        passwordHash: await hashPassword(password),
-        passwordSetAt: new Date(),
-      })
-      .returning();
+    if (!(await verifyPassword(password, user.passwordHash))) {
+      await recordLoginAttempt(email, false, tx);
+      return { status: "invalid" as const };
+    }
 
-    await startSession(created);
-    return { bootstrapped: true, mustChangePassword: false };
-  }
+    await recordLoginAttempt(email, true, tx);
+    return { status: "ok" as const, user };
+  });
 
   // Checked ahead of the credential lookup, and with the same fake-timing cost
   // as a real check on the way out — a rate-limited response must not be
   // distinguishable-by-latency from a normal wrong-password response, for the
   // same reason `fakeVerify()` exists at all.
-  if (isLoginRateLimited(await countRecentFailedAttempts(email))) {
+  if (outcome.status === "rate_limited") {
     await fakeVerify();
     throw new ActionError("Too many failed attempts. Try again in a few minutes.");
   }
-
-  const [user] = await db()
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.email, email))
-    .limit(1);
-
-  if (!user?.passwordHash) {
-    // Same cost as a real check, so a missing account is indistinguishable.
-    await fakeVerify();
-    await recordLoginAttempt(email, false);
+  if (outcome.status === "invalid") {
     throw new ActionError(INVALID_CREDENTIALS);
   }
 
-  if (!(await verifyPassword(password, user.passwordHash))) {
-    await recordLoginAttempt(email, false);
-    throw new ActionError(INVALID_CREDENTIALS);
-  }
-
-  await recordLoginAttempt(email, true);
-  await startSession(user);
-  return { bootstrapped: false, mustChangePassword: user.mustChangePassword };
+  await startSession(outcome.user);
+  return { bootstrapped: false, mustChangePassword: outcome.user.mustChangePassword };
 });
 
 /**
@@ -157,7 +149,13 @@ export const changePassword = authActionClientAllowPendingPasswordChange
       .where(eq(schema.users.id, ctx.user.userId));
 
     const sessionVersion = await bumpSessionVersion(ctx.user.userId);
-    await startSession({ id: ctx.user.userId, email: ctx.user.email, role: ctx.user.role, sessionVersion });
+    await startSession({
+      id: ctx.user.userId,
+      email: ctx.user.email,
+      role: ctx.user.role,
+      sessionVersion,
+      companyId: ctx.user.companyId,
+    });
 
     return { ok: true };
   });

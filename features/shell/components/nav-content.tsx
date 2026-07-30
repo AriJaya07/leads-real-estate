@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Database, Inbox, KanbanSquare, Settings2, TrendingUp, Users } from "lucide-react";
+import { CreditCard, Database, Download, Inbox, KanbanSquare, Settings2, TrendingUp, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { type Role, roleAtLeast } from "@/domain/auth/permissions";
 
 const NAV = [
   { href: "/leads", label: "Inbox", icon: Inbox },
@@ -11,11 +12,18 @@ const NAV = [
   { href: "/intelligence", label: "Intelligence", icon: TrendingUp },
 ];
 
-const ADMIN_NAV = [
+/** Manage projects and data — visible to manager and above. */
+const MANAGER_NAV = [
+  { href: "/admin/collection", label: "Collect data", icon: Download },
   { href: "/admin/datasets", label: "Datasets", icon: Database },
   { href: "/admin/sync", label: "Sync", icon: Settings2 },
-  { href: "/admin/team", label: "Team", icon: Users },
 ];
+
+/** Manage users and settings — visible to admin (and owner) only. */
+const ADMIN_NAV = [{ href: "/admin/team", label: "Team", icon: Users }];
+
+/** Spend decisions — visible to owner only. */
+const OWNER_NAV = [{ href: "/admin/billing", label: "Billing", icon: CreditCard }];
 
 /**
  * The nav item list itself, shared between the desktop sidebar and the mobile
@@ -27,7 +35,7 @@ export function NavContent({
   role,
   onNavigate,
 }: {
-  role: "admin" | "agent";
+  role: Role;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -57,12 +65,14 @@ export function NavContent({
     <nav className="flex flex-1 flex-col gap-1 p-2">
       {NAV.map((n) => item(n.href, n.label, n.icon))}
 
-      {role === "admin" && (
+      {roleAtLeast(role, "manager") && (
         <>
           <div className="text-muted-foreground mt-4 mb-1 px-3 text-[11px] font-semibold tracking-wider uppercase">
             Admin
           </div>
-          {ADMIN_NAV.map((n) => item(n.href, n.label, n.icon))}
+          {MANAGER_NAV.map((n) => item(n.href, n.label, n.icon))}
+          {roleAtLeast(role, "admin") && ADMIN_NAV.map((n) => item(n.href, n.label, n.icon))}
+          {role === "owner" && OWNER_NAV.map((n) => item(n.href, n.label, n.icon))}
         </>
       )}
     </nav>

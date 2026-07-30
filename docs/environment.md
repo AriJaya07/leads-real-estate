@@ -21,6 +21,11 @@ Copy `.env.example` to `.env` and fill in:
 | `AUTH_ALLOWED_EMAILS` | no | Comma-separated. Bootstrap guard only — restricts which address may claim the instance as first admin. Empty = anyone claims it. Not consulted after bootstrap; team members are added from `/admin/team` instead. |
 | `RESEND_API_KEY` | no | Only used for lead-alert emails. Sign-in never needs it. Without it, alerts log a warning instead of sending and the app runs fine. |
 | `RESEND_FROM_EMAIL` | no | Defaults to `DreamRue Lead Radar <onboarding@resend.dev>`. |
+| `WHATSAPP_API_TOKEN` | no | WhatsApp Cloud API token, only used for lead-alert WhatsApp messages. Without it (or `WHATSAPP_PHONE_NUMBER_ID`), alerts log a warning instead of sending. |
+| `WHATSAPP_PHONE_NUMBER_ID` | no | The WhatsApp Cloud API sender's phone number id. |
+| `N8N_TRIGGER_SECRET` | no | Min 16 chars. Shared secret for `POST /api/trigger/{discover,sync,fx,retention}` — see "Scheduled jobs" below. Unset means every trigger route always returns 401. |
+| `ANTHROPIC_API_KEY` | no | Only used by the shadow-mode LLM classifier (see `docs/tech-debt.md`). Unset means it never runs. |
+| `LLM_SHADOW_CLASSIFY_ENABLED` | no | Explicit opt-in to fire the shadow LLM classifier alongside the real rules classifier. Default off; needs `ANTHROPIC_API_KEY` too. |
 | `NODE_ENV` | no | `development` \| `test` \| `production`, defaults `development`. |
 
 Validation is Zod-based and fails fast with a readable message
@@ -55,32 +60,35 @@ same `discoverAllSources()`/`syncDataset()` functions any scheduler would.
 
 ## Scheduled jobs
 
-**There are none right now.** The app previously declared four Vercel crons in
-`vercel.json` (discovery every 15 min, sync every 5, FX daily, retention weekly), each
-hitting a `GET /api/cron/*` route behind a `CRON_SECRET`. All of that — routes,
-`vercel.json`, and the env var — was removed in favour of triggering from n8n, which
-is not wired up yet.
+The app previously declared four Vercel crons in `vercel.json` (discovery every 15
+min, sync every 5, FX daily, retention weekly), each hitting a `GET /api/cron/*` route
+behind a `CRON_SECRET`. All of that — routes, `vercel.json`, and the env var — was
+removed in favour of triggering from n8n.
 
-What survived, and is what an n8n workflow should call into once there are endpoints
-again:
+n8n is now the trigger. Four `POST /api/trigger/*` routes exist for exactly this, each
+guarded by `N8N_TRIGGER_SECRET` (checked with `secretsMatch()`, sent as either an
+`x-webhook-secret` header or `Authorization: Bearer <secret>`) — an n8n workflow should
+call each on its own schedule:
 
-| Work | Function | Was scheduled |
-| --- | --- | --- |
-| Dataset discovery | `application/sync/discovery.ts::discoverAllSources` | every 15 min |
-| Incremental sync | `application/sync/sync-dataset.ts::dueDatasets` → `syncDataset` | every 5 min |
-| FX refresh | `application/fx/refresh-fx-rates.ts::refreshFxRates` | daily 03:00 UTC |
-| Retention pruning | `application/maintenance/prune-old-rows.ts::pruneOldRows` | weekly |
+| Work | Route | Function | Suggested cadence |
+| --- | --- | --- | --- |
+| Dataset discovery | `POST /api/trigger/discover` | `application/sync/discovery.ts::discoverAllSources` | every 15 min |
+| Incremental sync | `POST /api/trigger/sync` | `application/sync/sync-dataset.ts::dueDatasets` → `syncDataset` | every 5 min |
+| FX refresh | `POST /api/trigger/fx` | `application/fx/refresh-fx-rates.ts::refreshFxRates` | daily |
+| Retention pruning | `POST /api/trigger/retention` | `application/maintenance/prune-old-rows.ts::pruneOldRows` | weekly |
 
 Note the sync pair specifically: per-dataset intervals still adapt (faster after new
 items, backing off when quiet, tightened on weekends Bali time — see
 `domain/sync/scheduling.ts::nextIntervalSeconds`), and `syncDataset` still writes the
-resulting `nextSyncDueAt` watermark that `dueDatasets()` reads. So an external
-scheduler can tick on a plain fixed interval and still get adaptive per-dataset
-behaviour for free — it should call `dueDatasets()` and sync only what that returns,
-not sync everything on every tick.
+resulting `nextSyncDueAt` watermark that `dueDatasets()` reads. So `/api/trigger/sync`
+can be called on a plain fixed interval and still get adaptive per-dataset behaviour
+for free — it only syncs the datasets `dueDatasets()` actually returns, not every
+dataset on every tick.
 
-See `docs/tech-debt.md`'s "no scheduled trigger" entry for what's currently degraded
-while this gap is open.
+Each route responds synchronously (unlike the Apify webhook's `after()`-deferred
+pattern) with `{ ok: true, ... }` on success or a `401`/`500` with `{ error }`/
+`{ ok: false, error }` on failure, so an n8n workflow can branch on the real result.
+See `docs/api-patterns.md`'s "System routes" section for the full pattern.
 
 ## Third-party services
 
@@ -89,8 +97,10 @@ while this gap is open.
 | Postgres | Everything — the only datastore | `DATABASE_URL` | No — hard requirement |
 | Apify | Dataset discovery + item ingestion | `APIFY_API_TOKEN`, admin `sources` row | No — the only connector implemented today |
 | Resend | Lead alert emails | `RESEND_API_KEY` (optional) | Yes — logs instead of sending |
+| WhatsApp Cloud API | Lead alert WhatsApp messages | `WHATSAPP_API_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` (optional) | Yes — logs instead of sending |
+| Anthropic | Shadow-mode LLM classifier (comparison logging only, never live) | `ANTHROPIC_API_KEY` + `LLM_SHADOW_CLASSIFY_ENABLED` (both optional, both off by default) | Yes — skipped entirely when either is unset |
 | frankfurter.dev | Daily FX rate refresh | No key needed | Yes — a failed refresh leaves existing `fx_rates` rows untouched, see `application/fx/refresh-fx-rates.ts` |
-| n8n | Upstream data producer (writes into Apify datasets) | Entirely external, not part of this repo | N/A |
+| n8n | Upstream data producer (writes into Apify datasets) **and** the trigger for discovery/sync/FX/retention via `POST /api/trigger/*` | `N8N_TRIGGER_SECRET` (optional) for the trigger side; data-producer side entirely external, not part of this repo | Trigger routes: N/A (401s if unconfigured) |
 
 There is no test/staging Apify token distinct from production configured anywhere in
 this repo — be careful running `npm run db:seed` or triggering a sync from

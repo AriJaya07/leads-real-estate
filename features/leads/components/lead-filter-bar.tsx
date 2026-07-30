@@ -52,13 +52,61 @@ export function LeadFilterBar({
           />
           <Input
             defaultValue={params.get("q") ?? ""}
-            placeholder="Search posts, authors, groups…"
+            placeholder="Search by name, company, location or category…"
             className="pl-8"
             onKeyDown={(event) => {
               if (event.key !== "Enter") return;
               const value = event.currentTarget.value.trim();
               update((next) => (value ? next.set("q", value) : next.delete("q")));
             }}
+          />
+        </div>
+
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground text-xs font-medium">Min lead score</span>
+          <Input
+            type="number"
+            min={0}
+            max={100}
+            defaultValue={params.get("minLeadScore") ?? ""}
+            placeholder="0"
+            className="w-16"
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              const value = event.currentTarget.value.trim();
+              update((next) => (value ? next.set("minLeadScore", value) : next.delete("minLeadScore")));
+            }}
+          />
+        </div>
+
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground text-xs font-medium">Collected</span>
+          <Input
+            type="date"
+            defaultValue={params.get("collectedAfter") ?? ""}
+            className="w-36"
+            aria-label="Collected after"
+            onChange={(event) =>
+              update((next) =>
+                event.currentTarget.value
+                  ? next.set("collectedAfter", event.currentTarget.value)
+                  : next.delete("collectedAfter"),
+              )
+            }
+          />
+          <span className="text-muted-foreground text-xs">to</span>
+          <Input
+            type="date"
+            defaultValue={params.get("collectedBefore") ?? ""}
+            className="w-36"
+            aria-label="Collected before"
+            onChange={(event) =>
+              update((next) =>
+                event.currentTarget.value
+                  ? next.set("collectedBefore", event.currentTarget.value)
+                  : next.delete("collectedBefore"),
+              )
+            }
           />
         </div>
 

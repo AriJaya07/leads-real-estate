@@ -1,30 +1,9 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
-import { sql } from "drizzle-orm";
-import { db, schema } from "@/infrastructure/db/client";
+import Link from "next/link";
 import { LoginForm } from "@/features/auth/components/login-form";
 import { BrandMark } from "@/components/brand/brand-mark";
-import { Skeleton } from "@/components/ui/skeleton";
 
 export const metadata: Metadata = { title: "Sign in" };
-
-async function Form() {
-  const [{ count }] = await db()
-    .select({ count: sql<number>`count(*)::int` })
-    .from(schema.users);
-
-  return <LoginForm isFirstRun={count === 0} />;
-}
-
-function FormSkeleton() {
-  return (
-    <div className="flex flex-col gap-4" aria-hidden>
-      <Skeleton className="h-9 w-full" />
-      <Skeleton className="h-9 w-full" />
-      <Skeleton className="h-8 w-full" />
-    </div>
-  );
-}
 
 export default function LoginPage() {
   return (
@@ -38,10 +17,14 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Counting users is a database read, so it streams. */}
-        <Suspense fallback={<FormSkeleton />}>
-          <Form />
-        </Suspense>
+        <LoginForm />
+
+        <p className="text-muted-foreground mt-6 text-center text-sm">
+          New here?{" "}
+          <Link href="/signup" className="text-foreground underline underline-offset-4">
+            Create a company
+          </Link>
+        </p>
       </div>
     </main>
   );

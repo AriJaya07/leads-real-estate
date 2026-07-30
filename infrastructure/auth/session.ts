@@ -3,13 +3,16 @@ import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from "@/shared/constants";
 import { serverEnv } from "@/shared/config/env";
+import { type Role, isRole } from "@/domain/auth/permissions";
 
 export interface SessionPayload {
   userId: string;
   email: string;
-  role: "admin" | "agent";
+  role: Role;
   /** Compared against `users.sessionVersion` on every request — see application/auth/current-user.ts. */
   sessionVersion: number;
+  /** The tenant this user belongs to — every query in application/ scopes by this. */
+  companyId: string;
 }
 
 function secretKey(): Uint8Array {
@@ -30,12 +33,26 @@ async function verifySession(token: string): Promise<SessionPayload | null> {
     if (
       typeof payload.userId !== "string" ||
       typeof payload.email !== "string" ||
-      typeof payload.sessionVersion !== "number"
+      typeof payload.sessionVersion !== "number" ||
+      // No fallback for a missing/malformed companyId, unlike `role` below —
+      // defaulting to a sentinel company would be a cross-tenant bug, not a
+      // graceful degradation.
+      typeof payload.companyId !== "string"
     ) {
       return null;
     }
-    const role = payload.role === "admin" ? "admin" : "agent";
-    return { userId: payload.userId, email: payload.email, role, sessionVersion: payload.sessionVersion };
+    // Unrecognized/malformed role degrades to the lowest tier, never a
+    // silent privilege grant — `currentUser()` re-verifies the real role
+    // against the DB on every request anyway, so this only ever matters for
+    // the brief window before that re-check runs.
+    const role = typeof payload.role === "string" && isRole(payload.role) ? payload.role : "member";
+    return {
+      userId: payload.userId,
+      email: payload.email,
+      role,
+      sessionVersion: payload.sessionVersion,
+      companyId: payload.companyId,
+    };
   } catch {
     return null;
   }

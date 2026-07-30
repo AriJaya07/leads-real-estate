@@ -207,8 +207,26 @@ security boundary), and `currentUser()` in
 against the database on every server action and page — that's the actual boundary.
 Cron/webhook routes carry their own bearer secret instead
 ([application/http/verify-secret.ts](../application/http/verify-secret.ts)) and are
-excluded from the proxy matcher. No email provider is involved in sign-in; the first
-account to sign in on a fresh instance claims admin.
+excluded from the proxy matcher. There is no "first sign-in claims admin" bootstrap —
+every account belongs to a company created via `/signup`
+([application/auth/signup.actions.ts](../application/auth/signup.actions.ts)), whose
+creator becomes that company's `owner`. See
+[saas-platform-architecture.md](saas-platform-architecture.md) for the full
+multi-tenant/role design.
+
+**Roles are a fixed, enforced hierarchy: `owner > admin > manager > member`**
+([domain/auth/permissions.ts](../domain/auth/permissions.ts)) — `roleAtLeast()` backs
+every page guard and action gate (`requireAdmin`/`requireManager`,
+`adminActionClient`/`managerActionClient`). Only an owner may grant or edit another
+owner (`canAssignRole`); at least one owner per company is always enforced. New
+teammates join via a real email invite
+([application/auth/invite.actions.ts](../application/auth/invite.actions.ts)) — a
+pending, expiring, single-use `invites` row, emailed a link (or shown on screen
+without a mail provider configured) — not the admin-issued temporary password that
+used to be the only path (that still exists for resetting an *existing* member's
+credential, see `team.actions.ts::resetTeamMemberPassword`). Self-service "forgot
+password" is a separate flow
+([application/auth/password-reset.actions.ts](../application/auth/password-reset.actions.ts)).
 
 **Sessions are revocable, not just verifiable.** A JWT is otherwise stateless and stays
 valid until its own expiry (14 days) no matter what happens to the account afterward —
@@ -235,8 +253,9 @@ the layout wraps `/account` too, and `requireUser()`'s own mustChangePassword re
 *targets* `/account` — enforcing it in the shared shell would loop forever on that exact
 route. See the comment on `requireUser()` and on `AuthedShell` in
 [app/(app)/layout.tsx](../app/(app)/layout.tsx) for the full reasoning. If you add a new
-protected page, give it its own `requireUser()`/`requireAdmin()` call — don't assume the
-layout covers it.
+protected page, give it its own `requireUser()`/`requireManager()`/`requireAdmin()` call
+(manager+ for "manage projects and data" pages like datasets/sync, admin+ for "manage
+users and settings" pages like team) — don't assume the layout covers it.
 
 ## Cache invalidation
 

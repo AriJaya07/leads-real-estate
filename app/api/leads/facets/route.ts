@@ -9,8 +9,8 @@ export async function GET(request: NextRequest) {
 
   const datasetId = request.nextUrl.searchParams.get("datasetId") ?? undefined;
   const [facets, dynamicFacets] = await Promise.all([
-    getLeadFacets(datasetId),
-    datasetId ? getDynamicAttributeFacets(datasetId) : Promise.resolve([]),
+    getLeadFacets(user.companyId, datasetId),
+    datasetId ? getDynamicAttributeFacets(user.companyId, datasetId) : Promise.resolve([]),
   ]);
 
   return NextResponse.json({ facets: [...facets, ...dynamicFacets] });

@@ -4,10 +4,19 @@ import { db, schema } from "@/infrastructure/db/client";
 import { bumpSessionVersion } from "./session-version";
 import { resetDb } from "@/test/integration/db-helpers";
 
+async function seedCompany() {
+  const [company] = await db()
+    .insert(schema.companies)
+    .values({ name: `Session Version Test Co ${crypto.randomUUID()}`, slug: `session-version-${crypto.randomUUID()}` })
+    .returning();
+  return company;
+}
+
 async function seedUser() {
+  const company = await seedCompany();
   const [user] = await db()
     .insert(schema.users)
-    .values({ email: `session-version-${crypto.randomUUID()}@example.com`, role: "agent" })
+    .values({ companyId: company.id, email: `session-version-${crypto.randomUUID()}@example.com`, role: "member" })
     .returning();
   return user;
 }

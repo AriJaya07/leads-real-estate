@@ -5,6 +5,10 @@ export const APIFY_API_BASE_URL = "https://api.apify.com/v2";
 export const SESSION_COOKIE_NAME = "dreamrue_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
 
+/** Every new company starts on a free trial of the Starter plan. See docs/pricing-strategy.md. */
+export const TRIAL_DAYS = 14;
+export const TRIAL_STARTER_PLAN_NAME = "Starter";
+
 /** Ingest page size. Small enough to stay well inside a serverless invocation. */
 export const SYNC_PAGE_SIZE = 500;
 /** Hard ceiling per invocation; the cursor is committed per page so the next run resumes. */
@@ -63,3 +67,14 @@ export const LOGIN_MAX_FAILED_ATTEMPTS = 5;
  */
 export const SYNC_EVENTS_RETENTION_DAYS = 30;
 export const LOGIN_ATTEMPTS_RETENTION_DAYS = 7;
+
+/**
+ * A repeated identical request (same template, same params) inside this window
+ * reuses the still-in-flight/just-finished request instead of starting a second
+ * Apify run — the "prevent unnecessary API usage" guard for the common case of a
+ * double-click or an impatient retry. See `application/collection/scrape-requests.actions.ts`.
+ */
+export const SCRAPE_REQUEST_DEDUP_WINDOW_MINUTES = 15;
+
+/** Curated defaults for the platform picker — the field itself stays free text, see collection.ts. */
+export const SCRAPE_PLATFORMS = ["instagram", "facebook", "linkedin", "other"] as const;

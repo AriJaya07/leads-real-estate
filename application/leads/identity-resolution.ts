@@ -9,7 +9,9 @@ import {
   type PersonalInfo,
 } from "@/domain/lead/identity";
 import { rollupPersonScores, type AppearanceForRollup } from "@/domain/scoring/lead-rollup";
+import { scoreAndValidateLead } from "@/domain/scoring/lead-validation";
 import type { ContactInfo } from "@/domain/scoring/types";
+import { incrementMonthlyLeadUsage } from "@/application/billing/usage";
 import { createLogger } from "@/infrastructure/observability/logger";
 
 const log = createLogger("identity-resolution");
@@ -29,10 +31,25 @@ export interface AppearanceIdentitySnapshot extends IdentityCandidate {
   contact: ContactInfo;
 }
 
-function matchCondition(key: { type: "facebookId" | "instagramId" | "profileUrl"; value: string }) {
-  if (key.type === "facebookId") return eq(schema.leads.facebookId, key.value);
-  if (key.type === "instagramId") return eq(schema.leads.instagramId, key.value);
-  return eq(schema.leads.profileUrl, key.value);
+/**
+ * AND'd with `companyId` — the actual identity-merge correctness fix. Without
+ * this, two different companies scraping the same public facebookId would
+ * still find and merge into each other's leads, even with the composite
+ * `(company_id, facebook_id)` unique index in place (that index only stops a
+ * *conflicting insert*; this is what stops the *lookup* from crossing tenants
+ * in the first place). See docs/saas-platform-architecture.md.
+ */
+function matchCondition(
+  companyId: string,
+  key: { type: "facebookId" | "instagramId" | "profileUrl"; value: string },
+) {
+  if (key.type === "facebookId") {
+    return and(eq(schema.leads.companyId, companyId), eq(schema.leads.facebookId, key.value));
+  }
+  if (key.type === "instagramId") {
+    return and(eq(schema.leads.companyId, companyId), eq(schema.leads.instagramId, key.value));
+  }
+  return and(eq(schema.leads.companyId, companyId), eq(schema.leads.profileUrl, key.value));
 }
 
 function toPersonalInfo(row: {
@@ -69,14 +86,17 @@ function toPersonalInfo(row: {
  * violation from `leads_facebook_id_key`/`leads_instagram_id_key`/
  * `leads_profile_url_key` and re-reads the winner's row instead of erroring.
  */
-export async function resolveIdentity(candidate: AppearanceIdentitySnapshot): Promise<string> {
+export async function resolveIdentity(
+  companyId: string,
+  candidate: AppearanceIdentitySnapshot,
+): Promise<string> {
   const keys = identityKeys(candidate);
 
   if (keys.length > 0) {
     const [existing] = await db()
       .select()
       .from(schema.leads)
-      .where(or(...keys.map(matchCondition)))
+      .where(or(...keys.map((key) => matchCondition(companyId, key))))
       .limit(1);
 
     if (existing) {
@@ -117,6 +137,7 @@ export async function resolveIdentity(candidate: AppearanceIdentitySnapshot): Pr
       const [created] = await db()
         .insert(schema.leads)
         .values({
+          companyId,
           facebookId: candidate.facebookId ?? null,
           instagramId: candidate.instagramId ?? null,
           profileUrl: normalizeProfileUrl(candidate.profileUrl),
@@ -128,13 +149,14 @@ export async function resolveIdentity(candidate: AppearanceIdentitySnapshot): Pr
           contact: candidate.contact,
         })
         .returning({ id: schema.leads.id });
+      await incrementMonthlyLeadUsage(companyId);
       return created.id;
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
       const [winner] = await db()
         .select({ id: schema.leads.id })
         .from(schema.leads)
-        .where(or(...keys.map(matchCondition)))
+        .where(or(...keys.map((key) => matchCondition(companyId, key))))
         .limit(1);
       if (winner) return winner.id;
       throw error;
@@ -148,6 +170,7 @@ export async function resolveIdentity(candidate: AppearanceIdentitySnapshot): Pr
   const [created] = await db()
     .insert(schema.leads)
     .values({
+      companyId,
       username: candidate.username ?? null,
       name: candidate.name,
       avatarUrl: candidate.avatarUrl,
@@ -156,6 +179,7 @@ export async function resolveIdentity(candidate: AppearanceIdentitySnapshot): Pr
       contact: candidate.contact,
     })
     .returning({ id: schema.leads.id });
+  await incrementMonthlyLeadUsage(companyId);
   return created.id;
 }
 
@@ -166,7 +190,7 @@ export async function resolveIdentity(candidate: AppearanceIdentitySnapshot): Pr
  * `lead_appearances_lead_idx`) and idempotent, same "derived, freely
  * regenerable" contract as the appearance-level scores it reads.
  */
-export async function recomputePersonRollup(leadId: string): Promise<void> {
+export async function recomputePersonRollup(companyId: string, leadId: string): Promise<void> {
   const rows = await db()
     .select({
       intent: schema.leadAppearances.intent,
@@ -179,10 +203,14 @@ export async function recomputePersonRollup(leadId: string): Promise<void> {
       contact: schema.leadAppearances.contact,
       postedAt: schema.leadAppearances.postedAt,
       scoreReasons: schema.leadAppearances.scoreReasons,
+      likes: schema.leadAppearances.likes,
+      comments: schema.leadAppearances.comments,
+      shares: schema.leadAppearances.shares,
     })
     .from(schema.leadAppearances)
     .where(
       and(
+        eq(schema.leadAppearances.companyId, companyId),
         eq(schema.leadAppearances.leadId, leadId),
         eq(schema.leadAppearances.isSpam, false),
         isNull(schema.leadAppearances.canonicalAppearanceId),
@@ -219,6 +247,7 @@ export async function recomputePersonRollup(leadId: string): Promise<void> {
     .from(schema.leadAppearances)
     .where(
       and(
+        eq(schema.leadAppearances.companyId, companyId),
         eq(schema.leadAppearances.leadId, leadId),
         eq(schema.leadAppearances.isSpam, false),
         isNull(schema.leadAppearances.canonicalAppearanceId),
@@ -227,6 +256,69 @@ export async function recomputePersonRollup(leadId: string): Promise<void> {
     )
     .orderBy(desc(schema.leadAppearances.postedAt))
     .limit(1);
+
+  // Current identity/contact fields — already written by `resolveIdentity`
+  // earlier in the same request (or an earlier one); this rollup only *reads*
+  // them, same division of labour `mergePersonalInfo` already established.
+  const [identity] = await db()
+    .select({
+      name: schema.leads.name,
+      avatarUrl: schema.leads.avatarUrl,
+      bio: schema.leads.bio,
+      username: schema.leads.username,
+      profileUrl: schema.leads.profileUrl,
+      location: schema.leads.location,
+      contact: schema.leads.contact,
+    })
+    .from(schema.leads)
+    .where(and(eq(schema.leads.id, leadId), eq(schema.leads.companyId, companyId)))
+    .limit(1);
+
+  const industryRows = await db()
+    .select({ industry: schema.targetCompanies.industry })
+    .from(schema.leadTargetCompanyAffiliations)
+    .innerJoin(
+      schema.targetCompanies,
+      eq(schema.targetCompanies.id, schema.leadTargetCompanyAffiliations.targetCompanyId),
+    )
+    .where(
+      and(
+        eq(schema.leadTargetCompanyAffiliations.leadId, leadId),
+        eq(schema.targetCompanies.companyId, companyId),
+      ),
+    );
+  const affiliatedIndustries = industryRows.map((r) => r.industry).filter((i): i is string => Boolean(i));
+
+  // Customer data validation and lead scoring (domain/scoring/lead-validation.ts) —
+  // a different question from the rollup above ("what does this person's text
+  // say"): this grades the record itself, persisted so the dashboard can
+  // filter/sort by it without recomputing per row. See
+  // application/leads/lead-validation.ts for the on-demand, richer (breakdown +
+  // reasons) version used by the lead detail sheet.
+  const validation = scoreAndValidateLead({
+    name: identity?.name ?? null,
+    avatarUrl: identity?.avatarUrl ?? null,
+    bio: identity?.bio ?? null,
+    username: identity?.username ?? null,
+    profileUrl: identity?.profileUrl ?? null,
+    location: identity?.location ?? null,
+    propertyTypes: rollup.propertyTypes,
+    budgetUsdMin: budgetSource?.budgetUsdMin ?? null,
+    budgetUsdMax: budgetSource?.budgetUsdMax ?? null,
+    leadType: rollup.leadType,
+    contact: identity?.contact ?? {},
+    buyerScore: rollup.buyerScore,
+    sellerScore: rollup.sellerScore,
+    investorScore: rollup.investorScore,
+    confidenceScore: rollup.confidenceScore,
+    affiliatedIndustries,
+    locations: rollup.locations,
+    appearanceCount: rollup.appearanceCount,
+    latestAppearanceAt: rollup.latestAppearanceAt,
+    totalLikes: rows.reduce((sum, r) => sum + r.likes, 0),
+    totalComments: rows.reduce((sum, r) => sum + r.comments, 0),
+    totalShares: rows.reduce((sum, r) => sum + r.shares, 0),
+  });
 
   await db()
     .update(schema.leads)
@@ -248,9 +340,11 @@ export async function recomputePersonRollup(leadId: string): Promise<void> {
       budgetUsdMax: budgetSource?.budgetUsdMax ?? null,
       latestAppearanceAt: rollup.latestAppearanceAt,
       appearanceCount: rollup.appearanceCount,
+      leadScore: validation.leadScore,
+      dataQualityTier: validation.validationResult,
       updatedAt: new Date(),
     })
-    .where(eq(schema.leads.id, leadId));
+    .where(and(eq(schema.leads.id, leadId), eq(schema.leads.companyId, companyId)));
 
   log.debug("rollup recomputed", { leadId, leadType: rollup.leadType, appearanceCount: rollup.appearanceCount });
 }

@@ -18,6 +18,7 @@ import {
   platformEnum,
   sourceKindEnum,
 } from "./enums";
+import { companies } from "./company";
 import type { FieldProfile, MappingRules } from "@/domain/dataset/types";
 
 /** A connector instance. Replaces APIFY_ACTOR_ID / APIFY_DATASET_ID env vars. */
@@ -25,6 +26,9 @@ export const sources = pgTable(
   "sources",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
     kind: sourceKindEnum("kind").notNull(),
     name: text("name").notNull(),
     /** Connector-specific settings, e.g. { actorIds: [...], namePatterns: [...] }. */
@@ -34,7 +38,13 @@ export const sources = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("sources_kind_name_key").on(t.kind, t.name)],
+  (t) => [
+    // Composite with companyId, replacing the old global (kind, name) uniqueness —
+    // two different companies both naming a source "Apify — Facebook scraper" is
+    // normal, not a conflict. See docs/saas-platform-architecture.md.
+    uniqueIndex("sources_company_kind_name_key").on(t.companyId, t.kind, t.name),
+    index("sources_company_idx").on(t.companyId),
+  ],
 );
 
 /**
@@ -76,6 +86,14 @@ export const datasets = pgTable(
   "datasets",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /**
+     * Denormalized from `sources.companyId` (a dataset's source always belongs
+     * to the same company) so every downstream query can filter on this table
+     * directly instead of joining through `sources`.
+     */
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
     sourceId: uuid("source_id")
       .notNull()
       .references(() => sources.id, { onDelete: "cascade" }),
@@ -117,6 +135,7 @@ export const datasets = pgTable(
     uniqueIndex("datasets_source_external_key").on(t.sourceId, t.externalId),
     index("datasets_status_idx").on(t.status),
     index("datasets_due_idx").on(t.nextSyncDueAt),
+    index("datasets_company_idx").on(t.companyId),
   ],
 );
 
@@ -125,6 +144,10 @@ export const datasetVersions = pgTable(
   "dataset_versions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Denormalized from `datasets.companyId`. */
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
     datasetId: uuid("dataset_id")
       .notNull()
       .references(() => datasets.id, { onDelete: "cascade" }),
@@ -137,7 +160,10 @@ export const datasetVersions = pgTable(
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("dataset_versions_no_key").on(t.datasetId, t.versionNo)],
+  (t) => [
+    uniqueIndex("dataset_versions_no_key").on(t.datasetId, t.versionNo),
+    index("dataset_versions_company_idx").on(t.companyId),
+  ],
 );
 
 /** Inferred schema per dataset. Drives dynamic filters, columns and chart dimensions. */
@@ -145,6 +171,10 @@ export const fieldCatalog = pgTable(
   "field_catalog",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Denormalized from `datasets.companyId`. */
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
     datasetId: uuid("dataset_id")
       .notNull()
       .references(() => datasets.id, { onDelete: "cascade" }),
@@ -161,7 +191,10 @@ export const fieldCatalog = pgTable(
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("field_catalog_dataset_path_key").on(t.datasetId, t.path)],
+  (t) => [
+    uniqueIndex("field_catalog_dataset_path_key").on(t.datasetId, t.path),
+    index("field_catalog_company_idx").on(t.companyId),
+  ],
 );
 
 /**

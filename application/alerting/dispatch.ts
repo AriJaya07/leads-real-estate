@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
 import { evaluatePredicate } from "@/domain/alerting/predicate";
 import { getNotifier } from "@/infrastructure/notifiers/registry";
@@ -52,6 +52,7 @@ function dedupeKey(ruleId: string, leadId: string, channel: string): string {
 }
 
 async function claimDelivery(
+  companyId: string,
   rule: AlertRuleRow,
   leadId: string,
   channel: string,
@@ -60,6 +61,7 @@ async function claimDelivery(
   const [claimed] = await db()
     .insert(schema.alertDeliveries)
     .values({
+      companyId,
       alertRuleId: rule.id,
       leadId,
       channel: channel as "email" | "whatsapp" | "slack" | "inapp",
@@ -82,7 +84,7 @@ async function claimDelivery(
  * per lead: forty pings in five minutes gets the channel muted, and a muted
  * channel is worth nothing.
  */
-export async function dispatchAlertsForLeads(leadIds: string[]): Promise<DispatchResult> {
+export async function dispatchAlertsForLeads(companyId: string, leadIds: string[]): Promise<DispatchResult> {
   const result: DispatchResult = {
     evaluated: 0,
     matched: 0,
@@ -95,10 +97,10 @@ export async function dispatchAlertsForLeads(leadIds: string[]): Promise<Dispatc
   const rules = await db()
     .select()
     .from(schema.alertRules)
-    .where(eq(schema.alertRules.enabled, true));
+    .where(and(eq(schema.alertRules.enabled, true), eq(schema.alertRules.companyId, companyId)));
   if (rules.length === 0) return result;
 
-  const leads = await getLeadsForDigest(leadIds);
+  const leads = await getLeadsForDigest(companyId, leadIds);
   result.evaluated = leads.length;
 
   const now = Date.now();
@@ -115,7 +117,7 @@ export async function dispatchAlertsForLeads(leadIds: string[]): Promise<Dispatc
         const claimed: { deliveryId: string; lead: AlertableLead }[] = [];
 
         for (const lead of matched) {
-          const deliveryId = await claimDelivery(rule, lead.id, channel, recipient);
+          const deliveryId = await claimDelivery(companyId, rule, lead.id, channel, recipient);
           if (deliveryId) claimed.push({ deliveryId, lead });
           else result.suppressed += 1;
         }
@@ -150,6 +152,7 @@ export async function dispatchAlertsForLeads(leadIds: string[]): Promise<Dispatc
             .insert(schema.leadEvents)
             .values(
               claimed.map((c) => ({
+                companyId,
                 leadId: c.lead.id,
                 type: "alerted" as const,
                 payload: { rule: rule.name, channel, recipient },

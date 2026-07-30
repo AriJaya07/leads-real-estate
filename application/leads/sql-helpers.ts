@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { leadRecordKindEnum, leadStatusEnum, leadTypeEnum } from "@/infrastructure/db/schema/enums";
+import { leadPotentialEnum, leadRecordKindEnum, leadStatusEnum, leadTypeEnum } from "@/infrastructure/db/schema/enums";
 
 /**
  * Builds a genuine `text[]` parameter.
@@ -42,4 +42,11 @@ export type LeadRecordKindValue = (typeof leadRecordKindEnum.enumValues)[number]
 export function validRecordKinds(values: string[]): LeadRecordKindValue[] {
   const allowed = new Set<string>(leadRecordKindEnum.enumValues);
   return values.filter((value): value is LeadRecordKindValue => allowed.has(value));
+}
+
+export type LeadPotentialValue = (typeof leadPotentialEnum.enumValues)[number];
+
+export function validDataQualityTiers(values: string[]): LeadPotentialValue[] {
+  const allowed = new Set<string>(leadPotentialEnum.enumValues);
+  return values.filter((value): value is LeadPotentialValue => allowed.has(value));
 }

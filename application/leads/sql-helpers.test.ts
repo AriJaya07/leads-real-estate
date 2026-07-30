@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { textArray, validLeadTypes, validStatuses } from "./sql-helpers";
+import { textArray, validDataQualityTiers, validLeadTypes, validStatuses } from "./sql-helpers";
 
 const dialect = new PgDialect();
 
@@ -53,5 +53,15 @@ describe("validLeadTypes / validStatuses", () => {
   it("returns an empty list when nothing is valid", () => {
     expect(validLeadTypes(["nope"])).toEqual([]);
     expect(validStatuses(["nope"])).toEqual([]);
+  });
+});
+
+describe("validDataQualityTiers", () => {
+  it("keeps known tiers and drops the rest", () => {
+    expect(validDataQualityTiers(["high_potential", "low_potential"])).toEqual([
+      "high_potential",
+      "low_potential",
+    ]);
+    expect(validDataQualityTiers(["high_potential", "made_up_tier"])).toEqual(["high_potential"]);
   });
 });

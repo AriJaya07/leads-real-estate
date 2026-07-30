@@ -15,9 +15,11 @@ import {
 import { datasets } from "./catalog";
 import { users } from "./auth";
 import { rawRecords } from "./sync";
+import { companies } from "./company";
 import {
   leadEventTypeEnum,
   leadIntentEnum,
+  leadPotentialEnum,
   leadRecordKindEnum,
   leadStatusEnum,
   leadTypeEnum,
@@ -42,6 +44,15 @@ export const leads = pgTable(
   "leads",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+
+    /**
+     * Identity-merge uniqueness below is scoped by this column: two different
+     * companies scraping the same public `facebookId` must never merge into
+     * one lead.
+     */
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
 
     // --- Identity — at least one of these is present; used for merge/dedup ---
     facebookId: text("facebook_id"),
@@ -70,6 +81,11 @@ export const leads = pgTable(
     classifierId: text("classifier_id").notNull().default("unclassified"),
     classifiedAt: timestamp("classified_at", { withTimezone: true }),
 
+    // --- Data validation / lead scoring (domain/scoring/lead-validation.ts) ---
+    /** 0-100 composite across completeness, contactability, relevance, industry, location, engagement, business potential. */
+    leadScore: integer("lead_score").notNull().default(0),
+    dataQualityTier: leadPotentialEnum("data_quality_tier").notNull().default("low_potential"),
+
     /** Union across every non-spam, non-duplicate appearance. Open vocabulary. */
     propertyTypes: text("property_types").array().notNull().default(sql`'{}'::text[]`),
     locations: text("locations").array().notNull().default(sql`'{}'::text[]`),
@@ -90,11 +106,24 @@ export const leads = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("leads_facebook_id_key").on(t.facebookId).where(sql`${t.facebookId} IS NOT NULL`),
-    uniqueIndex("leads_instagram_id_key").on(t.instagramId).where(sql`${t.instagramId} IS NOT NULL`),
-    uniqueIndex("leads_profile_url_key").on(t.profileUrl).where(sql`${t.profileUrl} IS NOT NULL`),
+    // Composite with companyId — the single most important correctness fix in
+    // the multi-tenant retrofit. A global unique index here would silently
+    // merge two different companies' leads that happen to share a scraped
+    // facebookId/instagramId/profileUrl. See docs/saas-platform-architecture.md.
+    uniqueIndex("leads_company_facebook_id_key")
+      .on(t.companyId, t.facebookId)
+      .where(sql`${t.facebookId} IS NOT NULL`),
+    uniqueIndex("leads_company_instagram_id_key")
+      .on(t.companyId, t.instagramId)
+      .where(sql`${t.instagramId} IS NOT NULL`),
+    uniqueIndex("leads_company_profile_url_key")
+      .on(t.companyId, t.profileUrl)
+      .where(sql`${t.profileUrl} IS NOT NULL`),
+    index("leads_company_idx").on(t.companyId),
     index("leads_lead_type_idx").on(t.leadType),
     index("leads_lead_type_buyer_score_idx").on(t.leadType, t.buyerScore),
+    index("leads_lead_score_idx").on(t.leadScore),
+    index("leads_data_quality_tier_idx").on(t.dataQualityTier),
     index("leads_latest_appearance_idx").on(t.latestAppearanceAt),
     index("leads_property_types_idx").using("gin", t.propertyTypes),
     index("leads_locations_idx").using("gin", t.locations),
@@ -103,6 +132,20 @@ export const leads = pgTable(
       sql`to_tsvector('simple', coalesce(${t.name}, '') || ' ' || coalesce(${t.username}, '') || ' ' || coalesce(${t.bio}, ''))`,
     ),
     index("leads_name_trgm_idx").using("gin", sql`${t.name} gin_trgm_ops`),
+    /**
+     * Backs the free-text search's location branch
+     * (`application/leads/lead-queries.ts::buildConditions`'s `q` handling),
+     * the scalar `leads.location ILIKE '%term%'` condition specifically. The
+     * `locations`/`propertyTypes` *array* branches of that same search can't
+     * get the equivalent treatment cheaply — a GIN trigram index needs an
+     * `IMMUTABLE` expression to index against, and Postgres's own
+     * `array_to_string()` is not marked `IMMUTABLE`, so a functional index on
+     * it is rejected at creation time. Those two branches stay an unindexed
+     * `unnest(...)` scan for now; acceptable at today's per-company row
+     * counts, worth revisiting (a small custom `IMMUTABLE` wrapper function,
+     * or a generated column) if it ever shows up as a real bottleneck.
+     */
+    index("leads_location_trgm_idx").using("gin", sql`${t.location} gin_trgm_ops`),
   ],
 );
 
@@ -117,6 +160,10 @@ export const leadAppearances = pgTable(
   "lead_appearances",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Denormalized from `datasets.companyId`. */
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
     leadId: uuid("lead_id")
       .notNull()
       .references(() => leads.id, { onDelete: "cascade" }),
@@ -240,6 +287,7 @@ export const leadAppearances = pgTable(
     index("lead_appearances_engagement_author_idx")
       .on(t.authorExternalId)
       .where(sql`${t.recordKind} != 'content_post'`),
+    index("lead_appearances_company_idx").on(t.companyId),
   ],
 );
 
@@ -255,6 +303,10 @@ export const leadStates = pgTable(
     leadId: uuid("lead_id")
       .primaryKey()
       .references(() => leads.id, { onDelete: "cascade" }),
+    /** Denormalized from `leads.companyId`. */
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
     status: leadStatusEnum("status").notNull().default("new"),
     assignedTo: uuid("assigned_to").references(() => users.id, { onDelete: "set null" }),
     priority: integer("priority").notNull().default(0),
@@ -269,6 +321,7 @@ export const leadStates = pgTable(
   (t) => [
     index("lead_states_status_idx").on(t.status),
     index("lead_states_assigned_idx").on(t.assignedTo),
+    index("lead_states_company_idx").on(t.companyId),
   ],
 );
 
@@ -277,6 +330,10 @@ export const leadEvents = pgTable(
   "lead_events",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Denormalized from `leads.companyId`. */
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
     leadId: uuid("lead_id")
       .notNull()
       .references(() => leads.id, { onDelete: "cascade" }),
@@ -285,7 +342,10 @@ export const leadEvents = pgTable(
     payload: jsonb("payload").$type<Record<string, unknown>>(),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("lead_events_lead_at_idx").on(t.leadId, t.at)],
+  (t) => [
+    index("lead_events_lead_at_idx").on(t.leadId, t.at),
+    index("lead_events_company_idx").on(t.companyId),
+  ],
 );
 
 /** Saved views are shareable, first-class objects rather than ad-hoc URLs. */
@@ -293,6 +353,10 @@ export const savedViews = pgTable(
   "saved_views",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Denormalized from `users.companyId`. */
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     ownerId: uuid("owner_id").references(() => users.id, { onDelete: "cascade" }),
     shared: boolean("shared").notNull().default(false),
@@ -300,7 +364,10 @@ export const savedViews = pgTable(
     sort: text("sort"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("saved_views_owner_idx").on(t.ownerId)],
+  (t) => [
+    index("saved_views_owner_idx").on(t.ownerId),
+    index("saved_views_company_idx").on(t.companyId),
+  ],
 );
 
 /** Daily rollup for currency normalisation; refreshed by `refreshFxRates()`. */
@@ -310,7 +377,76 @@ export const fxRates = pgTable("fx_rates", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * A B2B/prospect firm — genuinely new scope, not a rename of anything that
+ * exists. Today's product is deliberately person-centric (a lead is a
+ * person, never a company — see docs/domain.md); this table exists for
+ * manual linking from the lead detail sheet, not automatic extraction from
+ * scraped payloads (`domain/dataset/types.ts`'s `MappingRules` has no
+ * employer/company field concept). Named `target_companies`, not
+ * `companies`, to disambiguate from the tenant table.
+ */
+export const targetCompanies = pgTable(
+  "target_companies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** The tenant that discovered/owns this record — not the target firm's own identity. */
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    domain: text("domain"),
+    industry: text("industry"),
+    sizeRange: text("size_range"),
+    location: text("location"),
+    source: text("source"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("target_companies_company_idx").on(t.companyId),
+    // Dedup signal: two appearances mentioning the same domain within one
+    // tenant should resolve to one target company. Partial — most rows won't
+    // have a domain, and a plain unique index would reject a second NULL.
+    uniqueIndex("target_companies_company_domain_key")
+      .on(t.companyId, t.domain)
+      .where(sql`${t.domain} IS NOT NULL`),
+    // Backs the "Company" branch of the lead search's `q` free-text match.
+    index("target_companies_name_trgm_idx").using("gin", sql`${t.name} gin_trgm_ops`),
+  ],
+);
+
+/**
+ * Many-to-many, not a single FK on `leads` — a person's professional
+ * affiliation changes (they move firms), and the same person can
+ * legitimately be affiliated with more than one firm at once (an
+ * independent broker representing several agencies). A single FK can't
+ * express either without overwriting history.
+ */
+export const leadTargetCompanyAffiliations = pgTable(
+  "lead_target_company_affiliations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    targetCompanyId: uuid("target_company_id")
+      .notNull()
+      .references(() => targetCompanies.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("unknown"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    /** Null = current. */
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("lead_target_company_affiliations_lead_idx").on(t.leadId),
+    index("lead_target_company_affiliations_target_idx").on(t.targetCompanyId),
+  ],
+);
+
 export type LeadRow = typeof leads.$inferSelect;
 export type LeadAppearanceRow = typeof leadAppearances.$inferSelect;
 export type LeadStateRow = typeof leadStates.$inferSelect;
 export type LeadEventRow = typeof leadEvents.$inferSelect;
+export type TargetCompanyRow = typeof targetCompanies.$inferSelect;
+export type LeadTargetCompanyAffiliationRow = typeof leadTargetCompanyAffiliations.$inferSelect;

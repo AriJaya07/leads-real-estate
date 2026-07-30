@@ -5,7 +5,13 @@ import { db, schema } from "@/infrastructure/db/client";
 import { priorityScore } from "@/domain/lead/ranking";
 import { leadsTag } from "@/application/cache-tags";
 import type { LeadFilters } from "./filters.schema";
-import { textArray, validLeadTypes, validStatuses, validRecordKinds } from "./sql-helpers";
+import {
+  textArray,
+  validDataQualityTiers,
+  validLeadTypes,
+  validStatuses,
+  validRecordKinds,
+} from "./sql-helpers";
 import { prioritySortExpression } from "./priority-sql";
 import type { ContactInfo, ScoreReason } from "@/domain/scoring/types";
 
@@ -45,6 +51,10 @@ export interface LeadListItem {
   budgetCurrency: string | null;
   latestAppearanceAt: Date | null;
   appearanceCount: number;
+  /** Data validation / lead scoring (domain/scoring/lead-validation.ts) — distinct from the intent scores above. */
+  leadScore: number;
+  dataQualityTier: string;
+  createdAt: Date;
   primaryAppearance: PrimaryAppearance | null;
   status: string;
   assignedTo: string | null;
@@ -62,13 +72,14 @@ export interface LeadListItem {
  * `lead_appearances` rather than direct columns — a person isn't scoped to one
  * dataset/group/record-kind, they can have appearances across many.
  */
-function buildConditions(filters: LeadFilters): SQL[] {
-  const conditions: SQL[] = [];
+function buildConditions(companyId: string, filters: LeadFilters): SQL[] {
+  const conditions: SQL[] = [eq(schema.leads.companyId, companyId)];
 
   if (filters.datasetId) {
     conditions.push(sql`
       EXISTS (SELECT 1 FROM ${schema.leadAppearances}
         WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.companyId} = ${companyId}
         AND ${schema.leadAppearances.datasetId} = ${filters.datasetId})
     `);
   }
@@ -77,11 +88,26 @@ function buildConditions(filters: LeadFilters): SQL[] {
     const term = `%${filters.q}%`;
     conditions.push(
       or(
+        // Name
         ilike(schema.leads.name, term),
         ilike(schema.leads.username, term),
         ilike(schema.leads.bio, term),
+        // Location — the scalar column is backed by `leads_location_trgm_idx`;
+        // the array column below isn't (see that index's comment in
+        // infrastructure/db/schema/leads.ts for why), so it stays a per-row scan.
+        ilike(schema.leads.location, term),
+        sql`EXISTS (SELECT 1 FROM unnest(${schema.leads.locations}) AS loc WHERE loc ILIKE ${term})`,
+        // Category (property type) — same unindexed-array reasoning.
+        sql`EXISTS (SELECT 1 FROM unnest(${schema.leads.propertyTypes}) AS cat WHERE cat ILIKE ${term})`,
+        // Company — the target company this lead is affiliated with, if any.
+        sql`EXISTS (SELECT 1 FROM ${schema.leadTargetCompanyAffiliations}
+          JOIN ${schema.targetCompanies} ON ${schema.targetCompanies.id} = ${schema.leadTargetCompanyAffiliations.targetCompanyId}
+          WHERE ${schema.leadTargetCompanyAffiliations.leadId} = ${schema.leads.id}
+          AND ${schema.targetCompanies.companyId} = ${companyId}
+          AND ${schema.targetCompanies.name} ILIKE ${term})`,
         sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
           WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+          AND ${schema.leadAppearances.companyId} = ${companyId}
           AND (${schema.leadAppearances.body} ILIKE ${term}
                OR ${schema.leadAppearances.listingTitle} ILIKE ${term}
                OR ${schema.leadAppearances.sourceGroup} ILIKE ${term}))`,
@@ -102,6 +128,7 @@ function buildConditions(filters: LeadFilters): SQL[] {
     conditions.push(sql`
       EXISTS (SELECT 1 FROM ${schema.leadAppearances}
         WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.companyId} = ${companyId}
         AND ${schema.leadAppearances.recordKind}::text = ANY(${textArray(recordKinds)}))
     `);
   }
@@ -110,6 +137,7 @@ function buildConditions(filters: LeadFilters): SQL[] {
     conditions.push(sql`
       EXISTS (SELECT 1 FROM ${schema.leadAppearances}
         WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.companyId} = ${companyId}
         AND ${schema.leadAppearances.sourceGroup} = ANY(${textArray(filters.groups)}))
     `);
   }
@@ -121,11 +149,29 @@ function buildConditions(filters: LeadFilters): SQL[] {
     conditions.push(sql`${schema.leads.locations} && ${textArray(filters.locations)}`);
   }
 
+  if (filters.sourceIds.length) {
+    conditions.push(sql`
+      EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+        JOIN ${schema.datasets} ON ${schema.datasets.id} = ${schema.leadAppearances.datasetId}
+        WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.companyId} = ${companyId}
+        AND ${schema.datasets.sourceId}::text = ANY(${textArray(filters.sourceIds)}))
+    `);
+  }
+
+  const dataQualityTiers = validDataQualityTiers(filters.dataQuality);
+  if (dataQualityTiers.length) {
+    conditions.push(inArray(schema.leads.dataQualityTier, dataQualityTiers));
+  }
+
   if (filters.minBuyerScore !== undefined) {
     conditions.push(gte(schema.leads.buyerScore, filters.minBuyerScore));
   }
   if (filters.minConfidence !== undefined) {
     conditions.push(gte(schema.leads.confidenceScore, filters.minConfidence));
+  }
+  if (filters.minLeadScore !== undefined) {
+    conditions.push(gte(schema.leads.leadScore, filters.minLeadScore));
   }
   if (filters.budgetMin !== undefined) {
     conditions.push(gte(schema.leads.budgetUsdMax, filters.budgetMin));
@@ -151,6 +197,15 @@ function buildConditions(filters: LeadFilters): SQL[] {
     if (!Number.isNaN(date.getTime())) conditions.push(lte(schema.leads.latestAppearanceAt, date));
   }
 
+  if (filters.collectedAfter) {
+    const date = new Date(filters.collectedAfter);
+    if (!Number.isNaN(date.getTime())) conditions.push(gte(schema.leads.createdAt, date));
+  }
+  if (filters.collectedBefore) {
+    const date = new Date(filters.collectedBefore);
+    if (!Number.isNaN(date.getTime())) conditions.push(lte(schema.leads.createdAt, date));
+  }
+
   // Dynamic attributes discovered in the payload, now appearance-scoped. Values
   // are bound as parameters, and the key is confined to a jsonb path — no SQL
   // is built from user strings.
@@ -160,6 +215,7 @@ function buildConditions(filters: LeadFilters): SQL[] {
     conditions.push(sql`
       EXISTS (SELECT 1 FROM ${schema.leadAppearances}
         WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.companyId} = ${companyId}
         AND ${schema.leadAppearances.attributes}->>${key} = ANY(${textArray(values)}))
     `);
   }
@@ -194,7 +250,7 @@ function orderBy(sort: LeadFilters["sort"]) {
  * display via `DISTINCT ON`. The full history is `getLeadAppearances`, used by
  * the detail sheet's "Sources" list.
  */
-export function primaryAppearanceSubquery() {
+export function primaryAppearanceSubquery(companyId: string) {
   return db()
     .selectDistinctOn([schema.leadAppearances.leadId], {
       leadId: schema.leadAppearances.leadId,
@@ -208,7 +264,13 @@ export function primaryAppearanceSubquery() {
       scoreReasons: schema.leadAppearances.scoreReasons,
     })
     .from(schema.leadAppearances)
-    .where(and(eq(schema.leadAppearances.isSpam, false), isNull(schema.leadAppearances.canonicalAppearanceId)))
+    .where(
+      and(
+        eq(schema.leadAppearances.companyId, companyId),
+        eq(schema.leadAppearances.isSpam, false),
+        isNull(schema.leadAppearances.canonicalAppearanceId),
+      ),
+    )
     .orderBy(
       schema.leadAppearances.leadId,
       desc(schema.leadAppearances.intentScore),
@@ -225,10 +287,10 @@ export interface LeadPage {
   pageSize: number;
 }
 
-export async function queryLeads(filters: LeadFilters): Promise<LeadPage> {
-  const conditions = buildConditions(filters);
-  const where = conditions.length ? and(...conditions) : undefined;
-  const primary = primaryAppearanceSubquery();
+export async function queryLeads(companyId: string, filters: LeadFilters): Promise<LeadPage> {
+  const conditions = buildConditions(companyId, filters);
+  const where = and(...conditions);
+  const primary = primaryAppearanceSubquery(companyId);
 
   const rows = await db()
     .select({
@@ -255,6 +317,9 @@ export async function queryLeads(filters: LeadFilters): Promise<LeadPage> {
       budgetCurrency: schema.leads.budgetCurrency,
       latestAppearanceAt: schema.leads.latestAppearanceAt,
       appearanceCount: schema.leads.appearanceCount,
+      leadScore: schema.leads.leadScore,
+      dataQualityTier: schema.leads.dataQualityTier,
+      createdAt: schema.leads.createdAt,
       primaryBody: primary.body,
       primaryListingTitle: primary.listingTitle,
       primaryExternalUrl: primary.externalUrl,
@@ -356,9 +421,9 @@ export interface AlertableLead {
  * digest email's "what to say/where to click" both come from this, not raw
  * `schema.leads` rows, since a person has no single body/link of their own.
  */
-export async function getLeadsForDigest(leadIds: string[]): Promise<AlertableLead[]> {
+export async function getLeadsForDigest(companyId: string, leadIds: string[]): Promise<AlertableLead[]> {
   if (leadIds.length === 0) return [];
-  const primary = primaryAppearanceSubquery();
+  const primary = primaryAppearanceSubquery(companyId);
 
   const rows = await db()
     .select({
@@ -389,7 +454,7 @@ export async function getLeadsForDigest(leadIds: string[]): Promise<AlertableLea
     })
     .from(schema.leads)
     .leftJoin(primary, eq(primary.leadId, schema.leads.id))
-    .where(inArray(schema.leads.id, leadIds));
+    .where(and(eq(schema.leads.companyId, companyId), inArray(schema.leads.id, leadIds)));
 
   return rows.map((row) => ({
     ...row,
@@ -432,7 +497,7 @@ export interface LeadAppearanceListItem {
  * their canonical appearance (via `duplicateCount`), same UI pattern the old
  * per-post inbox used, just scoped per-person now instead of globally.
  */
-export async function getLeadAppearances(leadId: string): Promise<LeadAppearanceListItem[]> {
+export async function getLeadAppearances(companyId: string, leadId: string): Promise<LeadAppearanceListItem[]> {
   const duplicateCount = sql<number>`(
     SELECT count(*)::int FROM ${schema.leadAppearances} AS dup
     WHERE dup.canonical_appearance_id = ${schema.leadAppearances.id}
@@ -457,6 +522,7 @@ export async function getLeadAppearances(leadId: string): Promise<LeadAppearance
     .from(schema.leadAppearances)
     .where(
       and(
+        eq(schema.leadAppearances.companyId, companyId),
         eq(schema.leadAppearances.leadId, leadId),
         eq(schema.leadAppearances.isSpam, false),
         isNull(schema.leadAppearances.canonicalAppearanceId),
@@ -474,6 +540,8 @@ export interface LeadStats {
   unassigned: number;
   newLast24h: number;
   contactable: number;
+  /** `dataQualityTier = 'high_potential'` — see domain/scoring/lead-validation.ts. */
+  highPotential: number;
   medianTimeToFirstTouchMinutes: number | null;
 }
 
@@ -494,16 +562,20 @@ export interface LeadStats {
  * hit. `leadsTag()` is invalidated immediately by every lead mutation
  * (`lead.actions.ts`) and in the background by every sync.
  */
-export async function getLeadStats(datasetId?: string): Promise<LeadStats> {
+export async function getLeadStats(companyId: string, datasetId?: string): Promise<LeadStats> {
   "use cache";
   cacheLife("minutes");
   cacheTag(leadsTag());
 
-  const scope = datasetId
-    ? sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
-        WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
-        AND ${schema.leadAppearances.datasetId} = ${datasetId})`
-    : undefined;
+  const scope = and(
+    eq(schema.leads.companyId, companyId),
+    datasetId
+      ? sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+          WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+          AND ${schema.leadAppearances.companyId} = ${companyId}
+          AND ${schema.leadAppearances.datasetId} = ${datasetId})`
+      : undefined,
+  );
 
   const [row] = await db()
     .select({
@@ -513,6 +585,7 @@ export async function getLeadStats(datasetId?: string): Promise<LeadStats> {
       unassigned: sql<number>`count(*) FILTER (WHERE ${schema.leadStates.assignedTo} IS NULL)::int`,
       newLast24h: sql<number>`count(*) FILTER (WHERE ${schema.leads.createdAt} > now() - interval '24 hours')::int`,
       contactable: sql<number>`count(*) FILTER (WHERE ${schema.leads.contact}->>'whatsapp' IS NOT NULL OR ${schema.leads.contact}->>'phone' IS NOT NULL)::int`,
+      highPotential: sql<number>`count(*) FILTER (WHERE ${schema.leads.dataQualityTier} = 'high_potential')::int`,
       medianTtft: sql<number | null>`
         percentile_cont(0.5) WITHIN GROUP (
           ORDER BY EXTRACT(EPOCH FROM (${schema.leadStates.firstContactedAt} - ${schema.leads.createdAt})) / 60
@@ -530,6 +603,7 @@ export async function getLeadStats(datasetId?: string): Promise<LeadStats> {
     unassigned: row.unassigned,
     newLast24h: row.newLast24h,
     contactable: row.contactable,
+    highPotential: row.highPotential,
     medianTimeToFirstTouchMinutes:
       row.medianTtft === null ? null : Math.round(Number(row.medianTtft)),
   };
@@ -550,7 +624,11 @@ export interface LeadTrendPoint {
  * with zero new leads shouldn't need a `generate_series` join for what's a
  * 30-element array either way.
  */
-export async function getLeadTrend(datasetId?: string, days = 30): Promise<LeadTrendPoint[]> {
+export async function getLeadTrend(
+  companyId: string,
+  datasetId?: string,
+  days = 30,
+): Promise<LeadTrendPoint[]> {
   "use cache";
   cacheLife("minutes");
   cacheTag(leadsTag());
@@ -559,6 +637,7 @@ export async function getLeadTrend(datasetId?: string, days = 30): Promise<LeadT
   const scope = datasetId
     ? sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
         WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+        AND ${schema.leadAppearances.companyId} = ${companyId}
         AND ${schema.leadAppearances.datasetId} = ${datasetId})`
     : undefined;
 
@@ -569,7 +648,7 @@ export async function getLeadTrend(datasetId?: string, days = 30): Promise<LeadT
       buyers: sql<number>`count(*) FILTER (WHERE ${schema.leads.leadType} = 'buyer')::int`,
     })
     .from(schema.leads)
-    .where(and(gte(schema.leads.createdAt, since), scope))
+    .where(and(eq(schema.leads.companyId, companyId), gte(schema.leads.createdAt, since), scope))
     .groupBy(sql`date_trunc('day', ${schema.leads.createdAt})`)
     .orderBy(sql`date_trunc('day', ${schema.leads.createdAt})`);
 
@@ -591,16 +670,20 @@ export interface BudgetStats {
 }
 
 /** Budget signal across active leads — USD-normalized, same fields `queryLeads` filters on. */
-export async function getBudgetStats(datasetId?: string): Promise<BudgetStats> {
+export async function getBudgetStats(companyId: string, datasetId?: string): Promise<BudgetStats> {
   "use cache";
   cacheLife("minutes");
   cacheTag(leadsTag());
 
-  const scope = datasetId
-    ? sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
-        WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
-        AND ${schema.leadAppearances.datasetId} = ${datasetId})`
-    : undefined;
+  const scope = and(
+    eq(schema.leads.companyId, companyId),
+    datasetId
+      ? sql`EXISTS (SELECT 1 FROM ${schema.leadAppearances}
+          WHERE ${schema.leadAppearances.leadId} = ${schema.leads.id}
+          AND ${schema.leadAppearances.companyId} = ${companyId}
+          AND ${schema.leadAppearances.datasetId} = ${datasetId})`
+      : undefined,
+  );
   const stated = sql`coalesce(${schema.leads.budgetUsdMax}, ${schema.leads.budgetUsdMin})`;
 
   const [row] = await db()

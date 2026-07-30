@@ -38,9 +38,15 @@ const leadFiltersSchema = z.object({
   propertyTypes: csv,
   locations: csv,
   groups: csv,
+  /** `sources.id` — which connector/platform produced this lead's appearances. */
+  sourceIds: csv,
+  /** `leads.dataQualityTier` — the validation tier from domain/scoring/lead-validation.ts. */
+  dataQuality: csv,
 
   minBuyerScore: z.coerce.number().int().min(0).max(100).optional(),
   minConfidence: z.coerce.number().int().min(0).max(100).optional(),
+  /** `leads.leadScore` — the composite data-validation score, distinct from `minBuyerScore`. */
+  minLeadScore: z.coerce.number().int().min(0).max(100).optional(),
   budgetMin: z.coerce.number().nonnegative().optional(),
   budgetMax: z.coerce.number().nonnegative().optional(),
 
@@ -51,6 +57,9 @@ const leadFiltersSchema = z.object({
   /** Filters on `leads.latestAppearanceAt` — when this person was last active. */
   postedAfter: z.string().optional(),
   postedBefore: z.string().optional(),
+  /** Filters on `leads.createdAt` — when this person was first collected, distinct from last-active above. */
+  collectedAfter: z.string().optional(),
+  collectedBefore: z.string().optional(),
 
   /** Dynamic, appearance-derived filters: `attr.paidPartnership=true`. */
   attr: z.record(z.string(), z.union([z.string(), z.array(z.string())])).default({}),
@@ -129,8 +138,11 @@ export function serializeLeadFilters(filters: LeadFilters): URLSearchParams {
   put("propertyTypes", filters.propertyTypes);
   put("locations", filters.locations);
   put("groups", filters.groups);
+  put("sourceIds", filters.sourceIds);
+  put("dataQuality", filters.dataQuality);
   put("minBuyerScore", filters.minBuyerScore);
   put("minConfidence", filters.minConfidence);
+  put("minLeadScore", filters.minLeadScore);
   put("budgetMin", filters.budgetMin);
   put("budgetMax", filters.budgetMax);
   put("hasContact", filters.hasContact);
@@ -138,6 +150,8 @@ export function serializeLeadFilters(filters: LeadFilters): URLSearchParams {
   put("unassigned", filters.unassigned);
   put("postedAfter", filters.postedAfter);
   put("postedBefore", filters.postedBefore);
+  put("collectedAfter", filters.collectedAfter);
+  put("collectedBefore", filters.collectedBefore);
   put("sort", filters.sort === DEFAULT_FILTERS.sort ? undefined : filters.sort);
   put("view", filters.view === DEFAULT_FILTERS.view ? undefined : filters.view);
   put("page", filters.page === DEFAULT_FILTERS.page ? undefined : filters.page);

@@ -11,6 +11,6 @@ export async function GET() {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const datasets = await listDatasets();
+  const datasets = await listDatasets(user.companyId);
   return NextResponse.json({ datasets });
 }

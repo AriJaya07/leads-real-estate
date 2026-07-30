@@ -25,3 +25,11 @@ export function datasetsRegistryTag(): string {
 export function leadTag(leadId: string): string {
   return `lead:${leadId}`;
 }
+
+export function actorTemplatesTag(): string {
+  return "actor-templates";
+}
+
+export function scrapeRequestsTag(): string {
+  return "scrape-requests";
+}

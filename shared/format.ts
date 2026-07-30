@@ -27,3 +27,14 @@ export function formatMinutes(minutes: number | null): string {
   if (minutes < 1440) return `${Math.round(minutes / 60)}h`;
   return `${Math.round(minutes / 1440)}d`;
 }
+
+/** `usage_counters`/`plans` store storage in KB — always render it as MB/GB, never a raw KB count. */
+export function formatStorageKb(kb: number): string {
+  if (kb < 1024) return `${integer.format(kb)} KB`;
+  if (kb < 1024 * 1024) return `${integer.format(Math.round(kb / 1024))} MB`;
+  return `${(kb / (1024 * 1024)).toFixed(1)} GB`;
+}
+
+export function formatUsd(amount: number): string {
+  return `$${integer.format(amount)}`;
+}

@@ -122,16 +122,23 @@ In rough priority order as understood from the codebase and README:
    through a UI. (The pipeline kanban, intelligence dashboards, and cross-dataset sync
    activity feed that used to be listed here are built — `/pipeline`, `/intelligence`,
    `/admin/sync`.)
-3. **LLM classifier and/or LLM rollup** behind the existing `LeadClassifier`/
-   `LeadIntelligence` ports, shadow-mode validated against the rules-based versions
-   before cutover. An engagement-only lead (liked a listing, no text anywhere) is the
-   case a phrase lexicon structurally can't help with and an LLM given "this profile +
-   these appearances" could.
-4. **WhatsApp notifier** — `alertChannelEnum` already includes `whatsapp`, and the
-   notifier registry pattern (`infrastructure/notifiers/registry.ts`) makes it a new
-   adapter, but only `email` is implemented. This is called out in the README as "the
-   channel that will actually be read on a Saturday" — i.e. the intended primary channel
-   once built, not a nice-to-have.
+3. **LLM classifier** — `infrastructure/ai/llm-classifier.ts` implements the
+   `LeadClassifier` port behind `ANTHROPIC_API_KEY` + `LLM_SHADOW_CLASSIFY_ENABLED`
+   (both optional, both off by default). `application/leads/shadow-classify.ts` fires
+   it alongside the real rules classifier for every content post, purely for
+   comparison logging — it never determines a persisted `intent`/score, and there is
+   deliberately no cutover mechanism yet. Still needed: an actual evaluation of shadow
+   logs against real lead volume before anyone considers flipping the primary path,
+   and the equivalent `LeadIntelligence` (rollup) implementation — only the
+   appearance-level classifier has a scaffold so far. An engagement-only lead (liked a
+   listing, no text anywhere) is the case a phrase lexicon structurally can't help with
+   and an LLM given "this profile + these appearances" could.
+4. **WhatsApp notifier** — adapter scaffolded (`infrastructure/notifiers/whatsapp.notifier.ts`,
+   registered in `infrastructure/notifiers/registry.ts` alongside `email`). Needs a real
+   `WHATSAPP_API_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` (WhatsApp Cloud API) to actually send —
+   without them it degrades to a log line, same as email without `RESEND_API_KEY`. This is
+   called out in the README as "the channel that will actually be read on a Saturday" —
+   i.e. the intended primary channel once activated, not a nice-to-have.
 5. **Embeddings / semantic search** — needs `pgvector`, not available on the local
    Postgres setup used during development.
 

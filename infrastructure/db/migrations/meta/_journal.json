@@ -8,6 +8,76 @@
       "when": 1785056467469,
       "tag": "0000_cool_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785221904255,
+      "tag": "0001_sloppy_maria_hill",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785222071415,
+      "tag": "0002_groovy_aqueduct",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785225674367,
+      "tag": "0003_young_vance_astro",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785226457080,
+      "tag": "0004_brief_the_renegades",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785307698450,
+      "tag": "0005_fantastic_garia",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785311303603,
+      "tag": "0006_serious_preak",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785312190865,
+      "tag": "0007_happy_tarot",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785373785453,
+      "tag": "0008_warm_mimic",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785377602482,
+      "tag": "0009_long_paladin",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785384336870,
+      "tag": "0010_careful_young_avengers",
+      "breakpoints": true
     }
   ]
 }

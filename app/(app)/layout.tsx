@@ -7,18 +7,21 @@ import { AppTopbar } from "@/features/shell/components/app-topbar";
 import { listDatasets } from "@/application/datasets/dataset-queries";
 import { datasetsQueryKey } from "@/features/datasets/query-keys";
 import { getQueryClient } from "@/shared/query-client";
+import type { Role } from "@/domain/auth/permissions";
 
 async function DatasetSwitcherSlot({
   userEmail,
   role,
+  companyId,
 }: {
   userEmail: string;
-  role: "admin" | "agent";
+  role: Role;
+  companyId: string;
 }) {
   const queryClient = getQueryClient();
   await queryClient.prefetchQuery({
     queryKey: datasetsQueryKey,
-    queryFn: () => listDatasets(),
+    queryFn: () => listDatasets(companyId),
   });
 
   return (
@@ -50,7 +53,7 @@ async function AuthedShell({ children }: { children: React.ReactNode }) {
       <AppSidebar role={user.role} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Suspense fallback={<div className="border-border h-14 border-b" />}>
-          <DatasetSwitcherSlot userEmail={user.email} role={user.role} />
+          <DatasetSwitcherSlot userEmail={user.email} role={user.role} companyId={user.companyId} />
         </Suspense>
         <main id="main-content" className="min-w-0 flex-1">
           {children}

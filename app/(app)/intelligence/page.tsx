@@ -31,14 +31,14 @@ function breakdownFrom(facets: FacetDescriptor[], key: string, limit = 8): Break
 }
 
 export default async function IntelligencePage({ searchParams }: { searchParams: SearchParams }) {
-  await requireUser();
+  const user = await requireUser();
   const { datasetId } = await searchParams;
 
   const [stats, trend, budget, facets] = await Promise.all([
-    getLeadStats(datasetId),
-    getLeadTrend(datasetId, 30),
-    getBudgetStats(datasetId),
-    getLeadFacets(datasetId),
+    getLeadStats(user.companyId, datasetId),
+    getLeadTrend(user.companyId, datasetId, 30),
+    getBudgetStats(user.companyId, datasetId),
+    getLeadFacets(user.companyId, datasetId),
   ]);
 
   return (

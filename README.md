@@ -7,7 +7,8 @@ Datasets produced by n8n and Apify are **discovered, versioned, normalized and s
 automatically**. There is no dataset ID in the environment, and adding a source never
 requires a deploy.
 
-The architecture and the audit behind it are in [docs/PLAN.md](docs/PLAN.md).
+The architecture is in [docs/architecture.md](docs/architecture.md), business terms in
+[docs/domain.md](docs/domain.md), and the product framing/roadmap in [docs/prd.md](docs/prd.md).
 
 ---
 
@@ -106,7 +107,11 @@ Environment holds **secrets and deployment identity only**. Everything operation
 which datasets sync, how often, who gets alerted, what counts as a hot lead — is database
 state managed from `/admin`. See `.env.example`.
 
-Scheduled jobs are declared in `vercel.json`: discovery every 15 minutes, sync every 5.
+Scheduling runs through n8n: four `POST /api/trigger/{discover,sync,fx,retention}` routes,
+each guarded by `N8N_TRIGGER_SECRET`, are what an n8n workflow calls on a schedule
+(suggested: discovery every 15 minutes, sync every 5 — see
+[docs/environment.md](docs/environment.md)'s "Scheduled jobs" section for the full
+table and [docs/api-patterns.md](docs/api-patterns.md) for the request pattern).
 Per-dataset intervals adapt on top of that — faster after new items, backing off when
 quiet, and tightened at weekends (Bali time), which is when consumers browse property.
 
@@ -140,7 +145,7 @@ through ports, infrastructure implements them, presentation depends on applicati
 ```bash
 npm run dev          # dev server
 npm run build        # production build
-npm test             # 64 domain + auth tests
+npm test             # unit suite — domain, application, and infrastructure logic
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint
 npm run db:generate  # create a migration from schema changes
@@ -153,14 +158,23 @@ npm run db:studio    # drizzle studio
 
 ## Not built yet
 
-See [docs/PLAN.md](docs/PLAN.md) §10 for the full roadmap. Outstanding:
+See [docs/prd.md](docs/prd.md)'s "Roadmap / not built yet" for the full list, and
+[docs/tech-debt.md](docs/tech-debt.md) for everything already shipped with a known gap.
+Outstanding:
 
-- Pipeline kanban, intelligence dashboards, dataset comparison UI, visual mapping editor
-- LLM classifier behind the existing `LeadClassifier` port (shadow-mode validated)
-- WhatsApp notifier — the channel that will actually be read on a Saturday
+- Visual mapping editor — mapping profiles are still edited as JSON rows
+- LLM classifier: adapter + shadow-mode comparison logging scaffolded
+  (`infrastructure/ai/llm-classifier.ts`, behind `ANTHROPIC_API_KEY` +
+  `LLM_SHADOW_CLASSIFY_ENABLED`), but nothing evaluates the shadow logs yet and there's
+  no cutover mechanism by design — the rules classifier is still the only thing that
+  determines a persisted score. The `LeadIntelligence` (rollup) port has no LLM
+  implementation at all yet, only the classifier does.
+- WhatsApp notifier: adapter scaffolded (`infrastructure/notifiers/whatsapp.notifier.ts`),
+  needs a real `WHATSAPP_API_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` to actually send — "the
+  channel that will actually be read on a Saturday."
 - Embeddings / semantic search (needs `pgvector`, unavailable on the local Postgres)
 
 **The highest-impact outstanding item is not code.** The datasets currently being
 collected are almost entirely seller listings and job posts. Finding *buyers* needs a
 change on the n8n side — buyer-side groups, keyword searches, and mining the commenters
-on listing posts. See PLAN §1.5 and §7.1.
+on listing posts. See [docs/prd.md](docs/prd.md) and [docs/tech-debt.md](docs/tech-debt.md).

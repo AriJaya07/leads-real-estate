@@ -53,7 +53,42 @@ test.describe("forced password change", () => {
     await expect(page.getByRole("heading", { name: "Lead inbox" })).toBeVisible();
 
     await page.goto("/admin/team");
-    await expect(page).toHaveURL(/\/leads$/); // agent, not admin — a *different* redirect proves they're past the account gate
+    await expect(page).toHaveURL(/\/leads$/); // member, not admin — a *different* redirect proves they're past the account gate
+  });
+});
+
+test.describe("profile", () => {
+  test("saving the profile form persists across a reload", async ({ page }) => {
+    await login(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
+    await expect(page).toHaveURL(/\/leads$/);
+    await page.goto("/account");
+
+    await page.getByLabel("Job title").fill("Head of Sales");
+    await page.getByRole("button", { name: "Save profile" }).click();
+    await expect(page.getByText("Profile saved")).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByLabel("Job title")).toHaveValue("Head of Sales");
+  });
+});
+
+test.describe("teams panel", () => {
+  test("creating a team and adding a member renders both", async ({ page }) => {
+    await login(page, E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
+    await expect(page).toHaveURL(/\/leads$/);
+    await page.goto("/admin/team");
+
+    const teamName = `Smoke Test Team ${Date.now()}`;
+    await page.getByLabel("New team").fill(teamName);
+    await page.getByRole("button", { name: "Create team" }).click();
+    await expect(page.getByText(teamName)).toBeVisible();
+
+    // "Add member" is ambiguous page-wide — the roster form above has its own
+    // submit button with the same accessible name. Scope to this team's card.
+    const teamCard = page.locator(`[data-team-name="${teamName}"]`);
+    await teamCard.getByRole("button", { name: "Add member" }).click();
+    await teamCard.getByRole("combobox").selectOption({ label: "E2E Throttle Target" });
+    await expect(teamCard.getByText("E2E Throttle Target")).toBeVisible();
   });
 });
 

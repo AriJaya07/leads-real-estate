@@ -9,6 +9,7 @@ import { NEAR_DUPLICATE_SIMILARITY, NEAR_DUPLICATE_WINDOW_HOURS } from "@/shared
 import type { RawRecordRow } from "@/infrastructure/db/schema/sync";
 import { createLogger } from "@/infrastructure/observability/logger";
 import { resolveIdentity, recomputePersonRollup } from "./identity-resolution";
+import { runShadowClassification } from "./shadow-classify";
 
 const log = createLogger("process-records");
 
@@ -47,6 +48,7 @@ async function usdRate(currency: string): Promise<number> {
  * dropped, and the UI collapses them.
  */
 async function findCanonicalDuplicate(
+  companyId: string,
   body: string,
   authorExternalId: string | null,
   postedAt: Date,
@@ -57,6 +59,7 @@ async function findCanonicalDuplicate(
   const since = new Date(postedAt.getTime() - NEAR_DUPLICATE_WINDOW_HOURS * 3_600_000);
 
   const conditions = [
+    eq(schema.leadAppearances.companyId, companyId),
     gte(schema.leadAppearances.postedAt, since),
     sql`similarity(${schema.leadAppearances.body}, ${body}) > ${NEAR_DUPLICATE_SIMILARITY}`,
     sql`${schema.leadAppearances.canonicalAppearanceId} IS NULL`,
@@ -87,6 +90,7 @@ async function findCanonicalDuplicate(
  * deduped away.
  */
 async function findEngagementDuplicate(
+  companyId: string,
   authorExternalId: string | null,
   targetPostExternalId: string | null,
   excludeAppearanceId?: string,
@@ -94,6 +98,7 @@ async function findEngagementDuplicate(
   if (!authorExternalId || !targetPostExternalId) return null;
 
   const conditions = [
+    eq(schema.leadAppearances.companyId, companyId),
     eq(schema.leadAppearances.authorExternalId, authorExternalId),
     sql`${schema.leadAppearances.attributes}->'_engagement'->>'targetPostExternalId' = ${targetPostExternalId}`,
     sql`${schema.leadAppearances.canonicalAppearanceId} IS NULL`,
@@ -112,6 +117,7 @@ async function findEngagementDuplicate(
 
 /** Distinct listings this person engaged with recently — the repeat-engagement signal. */
 async function countRecentEngagementTargets(
+  companyId: string,
   authorExternalId: string | null,
   excludeTargetPostExternalId: string | null,
 ): Promise<number> {
@@ -124,6 +130,7 @@ async function countRecentEngagementTargets(
     .from(schema.leadAppearances)
     .where(
       and(
+        eq(schema.leadAppearances.companyId, companyId),
         eq(schema.leadAppearances.authorExternalId, authorExternalId),
         sql`${schema.leadAppearances.recordKind} != 'content_post'`,
         excludeTargetPostExternalId
@@ -151,6 +158,7 @@ export async function processRawRecords(
   records: RawRecordRow[],
   mappingRules: MappingRules,
   options: {
+    companyId: string;
     passthrough: boolean;
     datasetId: string;
     recordKind?: "content_post" | "engagement_like" | "engagement_comment";
@@ -178,12 +186,13 @@ export async function processRawRecords(
 
       const repeatEngagementCount = isEngagement
         ? await countRecentEngagementTargets(
+            options.companyId,
             normalized.authorExternalId,
             normalized.engagementContext.targetPostExternalId,
           )
         : 0;
 
-      const classification = classifyWithRules({
+      const classifierInput = {
         body: normalized.body,
         listingTitle: normalized.listingTitle,
         locationRaw: normalized.locationRaw,
@@ -197,7 +206,11 @@ export async function processRawRecords(
         engagementContext: isEngagement
           ? { ...normalized.engagementContext, repeatEngagementCount }
           : undefined,
-      });
+      };
+      const classification = classifyWithRules(classifierInput);
+      // Fire-and-forget comparison logging only — no-op unless explicitly
+      // enabled, never affects `classification` below. See shadow-classify.ts.
+      runShadowClassification(classifierInput, classification);
 
       const budget = classification.budget;
       const rate = budget ? await usdRate(budget.currency) : 0;
@@ -221,12 +234,17 @@ export async function processRawRecords(
       const [existingAppearance] = await db()
         .select({ leadId: schema.leadAppearances.leadId })
         .from(schema.leadAppearances)
-        .where(eq(schema.leadAppearances.rawRecordId, record.id))
+        .where(
+          and(
+            eq(schema.leadAppearances.rawRecordId, record.id),
+            eq(schema.leadAppearances.companyId, options.companyId),
+          ),
+        )
         .limit(1);
 
       const leadId =
         existingAppearance?.leadId ??
-        (await resolveIdentity({
+        (await resolveIdentity(options.companyId, {
           facebookId: platform === "facebook" ? normalized.authorExternalId : null,
           instagramId: platform === "instagram" ? normalized.authorExternalId : null,
           profileUrl: normalized.authorUrl,
@@ -239,6 +257,7 @@ export async function processRawRecords(
         }));
 
       const values = {
+        companyId: options.companyId,
         leadId,
         rawRecordId: record.id,
         datasetId: options.datasetId,
@@ -308,11 +327,13 @@ export async function processRawRecords(
 
       const canonicalId = isEngagement
         ? await findEngagementDuplicate(
+            options.companyId,
             normalized.authorExternalId,
             normalized.engagementContext.targetPostExternalId,
             appearance.id,
           )
         : await findCanonicalDuplicate(
+            options.companyId,
             normalized.body,
             normalized.authorExternalId,
             normalized.postedAt,
@@ -330,13 +351,16 @@ export async function processRawRecords(
       // Human state is created once and never touched again by the pipeline —
       // as soon as a person has any appearance, whether or not this specific
       // one turned out to be a duplicate.
-      await db().insert(schema.leadStates).values({ leadId }).onConflictDoNothing();
+      await db()
+        .insert(schema.leadStates)
+        .values({ leadId, companyId: options.companyId })
+        .onConflictDoNothing();
 
       // Recomputed regardless of duplicate status: reprocessing (a mapping
       // change, a reclassification) can change which appearances count as
       // duplicates, so the rollup has to stay correct under replay, not just
       // on first ingest.
-      await recomputePersonRollup(leadId);
+      await recomputePersonRollup(options.companyId, leadId);
 
       if (isNew && !canonicalId) touchedLeadIds.add(leadId);
     } catch (error) {

@@ -57,6 +57,21 @@ export const syncStatusEnum = pgEnum("sync_status", [
 export const logLevelEnum = pgEnum("log_level", ["debug", "info", "warn", "error"]);
 
 /**
+ * Lifecycle of one triggered Apify actor run, driven by the run-status webhook
+ * (`app/api/webhooks/apify/route.ts`) — mirrors Apify's own run states 1:1 so no
+ * translation table is needed. `queued` is the local state between "we called the
+ * Start Run API" and the first webhook/poll telling us it actually started.
+ */
+export const scrapeRequestStatusEnum = pgEnum("scrape_request_status", [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "aborted",
+  "timed_out",
+]);
+
+/**
  * Per-*appearance* classification (one scraped post/like/comment). Unchanged by
  * the person-centric refactor — still what `rules-classifier.ts` outputs per
  * item. `leadTypeEnum` below is the separate, person-level business
@@ -98,7 +113,66 @@ export const alertDeliveryStatusEnum = pgEnum("alert_delivery_status", [
   "suppressed",
 ]);
 
-export const userRoleEnum = pgEnum("user_role", ["admin", "agent"]);
+/**
+ * Fixed 4-tier hierarchy — owner > admin > manager > member. See
+ * domain/auth/permissions.ts for the ranking and assignment rules; this enum
+ * is the fast-path check every action/page guard uses directly, no join.
+ */
+export const userRoleEnum = pgEnum("user_role", ["owner", "admin", "manager", "member"]);
+
+/**
+ * `past_due` is a degrade, not a data-loss event — a company with a lapsed
+ * payment method keeps every row it ever wrote, just loses write access until
+ * resolved. See docs/saas-platform-architecture.md.
+ */
+export const companyStatusEnum = pgEnum("company_status", [
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+]);
+
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "paused",
+]);
+
+/**
+ * A fixed, small set checked against `plans.max_*` — an enum, not open text
+ * like `propertyTypes`/`locations` elsewhere, because these are read by
+ * application code (`application/billing/usage.ts`), not display labels for
+ * scraped data. `datasets`/`seats` are enforced via a live `COUNT(*)` instead
+ * of this table (see usage.ts) but keep enum entries for documentation
+ * symmetry with the metrics that do use it.
+ */
+export const usageMetricEnum = pgEnum("usage_metric", [
+  "datasets",
+  "seats",
+  "leads_this_month",
+  /** Raw records ingested this month, across every source kind — the "data fetch limit." */
+  "raw_records_month",
+  /** Apify HTTP requests made this month — a distinct, infra-cost-driven metric from the above. */
+  "apify_requests_month",
+  /** Cumulative, not monthly-windowed (`periodStart` null) — total raw-record payload size on disk. */
+  "storage_kb",
+]);
+
+/**
+ * Data validation / lead scoring tier — `domain/scoring/lead-validation.ts`'s
+ * `LeadPotential` union, persisted so the dashboard can filter/sort by it
+ * without recomputing the composite score for every row on every request.
+ * Recomputed at the same point `leadType`/`buyerScore`/etc are (see
+ * `application/leads/identity-resolution.ts::recomputePersonRollup`) — same
+ * "derived, freely regenerable" contract as the rest of the rollup.
+ */
+export const leadPotentialEnum = pgEnum("lead_potential", [
+  "high_potential",
+  "medium_potential",
+  "low_potential",
+]);
 
 export const leadEventTypeEnum = pgEnum("lead_event_type", [
   "created",

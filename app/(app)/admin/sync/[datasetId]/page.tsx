@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { ArrowLeft } from "lucide-react";
-import { requireAdmin } from "@/application/auth/current-user";
+import { currentUser, requireManager } from "@/application/auth/current-user";
 import { getDatasetDetail, getSyncEvents } from "@/application/datasets/dataset-queries";
 import type { SchemaDiff } from "@/domain/dataset/types";
 import { PageHeader } from "@/components/common/page-header";
@@ -27,8 +27,10 @@ type Params = Promise<{ datasetId: string }>;
 type SearchParams = Promise<{ run?: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const user = await currentUser();
+  if (!user) return { title: "Dataset" };
   const { datasetId } = await params;
-  const detail = await getDatasetDetail(datasetId);
+  const detail = await getDatasetDetail(user.companyId, datasetId);
   return { title: detail ? detail.dataset.label : "Dataset" };
 }
 
@@ -36,8 +38,8 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   return <h2 className="text-sm font-semibold">{children}</h2>;
 }
 
-async function RunLog({ runId }: { runId: string }) {
-  const events = await getSyncEvents(runId);
+async function RunLog({ companyId, runId }: { companyId: string; runId: string }) {
+  const events = await getSyncEvents(companyId, runId);
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
@@ -56,11 +58,11 @@ export default async function DatasetDetailPage({
   params: Params;
   searchParams: SearchParams;
 }) {
-  await requireAdmin();
+  const user = await requireManager();
   const { datasetId } = await params;
   const { run: runId } = await searchParams;
 
-  const detail = await getDatasetDetail(datasetId);
+  const detail = await getDatasetDetail(user.companyId, datasetId);
   if (!detail) notFound();
 
   const { dataset, runs, versions, fields, profile } = detail;
@@ -215,7 +217,7 @@ export default async function DatasetDetailPage({
 
       {runId && (
         <Suspense fallback={<TableSkeleton />}>
-          <RunLog runId={runId} />
+          <RunLog companyId={user.companyId} runId={runId} />
         </Suspense>
       )}
     </div>

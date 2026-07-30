@@ -13,6 +13,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { leadId } = await params;
-  const appearances = await getLeadAppearances(leadId);
+  const appearances = await getLeadAppearances(user.companyId, leadId);
   return NextResponse.json({ appearances });
 }

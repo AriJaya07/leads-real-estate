@@ -5,6 +5,7 @@ import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/brand/brand-mark";
+import type { Role } from "@/domain/auth/permissions";
 import { NavContent } from "./nav-content";
 
 /**
@@ -13,7 +14,7 @@ import { NavContent } from "./nav-content";
  * viewport. Same `NavContent` as the desktop sidebar, so the two can't list
  * different destinations.
  */
-export function MobileNav({ role }: { role: "admin" | "agent" }) {
+export function MobileNav({ role }: { role: Role }) {
   const [open, setOpen] = useState(false);
 
   return (

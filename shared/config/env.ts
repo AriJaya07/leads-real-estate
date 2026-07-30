@@ -15,8 +15,28 @@ const serverEnvSchema = z.object({
 
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 chars"),
 
+  /** Base URL used to build absolute links in transactional emails (invites, password resets). */
+  APP_URL: z.string().url().default("http://localhost:3000"),
+
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().default("DreamRue Lead Radar <onboarding@resend.dev>"),
+
+  /**
+   * Shared secret for the n8n-triggered scheduler endpoints (`/api/trigger/*`).
+   * Optional so an instance that hasn't wired up n8n yet doesn't fail to boot —
+   * an unset secret makes every trigger route respond 401 to everything rather
+   * than skipping the check, see `application/http/verify-secret.ts`.
+   */
+  N8N_TRIGGER_SECRET: z.string().min(16, "N8N_TRIGGER_SECRET must be at least 16 chars").optional(),
+
+  /** WhatsApp Cloud API. Optional — without both, the notifier logs instead of sending. */
+  WHATSAPP_API_TOKEN: z.string().optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+
+  /** Anthropic API key for the shadow-mode LLM classifier. Optional — unset means it never runs. */
+  ANTHROPIC_API_KEY: z.string().optional(),
+  /** Explicit opt-in to fire shadow LLM classification alongside the real rules classifier. Default off. */
+  LLM_SHADOW_CLASSIFY_ENABLED: z.string().optional(),
 
   /** Comma-separated allowlist of addresses permitted to request a login link. */
   AUTH_ALLOWED_EMAILS: z.string().default(""),

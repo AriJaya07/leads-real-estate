@@ -5,13 +5,16 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
 import { getSession } from "@/infrastructure/auth/session";
 import { isSessionRevoked } from "@/domain/auth/session-version";
+import { type Role, roleAtLeast } from "@/domain/auth/permissions";
 
 export interface CurrentUser {
   userId: string;
   email: string;
-  role: "admin" | "agent";
-  /** True while a temporary (admin-issued or bootstrap) password hasn't been changed yet. */
+  role: Role;
+  /** True while a temporary (admin-issued) password hasn't been changed yet. */
   mustChangePassword: boolean;
+  /** The tenant this user belongs to — every application/ query scopes by this. */
+  companyId: string;
 }
 
 /**
@@ -37,6 +40,7 @@ export const currentUser = cache(async (): Promise<CurrentUser | null> => {
       role: schema.users.role,
       mustChangePassword: schema.users.mustChangePassword,
       sessionVersion: schema.users.sessionVersion,
+      companyId: schema.users.companyId,
     })
     .from(schema.users)
     .where(eq(schema.users.id, session.userId))
@@ -50,6 +54,7 @@ export const currentUser = cache(async (): Promise<CurrentUser | null> => {
     email: row.email,
     role: row.role,
     mustChangePassword: row.mustChangePassword,
+    companyId: row.companyId,
   };
 });
 
@@ -70,8 +75,23 @@ export async function requireUser(): Promise<CurrentUser> {
   return user;
 }
 
+/** Owner or admin — "manage users and settings" in the role hierarchy. */
 export async function requireAdmin(): Promise<CurrentUser> {
   const user = await requireUser();
-  if (user.role !== "admin") redirect("/leads");
+  if (!roleAtLeast(user.role, "admin")) redirect("/leads");
+  return user;
+}
+
+/** Owner, admin, or manager — "manage projects and data." */
+export async function requireManager(): Promise<CurrentUser> {
+  const user = await requireUser();
+  if (!roleAtLeast(user.role, "manager")) redirect("/leads");
+  return user;
+}
+
+/** Owner only — for actions no other role may perform (e.g. granting ownership). */
+export async function requireOwner(): Promise<CurrentUser> {
+  const user = await requireUser();
+  if (user.role !== "owner") redirect("/leads");
   return user;
 }

@@ -1,15 +1,30 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { updateTag } from "next/cache";
 import { db, schema } from "@/infrastructure/db/client";
-import { authActionClient } from "@/application/safe-action";
+import { authActionClient, ActionError } from "@/application/safe-action";
 import { leadTag, leadsTag } from "@/application/cache-tags";
 import { LEAD_STATUSES } from "./lead-status";
 
-async function ensureState(leadId: string) {
-  await db().insert(schema.leadStates).values({ leadId }).onConflictDoNothing();
+/**
+ * Verifies the lead belongs to the caller's company before touching it, then
+ * creates its `lead_states` row if this is the first time anyone's touched it
+ * — the fix for a real cross-tenant bug: every action here used to trust a
+ * bare `leadId` with no ownership check at all, so any signed-in user could
+ * mutate any company's lead by guessing a UUID. See
+ * docs/saas-platform-architecture.md.
+ */
+async function ensureState(companyId: string, leadId: string) {
+  const [lead] = await db()
+    .select({ id: schema.leads.id })
+    .from(schema.leads)
+    .where(and(eq(schema.leads.id, leadId), eq(schema.leads.companyId, companyId)))
+    .limit(1);
+  if (!lead) throw new ActionError("Lead not found.");
+
+  await db().insert(schema.leadStates).values({ leadId, companyId }).onConflictDoNothing();
 }
 
 /**
@@ -24,13 +39,14 @@ function invalidate(leadId: string) {
 export const setLeadStatus = authActionClient
   .inputSchema(z.object({ leadId: z.string().uuid(), status: z.enum(LEAD_STATUSES) }))
   .action(async ({ parsedInput, ctx }) => {
-    await ensureState(parsedInput.leadId);
+    await ensureState(ctx.user.companyId, parsedInput.leadId);
     await db()
       .update(schema.leadStates)
       .set({ status: parsedInput.status, updatedBy: ctx.user.userId, updatedAt: new Date() })
       .where(eq(schema.leadStates.leadId, parsedInput.leadId));
 
     await db().insert(schema.leadEvents).values({
+      companyId: ctx.user.companyId,
       leadId: parsedInput.leadId,
       type: "status_changed",
       actorId: ctx.user.userId,
@@ -44,13 +60,24 @@ export const setLeadStatus = authActionClient
 export const assignLead = authActionClient
   .inputSchema(z.object({ leadId: z.string().uuid(), userId: z.string().uuid().nullable() }))
   .action(async ({ parsedInput, ctx }) => {
-    await ensureState(parsedInput.leadId);
+    await ensureState(ctx.user.companyId, parsedInput.leadId);
+
+    if (parsedInput.userId) {
+      const [assignee] = await db()
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(and(eq(schema.users.id, parsedInput.userId), eq(schema.users.companyId, ctx.user.companyId)))
+        .limit(1);
+      if (!assignee) throw new ActionError("That teammate was not found.");
+    }
+
     await db()
       .update(schema.leadStates)
       .set({ assignedTo: parsedInput.userId, updatedBy: ctx.user.userId, updatedAt: new Date() })
       .where(eq(schema.leadStates.leadId, parsedInput.leadId));
 
     await db().insert(schema.leadEvents).values({
+      companyId: ctx.user.companyId,
       leadId: parsedInput.leadId,
       type: "assigned",
       actorId: ctx.user.userId,
@@ -74,7 +101,7 @@ export const markContacted = authActionClient
     }),
   )
   .action(async ({ parsedInput, ctx }) => {
-    await ensureState(parsedInput.leadId);
+    await ensureState(ctx.user.companyId, parsedInput.leadId);
 
     await db()
       .update(schema.leadStates)
@@ -89,6 +116,7 @@ export const markContacted = authActionClient
       .where(eq(schema.leadStates.leadId, parsedInput.leadId));
 
     await db().insert(schema.leadEvents).values({
+      companyId: ctx.user.companyId,
       leadId: parsedInput.leadId,
       type: "contacted",
       actorId: ctx.user.userId,
@@ -102,13 +130,14 @@ export const markContacted = authActionClient
 export const saveLeadNotes = authActionClient
   .inputSchema(z.object({ leadId: z.string().uuid(), notes: z.string().max(10_000) }))
   .action(async ({ parsedInput, ctx }) => {
-    await ensureState(parsedInput.leadId);
+    await ensureState(ctx.user.companyId, parsedInput.leadId);
     await db()
       .update(schema.leadStates)
       .set({ notes: parsedInput.notes, updatedBy: ctx.user.userId, updatedAt: new Date() })
       .where(eq(schema.leadStates.leadId, parsedInput.leadId));
 
     await db().insert(schema.leadEvents).values({
+      companyId: ctx.user.companyId,
       leadId: parsedInput.leadId,
       type: "note_added",
       actorId: ctx.user.userId,
@@ -121,7 +150,7 @@ export const saveLeadNotes = authActionClient
 export const toggleBookmark = authActionClient
   .inputSchema(z.object({ leadId: z.string().uuid() }))
   .action(async ({ parsedInput, ctx }) => {
-    await ensureState(parsedInput.leadId);
+    await ensureState(ctx.user.companyId, parsedInput.leadId);
     await db()
       .update(schema.leadStates)
       .set({

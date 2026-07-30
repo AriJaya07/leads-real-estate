@@ -1,9 +1,14 @@
 /**
  * Seeds the baseline configuration that used to live in environment variables:
  * the Apify source, a known-good mapping profile for the Facebook Groups actor,
- * the CEO's priority alert rule, and location aliases.
+ * the CEO's priority alert rule, and location aliases — for one company,
+ * given by name (default "DreamRue", matching the pre-multi-tenant instance).
+ * `mapping_profiles`/`location_aliases`/`fx_rates` stay global — see
+ * docs/saas-platform-architecture.md.
  *
  * Idempotent — safe to re-run.
+ *
+ * Usage: node --env-file=.env infrastructure/db/seed.mjs ["Company Name"]
  */
 import postgres from "postgres";
 
@@ -12,6 +17,12 @@ if (!url) {
   console.error("DATABASE_URL is not set");
   process.exit(1);
 }
+
+const companyName = process.argv[2] ?? process.env.SEED_COMPANY_NAME ?? "DreamRue";
+const companySlug = companyName
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/(^-|-$)/g, "");
 
 const sql = postgres(url, { max: 1 });
 
@@ -96,16 +107,154 @@ const LOCATION_ALIASES = [
 ];
 
 try {
+  const [company] = await sql`
+    INSERT INTO companies (name, slug, status)
+    VALUES (${companyName}, ${companySlug}, 'active')
+    ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+    RETURNING id, name
+  `;
+  console.log(`company: ${company.name} (${company.id})`);
+
+  // The real, sellable tiers — see docs/pricing-strategy.md for the business
+  // rationale behind every number here. `maxSeats`/`maxAlertRules: null` means
+  // unlimited (Enterprise's actual selling point for those two); every other
+  // limit stays finite even for Enterprise since it maps to real infra/API
+  // cost (Apify requests, storage, records fetched).
+  const STANDARD_PLANS = [
+    {
+      name: "Starter",
+      monthlyPriceUsd: 49,
+      annualPriceUsd: 470, // ~20% off, matches every tier below
+      maxSeats: 3,
+      maxDatasets: 3,
+      maxRawRecordsPerMonth: 5_000,
+      maxLeadsPerMonth: 1_000,
+      maxAlertRules: 5,
+      maxApifyRequestsPerMonth: 5_000,
+      maxStorageKb: 500 * 1024,
+      dataRetentionDays: 90,
+      features: {
+        whatsappAlerts: false,
+        llmShadowClassify: false,
+        customBranding: false,
+        prioritySupport: false,
+        sso: false,
+      },
+    },
+    {
+      name: "Professional",
+      monthlyPriceUsd: 149,
+      annualPriceUsd: 1_430,
+      maxSeats: 10,
+      maxDatasets: 10,
+      maxRawRecordsPerMonth: 25_000,
+      maxLeadsPerMonth: 5_000,
+      maxAlertRules: 25,
+      maxApifyRequestsPerMonth: 25_000,
+      maxStorageKb: 5 * 1024 * 1024,
+      dataRetentionDays: 180,
+      features: {
+        whatsappAlerts: true,
+        llmShadowClassify: false,
+        customBranding: false,
+        prioritySupport: true,
+        sso: false,
+      },
+    },
+    {
+      name: "Business",
+      monthlyPriceUsd: 399,
+      annualPriceUsd: 3_830,
+      maxSeats: 25,
+      maxDatasets: 30,
+      maxRawRecordsPerMonth: 100_000,
+      maxLeadsPerMonth: 20_000,
+      maxAlertRules: 100,
+      maxApifyRequestsPerMonth: 100_000,
+      maxStorageKb: 25 * 1024 * 1024,
+      dataRetentionDays: 365,
+      features: {
+        whatsappAlerts: true,
+        llmShadowClassify: true,
+        customBranding: true,
+        prioritySupport: true,
+        sso: false,
+      },
+    },
+    {
+      name: "Enterprise",
+      // Indicative "starting at" price, not a fixed self-serve rate — real
+      // Enterprise deals are custom-quoted. No annual self-serve option.
+      monthlyPriceUsd: 999,
+      annualPriceUsd: null,
+      maxSeats: null,
+      maxDatasets: 100,
+      maxRawRecordsPerMonth: 500_000,
+      maxLeadsPerMonth: 100_000,
+      maxAlertRules: null,
+      maxApifyRequestsPerMonth: 500_000,
+      maxStorageKb: 100 * 1024 * 1024,
+      dataRetentionDays: 730,
+      features: {
+        whatsappAlerts: true,
+        llmShadowClassify: true,
+        customBranding: true,
+        prioritySupport: true,
+        sso: true,
+      },
+    },
+  ];
+
+  for (const p of STANDARD_PLANS) {
+    const [existing] = await sql`SELECT id FROM plans WHERE name = ${p.name} LIMIT 1`;
+    if (existing) continue;
+    await sql`
+      INSERT INTO plans (
+        name, monthly_price_usd, annual_price_usd, max_seats, max_datasets,
+        max_raw_records_per_month, max_leads_per_month, max_alert_rules,
+        max_apify_requests_per_month, max_storage_kb, data_retention_days, features
+      )
+      VALUES (
+        ${p.name}, ${p.monthlyPriceUsd}, ${p.annualPriceUsd}, ${p.maxSeats}, ${p.maxDatasets},
+        ${p.maxRawRecordsPerMonth}, ${p.maxLeadsPerMonth}, ${p.maxAlertRules},
+        ${p.maxApifyRequestsPerMonth}, ${p.maxStorageKb}, ${p.dataRetentionDays},
+        ${sql.json(p.features)}
+      )
+    `;
+  }
+  console.log(`standard plans: ${STANDARD_PLANS.map((p) => p.name).join(", ")}`);
+
+  // Permissive catch-all for any company that predates the standard tiers
+  // above (e.g. backfilled from a pre-multi-tenant instance) — see
+  // infrastructure/db/backfill-company.mjs. Not sellable, never assigned to a
+  // new signup (application/auth/signup.actions.ts always uses "Starter").
+  let [plan] = await sql`SELECT id FROM plans WHERE name = 'Legacy' LIMIT 1`;
+  if (!plan) {
+    [plan] = await sql`
+      INSERT INTO plans (
+        name, max_seats, max_datasets, max_raw_records_per_month, max_leads_per_month,
+        max_alert_rules, max_apify_requests_per_month, max_storage_kb, data_retention_days
+      )
+      VALUES ('Legacy', 999, 999, 999999, 999999, 999, 999999, 999999999, 3650)
+      RETURNING id
+    `;
+  }
+  await sql`
+    INSERT INTO subscriptions (company_id, plan_id, status)
+    VALUES (${company.id}, ${plan.id}, 'active')
+    ON CONFLICT (company_id) DO NOTHING
+  `;
+
   const [source] = await sql`
-    INSERT INTO sources (kind, name, config, enabled)
-    VALUES ('apify', 'Apify — Facebook & Instagram scrapers', ${sql.json({
+    INSERT INTO sources (company_id, kind, name, config, enabled)
+    VALUES (${company.id}, 'apify', 'Apify — Facebook & Instagram scrapers', ${sql.json({
       // Empty filters = track everything the token can see. Narrow this from the
       // admin UI once the useful producers are known.
       producerIds: [],
       namePatterns: [],
       minItemCount: 1,
     })}, true)
-    ON CONFLICT (kind, name) DO UPDATE SET updated_at = now()
+    ON CONFLICT (company_id, kind, name) DO UPDATE SET updated_at = now()
     RETURNING id, name
   `;
   console.log(`source: ${source.name} (${source.id})`);
@@ -128,8 +277,9 @@ try {
     .filter(Boolean);
 
   const [priority] = await sql`
-    INSERT INTO alert_rules (name, description, enabled, predicate, channels, recipients, throttle_seconds, digest_threshold, escalate_after_seconds)
+    INSERT INTO alert_rules (company_id, name, description, enabled, predicate, channels, recipients, throttle_seconds, digest_threshold, escalate_after_seconds)
     VALUES (
+      ${company.id},
       'High-intent Bali buyer',
       'Buyers actively looking for Bali property in the last 3 days. This is the cohort the sales team should be contacting first.',
       true,
@@ -138,14 +288,15 @@ try {
       ${recipients},
       300, 3, 1800
     )
-    ON CONFLICT (name) DO UPDATE SET predicate = EXCLUDED.predicate, recipients = EXCLUDED.recipients
+    ON CONFLICT (company_id, name) DO UPDATE SET predicate = EXCLUDED.predicate, recipients = EXCLUDED.recipients
     RETURNING id, name
   `;
   console.log(`alert rule: ${priority.name}`);
 
   const [daily] = await sql`
-    INSERT INTO alert_rules (name, description, enabled, predicate, channels, recipients, throttle_seconds, digest_threshold)
+    INSERT INTO alert_rules (company_id, name, description, enabled, predicate, channels, recipients, throttle_seconds, digest_threshold)
     VALUES (
+      ${company.id},
       'Daily buyer sweep',
       'Lower-confidence buyer signals from the last 24 hours. Disabled by default until alert precision is measured.',
       false,
@@ -154,7 +305,7 @@ try {
       ${recipients},
       3600, 10
     )
-    ON CONFLICT (name) DO UPDATE SET predicate = EXCLUDED.predicate
+    ON CONFLICT (company_id, name) DO UPDATE SET predicate = EXCLUDED.predicate
     RETURNING id, name
   `;
   console.log(`alert rule: ${daily.name} (disabled)`);
@@ -181,6 +332,41 @@ try {
     `;
   }
   console.log("fx rates seeded");
+
+  // Schema-only extension point, not enforced anywhere yet — `users.role`
+  // stays the fast-path check every existing action/page guard uses. This
+  // catalog just gives the tables real reference data instead of being
+  // completely empty. See docs/saas-database-schema.md.
+  const PERMISSIONS = [
+    ["leads", "read"],
+    ["leads", "write"],
+    ["datasets", "read"],
+    ["datasets", "manage"],
+    ["team", "manage"],
+    ["billing", "manage"],
+  ];
+  for (const [resource, action] of PERMISSIONS) {
+    await sql`
+      INSERT INTO permissions (resource, action)
+      VALUES (${resource}, ${action})
+      ON CONFLICT (resource, action) DO NOTHING
+    `;
+  }
+  console.log(`permissions catalog: ${PERMISSIONS.length}`);
+
+  // company_id IS NULL = a system role, shared across every company.
+  // Matches the partial index's own WHERE clause exactly
+  // (roles_system_name_key) — Postgres can't infer a partial index from a
+  // bare column list when more than one partial index exists on it.
+  for (const name of ["owner", "admin", "manager", "member"]) {
+    await sql`
+      INSERT INTO roles (company_id, name, is_system)
+      VALUES (NULL, ${name}, true)
+      ON CONFLICT (name) WHERE company_id IS NULL DO NOTHING
+    `;
+  }
+  console.log("system roles: owner, admin, manager, member");
+
   console.log("\nseed complete");
 } catch (error) {
   console.error("seed failed:", error);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -38,27 +38,34 @@ export function useServerAction() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  async function run<T>(
-    id: string,
-    action: () => Promise<SafeActionResult<T> | undefined>,
-    options: RunOptions<T> = {},
-  ): Promise<T | undefined> {
-    setBusyId(id);
-    const result = await action();
-    setBusyId(null);
+  // Stable across renders (deps are themselves stable from useRouter/useQueryClient)
+  // so a caller can safely depend on `run` in its own useCallback — see
+  // features/datasets/components/dataset-table.tsx for why that matters for
+  // row memoization.
+  const run = useCallback(
+    async function run<T>(
+      id: string,
+      action: () => Promise<SafeActionResult<T> | undefined>,
+      options: RunOptions<T> = {},
+    ): Promise<T | undefined> {
+      setBusyId(id);
+      const result = await action();
+      setBusyId(null);
 
-    if (!result || result.data === undefined) {
-      toast.error(result?.serverError ?? options.errorFallback ?? "Something went wrong. Please try again.");
-      return undefined;
-    }
+      if (!result || result.data === undefined) {
+        toast.error(result?.serverError ?? options.errorFallback ?? "Something went wrong. Please try again.");
+        return undefined;
+      }
 
-    options.onSuccess?.(result.data);
-    for (const queryKey of options.invalidateKeys ?? []) {
-      void queryClient.invalidateQueries({ queryKey });
-    }
-    startTransition(() => router.refresh());
-    return result.data;
-  }
+      options.onSuccess?.(result.data);
+      for (const queryKey of options.invalidateKeys ?? []) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+      startTransition(() => router.refresh());
+      return result.data;
+    },
+    [router, queryClient],
+  );
 
   return { busyId, run };
 }

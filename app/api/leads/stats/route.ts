@@ -8,6 +8,6 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const datasetId = request.nextUrl.searchParams.get("datasetId") ?? undefined;
-  const stats = await getLeadStats(datasetId);
+  const stats = await getLeadStats(user.companyId, datasetId);
   return NextResponse.json({ stats });
 }

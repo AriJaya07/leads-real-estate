@@ -22,17 +22,17 @@ type SearchParams = Promise<{ datasetId?: string }>;
  * reads each through the same `useLeadsQuery` hook the inbox uses, so the
  * prefetch and the client read share a query key and the fetch never repeats.
  */
-async function Board({ searchParams }: { searchParams: SearchParams }) {
+async function Board({ searchParams, companyId }: { searchParams: SearchParams; companyId: string }) {
   const { datasetId } = await searchParams;
   const queryClient = getQueryClient();
 
   const [teamMembers] = await Promise.all([
-    listAssignableTeamMembers(),
+    listAssignableTeamMembers(companyId),
     ...[...PIPELINE_STATUSES, ...TERMINAL_STATUSES].map((status) => {
       const filters = { ...DEFAULT_FILTERS, datasetId, status: [status], sort: "priority" as const, pageSize: 50 };
       return queryClient.prefetchQuery({
         queryKey: leadsQueryKey(filters),
-        queryFn: () => queryLeads(filters),
+        queryFn: () => queryLeads(companyId, filters),
       });
     }),
   ]);
@@ -45,7 +45,7 @@ async function Board({ searchParams }: { searchParams: SearchParams }) {
 }
 
 export default async function PipelinePage({ searchParams }: { searchParams: SearchParams }) {
-  await requireUser();
+  const user = await requireUser();
 
   return (
     <div className="flex flex-col gap-6 p-4 sm:p-6">
@@ -55,7 +55,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Sea
       />
 
       <Suspense fallback={<TableSkeleton />}>
-        <Board searchParams={searchParams} />
+        <Board searchParams={searchParams} companyId={user.companyId} />
       </Suspense>
     </div>
   );

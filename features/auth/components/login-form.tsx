@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/common/spinner";
 import { signIn } from "@/application/auth/login.actions";
 
-export function LoginForm({ isFirstRun }: { isFirstRun: boolean }) {
+export function LoginForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -41,13 +42,6 @@ export function LoginForm({ isFirstRun }: { isFirstRun: boolean }) {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      {isFirstRun && (
-        <p className="border-border bg-muted/50 text-muted-foreground rounded-lg border p-3 text-sm">
-          No accounts exist yet. The email and password you enter here become the
-          first admin account.
-        </p>
-      )}
-
       {error && (
         <p className="text-destructive text-sm" role="alert">
           {error}
@@ -68,27 +62,26 @@ export function LoginForm({ isFirstRun }: { isFirstRun: boolean }) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="password">Password</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password">Password</Label>
+          <Link href="/forgot-password" className="text-muted-foreground text-xs underline underline-offset-4">
+            Forgot password?
+          </Link>
+        </div>
         <Input
           id="password"
           name="password"
           type="password"
           required
-          autoComplete={isFirstRun ? "new-password" : "current-password"}
-          placeholder={isFirstRun ? "At least 10 characters" : "••••••••"}
+          autoComplete="current-password"
+          placeholder="••••••••"
         />
       </div>
 
       <Button type="submit" disabled={pending}>
         {pending && <Spinner className="size-4" />}
-        {isFirstRun ? "Create admin account" : "Sign in"}
+        Sign in
       </Button>
-
-      {!isFirstRun && (
-        <p className="text-muted-foreground text-center text-xs">
-          Lost your password? An admin can reset it from Admin → Team.
-        </p>
-      )}
     </form>
   );
 }

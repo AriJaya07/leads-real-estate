@@ -4,8 +4,20 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { LeadFilters } from "@/application/leads/filters.schema";
 import { serializeLeadFilters } from "@/application/leads/filters.schema";
 import type { LeadAppearanceListItem, LeadPage, LeadStats } from "@/application/leads/lead-queries";
+import type { LeadValidationResult } from "@/domain/scoring/lead-validation";
 import type { FacetDescriptor } from "@/application/leads/facets";
-import { leadAppearancesQueryKey, leadFacetsQueryKey, leadStatsQueryKey, leadsQueryKey } from "./query-keys";
+import type {
+  LeadAffiliation,
+  TargetCompanyOption,
+} from "@/application/companies/target-company-queries";
+import {
+  leadAffiliationsQueryKey,
+  leadAppearancesQueryKey,
+  leadFacetsQueryKey,
+  leadStatsQueryKey,
+  leadValidationQueryKey,
+  leadsQueryKey,
+} from "./query-keys";
 
 async function fetchJson<T>(url: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal });
@@ -84,5 +96,43 @@ export function useLeadAppearancesQuery(leadId: string | undefined) {
         signal,
       ).then((body) => body.appearances),
     enabled: Boolean(leadId),
+  });
+}
+
+/** Every target company this lead is linked to — same "only while the sheet is open" gating as appearances. */
+export function useLeadAffiliationsQuery(leadId: string | undefined) {
+  return useQuery({
+    queryKey: leadAffiliationsQueryKey(leadId ?? ""),
+    queryFn: ({ signal }) =>
+      fetchJson<{ affiliations: LeadAffiliation[] }>(`/api/leads/${leadId}/affiliations`, signal).then(
+        (body) => body.affiliations,
+      ),
+    enabled: Boolean(leadId),
+  });
+}
+
+/** Data validation + lead score for the open detail sheet — same "only while open" gating as appearances/affiliations. */
+export function useLeadValidationQuery(leadId: string | undefined) {
+  return useQuery({
+    queryKey: leadValidationQueryKey(leadId ?? ""),
+    queryFn: ({ signal }) =>
+      fetchJson<{ validation: LeadValidationResult }>(`/api/leads/${leadId}/validation`, signal).then(
+        (body) => body.validation,
+      ),
+    enabled: Boolean(leadId),
+  });
+}
+
+/** Search-as-you-type for the "link a company" combobox — disabled until the caller has typed something. */
+export function useTargetCompanySearchQuery(query: string) {
+  return useQuery({
+    queryKey: ["target-companies", "search", query] as const,
+    queryFn: ({ signal }) =>
+      fetchJson<{ companies: TargetCompanyOption[] }>(
+        `/api/target-companies?q=${encodeURIComponent(query)}`,
+        signal,
+      ).then((body) => body.companies),
+    enabled: query.trim().length > 0,
+    staleTime: 10_000,
   });
 }

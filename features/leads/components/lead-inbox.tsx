@@ -13,6 +13,7 @@ import { DataTable, DataTableHead } from "@/components/common/data-table";
 import { RelativeTime } from "@/components/common/relative-time";
 import { IntentBadge } from "@/components/common/intent-badge";
 import { ScoreBadge, ScoreReasons } from "@/components/common/score-badge";
+import { PotentialPill } from "@/components/common/potential-pill";
 import { LeadFilterBar } from "./lead-filter-bar";
 import { markContacted } from "@/application/leads/lead.actions";
 import { useUrlFilters } from "@/hooks/use-url-filters";
@@ -48,8 +49,12 @@ function countActiveFilters(filters: LeadFilters): number {
   if (filters.q) count += 1;
   count += filters.leadType.length + filters.status.length;
   count += filters.propertyTypes.length + filters.locations.length + filters.groups.length;
+  count += filters.sourceIds.length + filters.dataQuality.length;
   if (filters.minBuyerScore !== undefined) count += 1;
+  if (filters.minLeadScore !== undefined) count += 1;
   if (filters.hasContact) count += 1;
+  if (filters.collectedAfter) count += 1;
+  if (filters.collectedBefore) count += 1;
   count += Object.keys(filters.attr).length;
   return count;
 }
@@ -153,6 +158,7 @@ const LeadCard = memo(function LeadCard({
         <div className="flex flex-wrap items-center gap-1.5">
           <ScoreBadge score={primaryLeadScore(lead)} />
           <IntentBadge intent={lead.leadType} />
+          <PotentialPill potential={lead.dataQualityTier} />
         </div>
         <span className="text-muted-foreground shrink-0 text-xs">
           <RelativeTime value={lead.latestAppearanceAt} />
@@ -220,6 +226,7 @@ const LeadRow = memo(function LeadRow({
           <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
             c{lead.confidenceScore}
           </span>
+          <PotentialPill potential={lead.dataQualityTier} />
         </div>
       </td>
 

@@ -76,4 +76,18 @@ test.describe("lead triage", () => {
     await page.getByRole("button", { name: "Close", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Status" })).toBeHidden();
   });
+
+  test("linking a new affiliated company from the detail sheet persists it", async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto("/leads");
+
+    const row = page.getByRole("row", { name: new RegExp(E2E_LEAD_AUTHOR) });
+    await row.click();
+    await expect(page.getByRole("heading", { name: "Status" })).toBeVisible();
+
+    const companyName = `Smoke Test Villas ${Date.now()}`;
+    await page.getByPlaceholder("Search or add a company…").fill(companyName);
+    await page.getByRole("button", { name: "Link" }).click();
+    await expect(page.getByText(companyName)).toBeVisible();
+  });
 });

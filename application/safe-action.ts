@@ -1,6 +1,7 @@
 import "server-only";
 import { createSafeActionClient } from "next-safe-action";
 import { currentUser } from "@/application/auth/current-user";
+import { roleAtLeast } from "@/domain/auth/permissions";
 import { createLogger } from "@/infrastructure/observability/logger";
 
 const log = createLogger("action");
@@ -40,8 +41,21 @@ export const authActionClient = actionClient.use(async ({ next }) => {
   return next({ ctx: { user } });
 });
 
+/** Owner or admin — "manage users and settings." */
 export const adminActionClient = authActionClient.use(async ({ next, ctx }) => {
-  if (ctx.user.role !== "admin") throw new ActionError("Admin access required.");
+  if (!roleAtLeast(ctx.user.role, "admin")) throw new ActionError("Admin access required.");
+  return next({ ctx });
+});
+
+/** Owner, admin, or manager — "manage projects and data." */
+export const managerActionClient = authActionClient.use(async ({ next, ctx }) => {
+  if (!roleAtLeast(ctx.user.role, "manager")) throw new ActionError("Manager access required.");
+  return next({ ctx });
+});
+
+/** Owner only — spend-affecting actions (changing the subscription plan) that no other role may take. */
+export const ownerActionClient = authActionClient.use(async ({ next, ctx }) => {
+  if (!roleAtLeast(ctx.user.role, "owner")) throw new ActionError("Owner access required.");
   return next({ ctx });
 });
 

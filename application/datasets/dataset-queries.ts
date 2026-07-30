@@ -1,6 +1,6 @@
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
 import { datasetsRegistryTag, leadsTag } from "@/application/cache-tags";
 
@@ -35,7 +35,7 @@ function label(name: string | null, title: string | null, externalId: string): s
  * `leadCount`/`buyerCount` drifting from webhook-triggered syncs, which only
  * revalidate `leadsTag()` in the background — see api-patterns.md.
  */
-export async function listDatasets(): Promise<DatasetSummary[]> {
+export async function listDatasets(companyId: string): Promise<DatasetSummary[]> {
   "use cache";
   cacheLife("minutes");
   cacheTag(datasetsRegistryTag(), leadsTag());
@@ -75,6 +75,7 @@ export async function listDatasets(): Promise<DatasetSummary[]> {
     })
     .from(schema.datasets)
     .leftJoin(schema.mappingProfiles, eq(schema.mappingProfiles.id, schema.datasets.mappingProfileId))
+    .where(eq(schema.datasets.companyId, companyId))
     .orderBy(
       desc(sql`(
         SELECT count(DISTINCT ${schema.leadAppearances.leadId}) FROM ${schema.leadAppearances}
@@ -88,11 +89,11 @@ export async function listDatasets(): Promise<DatasetSummary[]> {
   }));
 }
 
-export async function getDatasetDetail(datasetId: string) {
+export async function getDatasetDetail(companyId: string, datasetId: string) {
   const [dataset] = await db()
     .select()
     .from(schema.datasets)
-    .where(eq(schema.datasets.id, datasetId))
+    .where(and(eq(schema.datasets.id, datasetId), eq(schema.datasets.companyId, companyId)))
     .limit(1);
   if (!dataset) return null;
 
@@ -100,19 +101,21 @@ export async function getDatasetDetail(datasetId: string) {
     db()
       .select()
       .from(schema.syncRuns)
-      .where(eq(schema.syncRuns.datasetId, datasetId))
+      .where(and(eq(schema.syncRuns.datasetId, datasetId), eq(schema.syncRuns.companyId, companyId)))
       .orderBy(desc(schema.syncRuns.startedAt))
       .limit(25),
     db()
       .select()
       .from(schema.datasetVersions)
-      .where(eq(schema.datasetVersions.datasetId, datasetId))
+      .where(
+        and(eq(schema.datasetVersions.datasetId, datasetId), eq(schema.datasetVersions.companyId, companyId)),
+      )
       .orderBy(desc(schema.datasetVersions.versionNo))
       .limit(10),
     db()
       .select()
       .from(schema.fieldCatalog)
-      .where(eq(schema.fieldCatalog.datasetId, datasetId))
+      .where(and(eq(schema.fieldCatalog.datasetId, datasetId), eq(schema.fieldCatalog.companyId, companyId)))
       .orderBy(desc(schema.fieldCatalog.fillRate)),
     dataset.mappingProfileId
       ? db()
@@ -159,7 +162,7 @@ export interface RecentSyncRun {
  * re-run — `"use cache"` plus a tag `runSync`/`setDatasetStatus` already
  * invalidate is what keeps it live instead of frozen at build time.
  */
-export async function getRecentSyncRuns(limit = 50): Promise<RecentSyncRun[]> {
+export async function getRecentSyncRuns(companyId: string, limit = 50): Promise<RecentSyncRun[]> {
   "use cache";
   cacheLife("minutes");
   cacheTag(datasetsRegistryTag(), leadsTag());
@@ -183,6 +186,7 @@ export async function getRecentSyncRuns(limit = 50): Promise<RecentSyncRun[]> {
     })
     .from(schema.syncRuns)
     .innerJoin(schema.datasets, eq(schema.datasets.id, schema.syncRuns.datasetId))
+    .where(eq(schema.syncRuns.companyId, companyId))
     .orderBy(desc(schema.syncRuns.startedAt))
     .limit(limit);
 
@@ -192,11 +196,11 @@ export async function getRecentSyncRuns(limit = 50): Promise<RecentSyncRun[]> {
   }));
 }
 
-export async function getSyncEvents(syncRunId: string) {
+export async function getSyncEvents(companyId: string, syncRunId: string) {
   return db()
     .select()
     .from(schema.syncEvents)
-    .where(eq(schema.syncEvents.syncRunId, syncRunId))
+    .where(and(eq(schema.syncEvents.syncRunId, syncRunId), eq(schema.syncEvents.companyId, companyId)))
     .orderBy(schema.syncEvents.at);
 }
 
@@ -206,7 +210,7 @@ export async function getSyncEvents(syncRunId: string) {
  * child on both `/admin/datasets` and `/admin/sync`, which needs `"use cache"`
  * to avoid being frozen into the static build shell.
  */
-export async function getSyncOverview() {
+export async function getSyncOverview(companyId: string) {
   "use cache";
   cacheLife("minutes");
   cacheTag(datasetsRegistryTag(), leadsTag());
@@ -220,7 +224,8 @@ export async function getSyncOverview() {
       stale: sql<number>`count(*) FILTER (WHERE ${schema.datasets.health} = 'stale')::int`,
       due: sql<number>`count(*) FILTER (WHERE ${schema.datasets.nextSyncDueAt} <= now())::int`,
     })
-    .from(schema.datasets);
+    .from(schema.datasets)
+    .where(eq(schema.datasets.companyId, companyId));
 
   const [recent] = await db()
     .select({
@@ -229,7 +234,8 @@ export async function getSyncOverview() {
       runs24h: sql<number>`count(*) FILTER (WHERE ${schema.syncRuns.startedAt} > now() - interval '24 hours')::int`,
       leads24h: sql<number>`coalesce(sum(${schema.syncRuns.leadsCreated}) FILTER (WHERE ${schema.syncRuns.startedAt} > now() - interval '24 hours'), 0)::int`,
     })
-    .from(schema.syncRuns);
+    .from(schema.syncRuns)
+    .where(eq(schema.syncRuns.companyId, companyId));
 
   return { ...row, ...recent };
 }

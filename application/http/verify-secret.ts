@@ -12,3 +12,12 @@ export function secretsMatch(provided: string | null | undefined, expected: stri
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
 }
+
+/** Pulls a shared secret from either header a system caller might use. */
+export function extractSecretHeader(request: Request): string | null {
+  return (
+    request.headers.get("x-webhook-secret") ??
+    request.headers.get("authorization")?.replace(/^Bearer /, "") ??
+    null
+  );
+}

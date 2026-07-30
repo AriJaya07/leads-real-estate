@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/application/auth/current-user";
+import { getProfile } from "@/application/auth/profile-queries";
 import { PageHeader } from "@/components/common/page-header";
 import { ChangePasswordForm } from "@/features/auth/components/change-password-form";
+import { ProfileForm } from "@/features/auth/components/profile-form";
 import { SignOutEverywhereButton } from "@/features/auth/components/sign-out-everywhere-button";
 
 export const metadata: Metadata = { title: "Account" };
@@ -23,6 +25,13 @@ export default async function AccountPage() {
         title="Account"
         description={user.email}
       />
+
+      {!user.mustChangePassword && (
+        <div className="border-border max-w-md rounded-xl border p-4 sm:p-6">
+          <h2 className="mb-4 text-sm font-medium">Profile</h2>
+          <ProfileForm profile={await getProfile(user.userId)} />
+        </div>
+      )}
 
       <div className="border-border max-w-md rounded-xl border p-4 sm:p-6">
         <h2 className="mb-4 text-sm font-medium">Change password</h2>

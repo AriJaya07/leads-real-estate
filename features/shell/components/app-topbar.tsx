@@ -19,6 +19,7 @@ import { formatCount } from "@/shared/format";
 import { signOut } from "@/application/auth/login.actions";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { useDatasetsQuery } from "@/features/datasets/queries";
+import type { Role } from "@/domain/auth/permissions";
 
 /**
  * The global dataset scope. This is what replaces switching APIFY_DATASET_ID:
@@ -35,7 +36,7 @@ export function AppTopbar({
   role,
 }: {
   userEmail: string;
-  role: "admin" | "agent";
+  role: Role;
 }) {
   const router = useRouter();
   const { searchParams, setParams } = useUrlFilters();

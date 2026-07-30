@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { requireAdmin } from "@/application/auth/current-user";
+import { requireManager } from "@/application/auth/current-user";
 import { listDatasets } from "@/application/datasets/dataset-queries";
 import { getSyncOverview } from "@/application/datasets/dataset-queries";
 import { PageHeader } from "@/components/common/page-header";
@@ -12,8 +12,8 @@ import { StatRowSkeleton } from "@/components/common/stat-row-skeleton";
 
 export const metadata: Metadata = { title: "Datasets" };
 
-async function Overview() {
-  const overview = await getSyncOverview();
+async function Overview({ companyId }: { companyId: string }) {
+  const overview = await getSyncOverview(companyId);
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
       <StatTile label="Datasets" value={overview.datasets} hint={`${overview.active} active`} />
@@ -30,13 +30,13 @@ async function Overview() {
   );
 }
 
-async function Registry() {
-  const datasets = await listDatasets();
+async function Registry({ companyId }: { companyId: string }) {
+  const datasets = await listDatasets(companyId);
   return <DatasetTable datasets={datasets} />;
 }
 
 export default async function AdminDatasetsPage() {
-  await requireAdmin();
+  const user = await requireManager();
 
   return (
     <div className="flex flex-col gap-6 p-4 sm:p-6">
@@ -47,11 +47,11 @@ export default async function AdminDatasetsPage() {
       />
 
       <Suspense fallback={<StatRowSkeleton />}>
-        <Overview />
+        <Overview companyId={user.companyId} />
       </Suspense>
 
       <Suspense fallback={<TableSkeleton />}>
-        <Registry />
+        <Registry companyId={user.companyId} />
       </Suspense>
     </div>
   );

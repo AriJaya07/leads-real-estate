@@ -90,22 +90,27 @@ async function contact() {
 
 ### System routes
 
-One system-to-system endpoint exists, and it is not a public API:
+System-to-system endpoints — none of this is a public API:
 
 | Route | Method | Auth | Purpose |
 | --- | --- | --- | --- |
 | `/api/webhooks/apify` | POST | `x-webhook-secret` or `Authorization: Bearer $APIFY_WEBHOOK_SECRET` | Accelerates a sync for one dataset; falls back to full discovery if the dataset is unknown |
+| `/api/trigger/discover` | POST | `x-webhook-secret` or `Authorization: Bearer $N8N_TRIGGER_SECRET` | n8n-scheduled dataset discovery — calls `discoverAllSources()` |
+| `/api/trigger/sync` | POST | same as above | n8n-scheduled sync tick — calls `dueDatasets(10)` then `syncDataset()` per due dataset |
+| `/api/trigger/fx` | POST | same as above | n8n-scheduled FX refresh — calls `refreshFxRates()` |
+| `/api/trigger/retention` | POST | same as above | n8n-scheduled retention pruning — calls `pruneOldRows()` |
 
 **There used to be four `GET /api/cron/*` routes** (discover, sync, fx, retention),
 scheduled from `vercel.json` and authenticated with a `CRON_SECRET`. All of them, the
-`vercel.json`, and the `CRON_SECRET` env var are gone — scheduling is being moved to
-n8n. The use-case functions they wrapped (`discoverAllSources()`, `dueDatasets()` +
-`syncDataset()`, `refreshFxRates()`, `pruneOldRows()`) are all still there and still
-tested; only the HTTP triggers were removed. See `docs/tech-debt.md`'s "no scheduled
-trigger" entry for what that currently costs, and re-read this section before
-re-adding trigger endpoints — the pattern below is what they should look like.
+`vercel.json`, and the `CRON_SECRET` env var are gone, replaced by the four
+`/api/trigger/*` routes above — one shared `N8N_TRIGGER_SECRET` rather than one secret
+per route (n8n is one caller; see the "one secret per caller" guidance below, which is
+about not reusing `APIFY_WEBHOOK_SECRET` for a *different* caller, not about minting a
+secret per endpoint for the *same* caller). Unlike the Apify webhook, these respond
+synchronously (no `after()`) — n8n needs the real `{ ok, ... }` result to branch its
+workflow on, not just an ack.
 
-Pattern for a new one, if you add one:
+Pattern for a new one, if you add one (what `/api/trigger/*` already follows):
 
 ```ts
 export async function POST(request: Request) {

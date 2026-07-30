@@ -10,6 +10,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { leads } from "./leads";
+import { companies } from "./company";
 import { alertChannelEnum, alertDeliveryStatusEnum } from "./enums";
 import type { Predicate } from "@/domain/alerting/predicate";
 
@@ -21,6 +22,9 @@ export const alertRules = pgTable(
   "alert_rules",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     description: text("description"),
     enabled: boolean("enabled").notNull().default(true),
@@ -35,7 +39,12 @@ export const alertRules = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("alert_rules_name_key").on(t.name)],
+  (t) => [
+    // Composite with companyId, replacing the old global (name) uniqueness —
+    // two companies can both name a rule "High-intent Bali buyer".
+    uniqueIndex("alert_rules_company_name_key").on(t.companyId, t.name),
+    index("alert_rules_company_idx").on(t.companyId),
+  ],
 );
 
 /**
@@ -46,6 +55,10 @@ export const alertDeliveries = pgTable(
   "alert_deliveries",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Denormalized from `alert_rules.companyId`. */
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
     alertRuleId: uuid("alert_rule_id").references(() => alertRules.id, { onDelete: "set null" }),
     leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
     channel: alertChannelEnum("channel").notNull(),
@@ -61,6 +74,7 @@ export const alertDeliveries = pgTable(
     uniqueIndex("alert_deliveries_dedupe_key").on(t.dedupeKey),
     index("alert_deliveries_lead_idx").on(t.leadId),
     index("alert_deliveries_status_idx").on(t.status),
+    index("alert_deliveries_company_idx").on(t.companyId),
   ],
 );
 
