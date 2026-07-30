@@ -3,7 +3,14 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { LeadFilters } from "@/application/leads/filters.schema";
 import { serializeLeadFilters } from "@/application/leads/filters.schema";
-import type { LeadAppearanceListItem, LeadPage, LeadStats } from "@/application/leads/lead-queries";
+import type {
+  LeadAppearanceListItem,
+  LeadEventItem,
+  LeadListItem,
+  LeadPage,
+  LeadStats,
+} from "@/application/leads/lead-queries";
+import type { SavedViewRow } from "@/infrastructure/db/schema/leads";
 import type { LeadValidationResult } from "@/domain/scoring/lead-validation";
 import type { FacetDescriptor } from "@/application/leads/facets";
 import type {
@@ -13,10 +20,13 @@ import type {
 import {
   leadAffiliationsQueryKey,
   leadAppearancesQueryKey,
+  leadEventsQueryKey,
   leadFacetsQueryKey,
+  leadSimilarQueryKey,
   leadStatsQueryKey,
   leadValidationQueryKey,
   leadsQueryKey,
+  savedViewsQueryKey,
 } from "./query-keys";
 
 async function fetchJson<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -120,6 +130,42 @@ export function useLeadValidationQuery(leadId: string | undefined) {
         (body) => body.validation,
       ),
     enabled: Boolean(leadId),
+  });
+}
+
+/** "Leads like this one" — same "only while the sheet is open" gating as appearances/affiliations/validation. */
+export function useLeadSimilarQuery(leadId: string | undefined) {
+  return useQuery({
+    queryKey: leadSimilarQueryKey(leadId ?? ""),
+    queryFn: ({ signal }) =>
+      fetchJson<{ leads: LeadListItem[] }>(`/api/leads/${leadId}/similar`, signal).then((body) => body.leads),
+    enabled: Boolean(leadId),
+  });
+}
+
+/** Full status/assignment/note/contact/alert history for the open detail sheet's "Activity" section. */
+export function useLeadEventsQuery(leadId: string | undefined) {
+  return useQuery({
+    queryKey: leadEventsQueryKey(leadId ?? ""),
+    queryFn: ({ signal }) =>
+      fetchJson<{ events: LeadEventItem[] }>(`/api/leads/${leadId}/events`, signal).then((body) => body.events),
+    enabled: Boolean(leadId),
+  });
+}
+
+/**
+ * A user's own saved searches plus every one the team has shared. Server-
+ * prefetched on first paint (`app/(app)/leads/page.tsx`, same `HydrationBoundary`
+ * pattern as facets/stats); this `queryFn` is what runs on every refetch after
+ * that (create/delete invalidates this key via `useServerAction`'s `invalidateKeys`).
+ */
+export function useSavedViewsQuery(initialData?: SavedViewRow[]) {
+  return useQuery({
+    queryKey: savedViewsQueryKey(),
+    queryFn: ({ signal }) =>
+      fetchJson<{ views: SavedViewRow[] }>("/api/leads/saved-views", signal).then((body) => body.views),
+    staleTime: 60_000,
+    initialData,
   });
 }
 

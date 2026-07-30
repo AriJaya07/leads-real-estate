@@ -33,3 +33,15 @@ export function actorTemplatesTag(): string {
 export function scrapeRequestsTag(): string {
   return "scrape-requests";
 }
+
+export function alertRulesTag(): string {
+  return "alert-rules";
+}
+
+export function savedViewsTag(): string {
+  return "saved-views";
+}
+
+export function automationSettingsTag(companyId: string): string {
+  return `automation-settings:${companyId}`;
+}

@@ -9,6 +9,8 @@ export interface PlanFeatures {
   whatsappAlerts: boolean;
   /** Gates the optional shadow LLM classifier per company, on top of the global env kill-switch. */
   llmShadowClassify: boolean;
+  /** Gates on-demand AI lead summaries and message drafting — see application/leads/ai-assist.actions.ts. */
+  aiAssistant: boolean;
   /** Display-only for now (no code path yet) — advertised in the pricing/comparison page. */
   customBranding: boolean;
   /** Display-only for now (no code path yet) — advertised in the pricing/comparison page. */
@@ -20,6 +22,7 @@ export interface PlanFeatures {
 export const NO_PLAN_FEATURES: PlanFeatures = {
   whatsappAlerts: false,
   llmShadowClassify: false,
+  aiAssistant: false,
   customBranding: false,
   prioritySupport: false,
   sso: false,

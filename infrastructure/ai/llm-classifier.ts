@@ -1,6 +1,7 @@
 import "server-only";
 import type { ClassifierInput, Classification, LeadClassifier, LeadIntent } from "@/domain/scoring/types";
 import { serverEnv } from "@/shared/config/env";
+import { callAnthropicText } from "./anthropic-client";
 
 /**
  * Shadow-mode LLM classifier — the `LeadClassifier` port's second
@@ -48,28 +49,7 @@ function buildPrompt(input: ClassifierInput): string {
 }
 
 async function callAnthropic(apiKey: string, prompt: string): Promise<unknown> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 512,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Anthropic API ${response.status}: ${body}`);
-  }
-
-  const data = (await response.json()) as { content?: { type: string; text?: string }[] };
-  const text = data.content?.find((block) => block.type === "text")?.text;
-  if (!text) throw new Error("Anthropic response had no text content block");
+  const text = await callAnthropicText({ apiKey, prompt, model: MODEL, maxTokens: 512 });
 
   try {
     return JSON.parse(text);

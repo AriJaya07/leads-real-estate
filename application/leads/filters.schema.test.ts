@@ -51,6 +51,7 @@ describe("serializeLeadFilters", () => {
       minBuyerScore: 60,
       minLeadScore: 70,
       hasContact: true,
+      bookmarked: true,
       collectedAfter: "2026-01-01",
       collectedBefore: "2026-07-01",
       sort: "newest",

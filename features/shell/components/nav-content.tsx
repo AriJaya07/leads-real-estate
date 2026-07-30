@@ -2,7 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreditCard, Database, Download, Inbox, KanbanSquare, Settings2, TrendingUp, Users } from "lucide-react";
+import {
+  BarChart3,
+  Bell,
+  CreditCard,
+  Database,
+  Download,
+  Inbox,
+  KanbanSquare,
+  Settings2,
+  TrendingUp,
+  Users,
+  Zap,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type Role, roleAtLeast } from "@/domain/auth/permissions";
 
@@ -14,13 +26,18 @@ const NAV = [
 
 /** Manage projects and data — visible to manager and above. */
 const MANAGER_NAV = [
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/admin/collection", label: "Collect data", icon: Download },
   { href: "/admin/datasets", label: "Datasets", icon: Database },
   { href: "/admin/sync", label: "Sync", icon: Settings2 },
 ];
 
 /** Manage users and settings — visible to admin (and owner) only. */
-const ADMIN_NAV = [{ href: "/admin/team", label: "Team", icon: Users }];
+const ADMIN_NAV = [
+  { href: "/admin/team", label: "Team", icon: Users },
+  { href: "/admin/alerts", label: "Alerts", icon: Bell },
+  { href: "/admin/automation", label: "Automation", icon: Zap },
+];
 
 /** Spend decisions — visible to owner only. */
 const OWNER_NAV = [{ href: "/admin/billing", label: "Billing", icon: CreditCard }];

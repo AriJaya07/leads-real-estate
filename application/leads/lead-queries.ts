@@ -13,6 +13,7 @@ import {
   validRecordKinds,
 } from "./sql-helpers";
 import { prioritySortExpression } from "./priority-sql";
+import { TERMINAL_STATUSES } from "./lead-status";
 import type { ContactInfo, ScoreReason } from "@/domain/scoring/types";
 
 /** A representative appearance for card/list display — a person has no single "body" anymore. */
@@ -44,6 +45,9 @@ export interface LeadListItem {
   investorScore: number;
   confidenceScore: number;
   aiExplanation: string;
+  /** On-demand, agent-triggered — see application/leads/ai-assist.actions.ts. Null until generated. */
+  aiSummary: string | null;
+  aiSummaryGeneratedAt: Date | null;
   propertyTypes: string[];
   locations: string[];
   budgetMin: number | null;
@@ -63,6 +67,9 @@ export interface LeadListItem {
   notes: string;
   tags: string[];
   firstContactedAt: Date | null;
+  /** Actual closed-deal value, entered by a human — see application/leads/lead.actions.ts::setDealValue. Distinct from the lead's own *stated* budgetMin/Max. */
+  dealValueUsd: number | null;
+  dealClosedAt: Date | null;
   priority: number;
 }
 
@@ -187,6 +194,7 @@ function buildConditions(companyId: string, filters: LeadFilters): SQL[] {
   }
   if (filters.assignedTo) conditions.push(eq(schema.leadStates.assignedTo, filters.assignedTo));
   if (filters.unassigned) conditions.push(isNull(schema.leadStates.assignedTo));
+  if (filters.bookmarked) conditions.push(eq(schema.leadStates.bookmarked, true));
 
   if (filters.postedAfter) {
     const date = new Date(filters.postedAfter);
@@ -287,9 +295,21 @@ export interface LeadPage {
   pageSize: number;
 }
 
-export async function queryLeads(companyId: string, filters: LeadFilters): Promise<LeadPage> {
-  const conditions = buildConditions(companyId, filters);
-  const where = and(...conditions);
+/**
+ * The one place that selects and shapes `leads` rows into `LeadListItem`s —
+ * `queryLeads` (the paginated inbox) and `getSimilarLeads` (recommendations)
+ * both call this rather than each carrying their own copy of the column list
+ * and enrichment logic (primary-appearance shaping, `priorityScore`). Any
+ * caller supplies its own `where`/`orderBy`/`limit`/`offset`; the shape of a
+ * "lead row" stays defined exactly once.
+ */
+async function selectLeadRows(
+  companyId: string,
+  where: SQL | undefined,
+  orderByExprs: SQL[],
+  limit: number,
+  offset: number,
+): Promise<LeadListItem[]> {
   const primary = primaryAppearanceSubquery(companyId);
 
   const rows = await db()
@@ -310,6 +330,8 @@ export async function queryLeads(companyId: string, filters: LeadFilters): Promi
       investorScore: schema.leads.investorScore,
       confidenceScore: schema.leads.confidenceScore,
       aiExplanation: schema.leads.aiExplanation,
+      aiSummary: schema.leads.aiSummary,
+      aiSummaryGeneratedAt: schema.leads.aiSummaryGeneratedAt,
       propertyTypes: schema.leads.propertyTypes,
       locations: schema.leads.locations,
       budgetMin: schema.leads.budgetMin,
@@ -335,24 +357,20 @@ export async function queryLeads(companyId: string, filters: LeadFilters): Promi
       notes: schema.leadStates.notes,
       tags: schema.leadStates.tags,
       firstContactedAt: schema.leadStates.firstContactedAt,
+      dealValueUsd: schema.leadStates.dealValueUsd,
+      dealClosedAt: schema.leadStates.dealClosedAt,
     })
     .from(schema.leads)
     .leftJoin(schema.leadStates, eq(schema.leadStates.leadId, schema.leads.id))
     .leftJoin(schema.users, eq(schema.users.id, schema.leadStates.assignedTo))
     .leftJoin(primary, eq(primary.leadId, schema.leads.id))
     .where(where)
-    .orderBy(...orderBy(filters.sort))
-    .limit(filters.pageSize)
-    .offset((filters.page - 1) * filters.pageSize);
-
-  const [{ count }] = await db()
-    .select({ count: sql<number>`count(*)::int` })
-    .from(schema.leads)
-    .leftJoin(schema.leadStates, eq(schema.leadStates.leadId, schema.leads.id))
-    .where(where);
+    .orderBy(...orderByExprs)
+    .limit(limit)
+    .offset(offset);
 
   const now = Date.now();
-  const items: LeadListItem[] = rows.map((row) => ({
+  return rows.map((row) => ({
     ...row,
     status: row.status ?? "new",
     notes: row.notes ?? "",
@@ -385,6 +403,25 @@ export async function queryLeads(companyId: string, filters: LeadFilters): Promi
       now,
     ),
   }));
+}
+
+export async function queryLeads(companyId: string, filters: LeadFilters): Promise<LeadPage> {
+  const conditions = buildConditions(companyId, filters);
+  const where = and(...conditions);
+
+  const items = await selectLeadRows(
+    companyId,
+    where,
+    orderBy(filters.sort),
+    filters.pageSize,
+    (filters.page - 1) * filters.pageSize,
+  );
+
+  const [{ count }] = await db()
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.leads)
+    .leftJoin(schema.leadStates, eq(schema.leadStates.leadId, schema.leads.id))
+    .where(where);
 
   return {
     items,
@@ -393,6 +430,55 @@ export async function queryLeads(companyId: string, filters: LeadFilters): Promi
     page: filters.page,
     pageSize: filters.pageSize,
   };
+}
+
+/**
+ * "Leads like this one" — reuses `selectLeadRows` (same shape, same
+ * `priorityScore` ranking as the main inbox) scoped to whoever shares a
+ * property type or location with `leadId`, falling back to the same
+ * `leadType` when neither array has anything to match on. Excludes the lead
+ * itself and anyone already `rejected` (`TERMINAL_STATUSES`) — a dead lead
+ * recommending more dead leads isn't useful. Not a new scoring model: the
+ * ranking is the exact same `priorityScore`/`prioritySortExpression` formula
+ * every other lead view uses, just applied to a narrower candidate set.
+ */
+export async function getSimilarLeads(companyId: string, leadId: string, limit = 6): Promise<LeadListItem[]> {
+  const [target] = await db()
+    .select({
+      propertyTypes: schema.leads.propertyTypes,
+      locations: schema.leads.locations,
+      leadType: schema.leads.leadType,
+    })
+    .from(schema.leads)
+    .where(and(eq(schema.leads.id, leadId), eq(schema.leads.companyId, companyId)))
+    .limit(1);
+  if (!target) return [];
+
+  const overlap: SQL[] = [];
+  if (target.propertyTypes.length) {
+    overlap.push(sql`${schema.leads.propertyTypes} && ${textArray(target.propertyTypes)}`);
+  }
+  if (target.locations.length) {
+    overlap.push(sql`${schema.leads.locations} && ${textArray(target.locations)}`);
+  }
+  if (overlap.length === 0) {
+    overlap.push(eq(schema.leads.leadType, target.leadType));
+  }
+
+  const where = and(
+    eq(schema.leads.companyId, companyId),
+    sql`${schema.leads.id} != ${leadId}`,
+    or(...overlap),
+    sql`(${schema.leadStates.status} IS NULL OR ${schema.leadStates.status}::text != ALL(${textArray([...TERMINAL_STATUSES])}))`,
+  );
+
+  return selectLeadRows(
+    companyId,
+    where,
+    [desc(prioritySortExpression()), desc(schema.leads.latestAppearanceAt)],
+    limit,
+    0,
+  );
 }
 
 export interface AlertableLead {
@@ -531,6 +617,41 @@ export async function getLeadAppearances(companyId: string, leadId: string): Pro
     .orderBy(desc(schema.leadAppearances.postedAt));
 
   return rows;
+}
+
+export interface LeadEventItem {
+  id: string;
+  type: string;
+  actorId: string | null;
+  actorName: string | null;
+  payload: Record<string, unknown> | null;
+  at: Date;
+}
+
+/**
+ * Full audit trail for one lead — status changes, assignment, notes, contact
+ * touches, alerts sent, and identity merges — backing the detail sheet's
+ * "Activity" timeline (also the concrete source for "contact history": every
+ * `markContacted` call writes its own `contacted` row here, distinct from
+ * `lead_states.firstContactedAt`, which only ever remembers the first one).
+ * Every event type here is already written by an existing action
+ * (`lead.actions.ts`, `application/alerting/dispatch.ts`,
+ * `identity-resolution.ts`) — this is the first reader, not a new write path.
+ */
+export async function getLeadEvents(companyId: string, leadId: string): Promise<LeadEventItem[]> {
+  return db()
+    .select({
+      id: schema.leadEvents.id,
+      type: schema.leadEvents.type,
+      actorId: schema.leadEvents.actorId,
+      actorName: schema.users.name,
+      payload: schema.leadEvents.payload,
+      at: schema.leadEvents.at,
+    })
+    .from(schema.leadEvents)
+    .leftJoin(schema.users, eq(schema.users.id, schema.leadEvents.actorId))
+    .where(and(eq(schema.leadEvents.companyId, companyId), eq(schema.leadEvents.leadId, leadId)))
+    .orderBy(desc(schema.leadEvents.at));
 }
 
 export interface LeadStats {

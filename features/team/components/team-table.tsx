@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/common/empty-state";
 import { DataTable, DataTableHead } from "@/components/common/data-table";
 import { Spinner } from "@/components/common/spinner";
+import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
 import type { Role } from "@/domain/auth/permissions";
 import {
   removeTeamMember,
@@ -277,15 +278,22 @@ export function TeamTable({
                         <KeyRound className="size-3.5" aria-hidden />
                         Reset
                       </Button>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        aria-label={`Remove ${member.email}`}
-                        disabled={busy || member.id === currentUserId}
-                        onClick={() => void remove(member)}
-                      >
-                        <Trash2 className="size-3.5" aria-hidden />
-                      </Button>
+                      <ConfirmDeleteDialog
+                        trigger={
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            aria-label={`Remove ${member.email}`}
+                            disabled={busy || member.id === currentUserId}
+                          >
+                            <Trash2 className="size-3.5" aria-hidden />
+                          </Button>
+                        }
+                        title={`Remove ${member.name ?? member.email}?`}
+                        description="They lose access to this company immediately. They'd need a new invite to rejoin."
+                        confirmLabel="Remove"
+                        onConfirm={() => void remove(member)}
+                      />
                     </div>
                   </td>
                 </tr>

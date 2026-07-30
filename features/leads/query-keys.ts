@@ -14,3 +14,6 @@ export const leadStatsQueryKey = (datasetId?: string) =>
 export const leadAppearancesQueryKey = (leadId: string) => ["leads", "appearances", leadId] as const;
 export const leadAffiliationsQueryKey = (leadId: string) => ["leads", "affiliations", leadId] as const;
 export const leadValidationQueryKey = (leadId: string) => ["leads", "validation", leadId] as const;
+export const leadSimilarQueryKey = (leadId: string) => ["leads", "similar", leadId] as const;
+export const leadEventsQueryKey = (leadId: string) => ["leads", "events", leadId] as const;
+export const savedViewsQueryKey = () => ["leads", "saved-views"] as const;

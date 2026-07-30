@@ -158,6 +158,8 @@ export const usageMetricEnum = pgEnum("usage_metric", [
   "apify_requests_month",
   /** Cumulative, not monthly-windowed (`periodStart` null) — total raw-record payload size on disk. */
   "storage_kb",
+  /** LLM calls made this month (lead summaries + message drafts) — a metered-cost metric like `apify_requests_month`, capped by a fixed constant rather than a per-plan column since only one plan feature (`aiAssistant`) gates this today. See application/leads/ai-assist.actions.ts. */
+  "ai_requests_month",
 ]);
 
 /**

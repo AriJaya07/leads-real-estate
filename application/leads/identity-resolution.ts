@@ -52,6 +52,23 @@ function matchCondition(
   return and(eq(schema.leads.companyId, companyId), eq(schema.leads.profileUrl, key.value));
 }
 
+/**
+ * Which identity field actually caused `existing` to match `candidate`, in
+ * the same facebookId → instagramId → profileUrl precedence
+ * `domain/lead/identity.ts` uses — purely descriptive, computed after the
+ * fact for the `merged` audit event below; doesn't change matching itself.
+ */
+function matchedIdentityField(
+  existing: PersonalInfo,
+  candidate: AppearanceIdentitySnapshot,
+): "facebookId" | "instagramId" | "profileUrl" | null {
+  if (candidate.facebookId && existing.facebookId === candidate.facebookId) return "facebookId";
+  if (candidate.instagramId && existing.instagramId === candidate.instagramId) return "instagramId";
+  const normalized = normalizeProfileUrl(candidate.profileUrl);
+  if (normalized && existing.profileUrl === normalized) return "profileUrl";
+  return null;
+}
+
 function toPersonalInfo(row: {
   facebookId: string | null;
   instagramId: string | null;
@@ -128,6 +145,25 @@ export async function resolveIdentity(
             updatedAt: new Date(),
           })
           .where(eq(schema.leads.id, existing.id));
+      }
+
+      // Audit trail for "why did this appearance end up as this person" —
+      // tech-debt.md flagged `merged` as defined on the enum since before the
+      // person-centric refactor but never written; this is that write path,
+      // one row per appearance that resolves to an existing person (not on
+      // create). Best-effort: a logging failure here must never block ingest.
+      try {
+        await db().insert(schema.leadEvents).values({
+          companyId,
+          leadId: existing.id,
+          type: "merged",
+          payload: {
+            matchedField: matchedIdentityField(toPersonalInfo(existing), candidate),
+            appearanceAuthorName: candidate.name,
+          },
+        });
+      } catch (error) {
+        log.warn("failed to record identity-merge event", { leadId: existing.id, error });
       }
 
       return existing.id;

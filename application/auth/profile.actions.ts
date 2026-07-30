@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
 import { authActionClient } from "@/application/safe-action";
 
@@ -39,6 +40,18 @@ export const updateProfile = authActionClient
           updatedAt: new Date(),
         },
       });
+
+    return { ok: true };
+  });
+
+/** Opt in/out of the automatic-assignment round-robin (`application/automation/auto-assign.ts`) — e.g. while away. */
+export const setAcceptsAssignments = authActionClient
+  .inputSchema(z.object({ acceptsAssignments: z.boolean() }))
+  .action(async ({ parsedInput, ctx }) => {
+    await db()
+      .update(schema.users)
+      .set({ acceptsAssignments: parsedInput.acceptsAssignments })
+      .where(eq(schema.users.id, ctx.user.userId));
 
     return { ok: true };
   });

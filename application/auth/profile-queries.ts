@@ -27,3 +27,13 @@ export async function getProfile(userId: string): Promise<Profile> {
     .limit(1);
   return row ?? DEFAULTS;
 }
+
+/** `users.acceptsAssignments` — whether this teammate is currently in the auto-assignment round-robin pool. */
+export async function getAcceptsAssignments(userId: string): Promise<boolean> {
+  const [row] = await db()
+    .select({ acceptsAssignments: schema.users.acceptsAssignments })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+  return row?.acceptsAssignments ?? true;
+}

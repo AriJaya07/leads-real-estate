@@ -88,6 +88,10 @@ test.describe("lead triage", () => {
     const companyName = `Smoke Test Villas ${Date.now()}`;
     await page.getByPlaceholder("Search or add a company…").fill(companyName);
     await page.getByRole("button", { name: "Link" }).click();
-    await expect(page.getByText(companyName)).toBeVisible();
+    // Scoped to the affiliation badge (a <li>), not just any text match — the
+    // success toast's own "Linked to {companyName}" wording also contains the
+    // company name, so a bare `getByText(companyName)` is ambiguous whenever
+    // the toast hasn't faded yet by assertion time.
+    await expect(page.getByRole("listitem").filter({ hasText: companyName })).toBeVisible();
   });
 });

@@ -2,14 +2,22 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { requireUser } from "@/application/auth/current-user";
+import { type Role, roleAtLeast } from "@/domain/auth/permissions";
 import { parseLeadFilters } from "@/application/leads/filters.schema";
 import { queryLeads, getLeadStats } from "@/application/leads/lead-queries";
 import { getDynamicAttributeFacets, getLeadFacets } from "@/application/leads/facets";
 import { getTeamActivityStats } from "@/application/leads/team-activity";
-import { getUsageSummary } from "@/application/billing/usage";
+import { getCompanyPlan, getUsageSummary } from "@/application/billing/usage";
+import { hasFeature } from "@/domain/billing/plan-features";
 import { getSyncOverview } from "@/application/datasets/dataset-queries";
 import { getCollectionOverview } from "@/application/collection/scrape-requests.queries";
-import { leadFacetsQueryKey, leadStatsQueryKey, leadsQueryKey } from "@/features/leads/query-keys";
+import { listSavedViews } from "@/application/leads/saved-views.queries";
+import {
+  leadFacetsQueryKey,
+  leadStatsQueryKey,
+  leadsQueryKey,
+  savedViewsQueryKey,
+} from "@/features/leads/query-keys";
 import { LeadInbox } from "@/features/leads/components/lead-inbox";
 import { LeadStatsRow } from "@/features/leads/components/lead-stats-row";
 import { TableSkeleton } from "@/components/common/table-skeleton";
@@ -104,11 +112,21 @@ async function DashboardOverview({ searchParams, companyId }: { searchParams: Se
   );
 }
 
-async function Inbox({ searchParams, companyId }: { searchParams: SearchParams; companyId: string }) {
+async function Inbox({
+  searchParams,
+  companyId,
+  userId,
+  viewerRole,
+}: {
+  searchParams: SearchParams;
+  companyId: string;
+  userId: string;
+  viewerRole: Role;
+}) {
   const filters = parseLeadFilters(toURLSearchParams(await searchParams));
   const queryClient = getQueryClient();
 
-  await Promise.all([
+  const [, , , plan] = await Promise.all([
     queryClient.prefetchQuery({
       queryKey: leadsQueryKey(filters),
       queryFn: () => queryLeads(companyId, filters),
@@ -123,11 +141,21 @@ async function Inbox({ searchParams, companyId }: { searchParams: SearchParams; 
         return [...facets, ...dynamicFacets];
       },
     }),
+    queryClient.prefetchQuery({
+      queryKey: savedViewsQueryKey(),
+      queryFn: () => listSavedViews(companyId, userId),
+    }),
+    getCompanyPlan(companyId),
   ]);
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
-      <LeadInbox />
+      <LeadInbox
+        canCollectData={roleAtLeast(viewerRole, "manager")}
+        currentUserId={userId}
+        canManageSharedSearches={roleAtLeast(viewerRole, "manager")}
+        hasAiAssist={hasFeature(plan?.features, "aiAssistant")}
+      />
     </HydrationBoundary>
   );
 }
@@ -159,7 +187,12 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
       </Suspense>
 
       <Suspense fallback={<TableSkeleton />}>
-        <Inbox searchParams={searchParams} companyId={user.companyId} />
+        <Inbox
+          searchParams={searchParams}
+          companyId={user.companyId}
+          userId={user.userId}
+          viewerRole={user.role}
+        />
       </Suspense>
     </div>
   );

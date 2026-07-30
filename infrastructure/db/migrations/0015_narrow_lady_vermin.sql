@@ -1,0 +1,1 @@
+ALTER TYPE "public"."usage_metric" ADD VALUE 'ai_requests_month';

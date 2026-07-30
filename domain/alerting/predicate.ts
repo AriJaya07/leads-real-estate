@@ -7,7 +7,7 @@
  * that can run code is a rule engine that can be exploited.
  */
 
-type ComparisonOp =
+export type ComparisonOp =
   | "eq"
   | "neq"
   | "gt"
@@ -21,7 +21,7 @@ type ComparisonOp =
   | "exists"
   | "within";
 
-interface Comparison {
+export interface Comparison {
   field: string;
   op: ComparisonOp;
   value?: unknown;
@@ -50,6 +50,25 @@ function isNotOf(p: Predicate): p is NotOf {
 }
 function isComparison(p: Predicate): p is Comparison {
   return "field" in p && "op" in p;
+}
+
+/** Wraps a flat list of comparisons in an `all` — what the alert-rule builder UI produces. */
+export function buildAllOfPredicate(conditions: Comparison[]): Predicate {
+  return { all: conditions };
+}
+
+/**
+ * The inverse of `buildAllOfPredicate`: returns the flat comparison list if
+ * `predicate` is exactly the shape the rule-builder UI can produce and edit
+ * (a top-level `all` of plain comparisons, no nested `any`/`not`/`all`), or
+ * `null` for anything hand-authored and more complex — e.g. the seeded
+ * `PRIORITY_BUYER`-style rule with a nested `any` branch. The UI falls back to
+ * a read-only view for those rather than risk re-saving a lossy
+ * approximation of a rule it can't fully represent.
+ */
+export function flattenAllOf(predicate: Predicate): Comparison[] | null {
+  if (!isAllOf(predicate)) return null;
+  return predicate.all.every(isComparison) ? (predicate.all as Comparison[]) : null;
 }
 
 function readPath(subject: Record<string, unknown>, path: string): unknown {

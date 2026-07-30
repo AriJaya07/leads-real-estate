@@ -78,3 +78,13 @@ export const SCRAPE_REQUEST_DEDUP_WINDOW_MINUTES = 15;
 
 /** Curated defaults for the platform picker — the field itself stays free text, see collection.ts. */
 export const SCRAPE_PLATFORMS = ["instagram", "facebook", "linkedin", "other"] as const;
+
+/**
+ * Monthly cap on AI-assist calls (lead summaries + message drafts) per
+ * company — a flat safety net against a runaway loop or abusive usage
+ * burning real Anthropic API spend, not a plan-tier limit (no plan currently
+ * has its own `maxAiRequestsPerMonth` column; `aiAssistant` is a plain
+ * on/off feature flag). Generous enough that no legitimate usage pattern
+ * should ever hit it. See application/leads/ai-assist.actions.ts.
+ */
+export const MAX_AI_REQUESTS_PER_MONTH = 300;

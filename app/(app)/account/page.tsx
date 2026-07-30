@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/application/auth/current-user";
-import { getProfile } from "@/application/auth/profile-queries";
+import { getAcceptsAssignments, getProfile } from "@/application/auth/profile-queries";
 import { PageHeader } from "@/components/common/page-header";
+import { AcceptsAssignmentsToggle } from "@/features/auth/components/accepts-assignments-toggle";
 import { ChangePasswordForm } from "@/features/auth/components/change-password-form";
 import { ProfileForm } from "@/features/auth/components/profile-form";
 import { SignOutEverywhereButton } from "@/features/auth/components/sign-out-everywhere-button";
@@ -30,6 +31,13 @@ export default async function AccountPage() {
         <div className="border-border max-w-md rounded-xl border p-4 sm:p-6">
           <h2 className="mb-4 text-sm font-medium">Profile</h2>
           <ProfileForm profile={await getProfile(user.userId)} />
+        </div>
+      )}
+
+      {!user.mustChangePassword && (
+        <div className="border-border max-w-md rounded-xl border p-4 sm:p-6">
+          <h2 className="mb-4 text-sm font-medium">Lead assignment</h2>
+          <AcceptsAssignmentsToggle initialValue={await getAcceptsAssignments(user.userId)} />
         </div>
       )}
 

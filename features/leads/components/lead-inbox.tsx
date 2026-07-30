@@ -2,9 +2,11 @@
 
 import { memo, useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, ExternalLink, MessageCircle, Phone } from "lucide-react";
+import { toast } from "sonner";
+import { ChevronLeft, ChevronRight, ExternalLink, MessageCircle, Phone, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
@@ -15,9 +17,10 @@ import { IntentBadge } from "@/components/common/intent-badge";
 import { ScoreBadge, ScoreReasons } from "@/components/common/score-badge";
 import { PotentialPill } from "@/components/common/potential-pill";
 import { LeadFilterBar } from "./lead-filter-bar";
+import { SavedSearchesBar } from "./saved-searches-bar";
 import { markContacted } from "@/application/leads/lead.actions";
 import { useUrlFilters } from "@/hooks/use-url-filters";
-import { useLeadFacetsQuery, useLeadsQuery } from "@/features/leads/queries";
+import { useLeadFacetsQuery, useLeadsQuery, useSavedViewsQuery } from "@/features/leads/queries";
 import { parseLeadFilters, type LeadFilters } from "@/application/leads/filters.schema";
 import { leadStatusLabel } from "@/application/leads/lead-status";
 import type { LeadListItem } from "@/application/leads/lead-queries";
@@ -53,6 +56,7 @@ function countActiveFilters(filters: LeadFilters): number {
   if (filters.minBuyerScore !== undefined) count += 1;
   if (filters.minLeadScore !== undefined) count += 1;
   if (filters.hasContact) count += 1;
+  if (filters.bookmarked) count += 1;
   if (filters.collectedAfter) count += 1;
   if (filters.collectedBefore) count += 1;
   count += Object.keys(filters.attr).length;
@@ -159,6 +163,7 @@ const LeadCard = memo(function LeadCard({
           <ScoreBadge score={primaryLeadScore(lead)} />
           <IntentBadge intent={lead.leadType} />
           <PotentialPill potential={lead.dataQualityTier} />
+          {lead.bookmarked && <Star className="size-3.5 fill-amber-400 text-amber-400" aria-label="Favorite" />}
         </div>
         <span className="text-muted-foreground shrink-0 text-xs">
           <RelativeTime value={lead.latestAppearanceAt} />
@@ -234,6 +239,7 @@ const LeadRow = memo(function LeadRow({
         <div className="flex flex-wrap items-center gap-2">
           <IntentBadge intent={lead.leadType} />
           <span className="font-medium">{lead.name ?? "Unknown"}</span>
+          {lead.bookmarked && <Star className="size-3.5 fill-amber-400 text-amber-400" aria-label="Favorite" />}
           {lead.appearanceCount > 1 && (
             <span className="text-muted-foreground text-xs">seen {lead.appearanceCount}×</span>
           )}
@@ -276,7 +282,18 @@ const LeadRow = memo(function LeadRow({
  * showing the old page, dimmed, while the new one loads" treatment — the
  * concrete reason `placeholderData: keepPreviousData` is set on the query.
  */
-export function LeadInbox() {
+export function LeadInbox({
+  canCollectData = false,
+  currentUserId,
+  canManageSharedSearches = false,
+  hasAiAssist = false,
+}: {
+  canCollectData?: boolean;
+  currentUserId: string;
+  canManageSharedSearches?: boolean;
+  /** `aiAssistant` plan feature — gates the summary/message-draft buttons in the detail sheet. */
+  hasAiAssist?: boolean;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { searchParams, goToPage } = useUrlFilters();
@@ -293,6 +310,7 @@ export function LeadInbox() {
     refetch,
   } = useLeadsQuery(filters);
   const { data: facets = [] } = useLeadFacetsQuery(filters.datasetId);
+  const { data: savedViews = [] } = useSavedViewsQuery();
 
   /**
    * Logs the touch first, then opens the channel — the metric must not depend
@@ -302,7 +320,12 @@ export function LeadInbox() {
    */
   const contact = useCallback(
     async (lead: LeadListItem, channel: ContactChannel) => {
-      await markContacted({ leadId: lead.id, channel });
+      const result = await markContacted({ leadId: lead.id, channel });
+      if (!result?.data) {
+        // Surfaced, but not blocking: the real-world contact below still
+        // happens even if logging the touch failed — see the comment above.
+        toast.error(result?.serverError ?? "Contact logged locally but couldn't be saved — it may not count toward time-to-first-touch.");
+      }
       void queryClient.invalidateQueries({ queryKey: ["leads"] });
       router.refresh();
 
@@ -318,6 +341,12 @@ export function LeadInbox() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SavedSearchesBar
+        views={savedViews}
+        currentUserId={currentUserId}
+        canManageSharedSearches={canManageSharedSearches}
+      />
+
       <LeadFilterBar
         facets={facets}
         activeCount={countActiveFilters(filters)}
@@ -333,10 +362,26 @@ export function LeadInbox() {
       ) : !page ? (
         <TableSkeleton />
       ) : page.items.length === 0 ? (
-        <EmptyState
-          title="No leads match these filters"
-          description="Widen the filters, switch dataset scope, or run a sync from the admin area if this source is new."
-        />
+        countActiveFilters(filters) === 0 && !filters.datasetId && page.total === 0 ? (
+          <EmptyState
+            title="No leads yet"
+            description={
+              canCollectData
+                ? "Connect a data source and DreamRue starts finding buyer leads automatically — no filters to widen, there's just nothing collected yet."
+                : "Nothing collected yet — ask an admin or manager to connect a data source under Collect data."
+            }
+            action={
+              canCollectData ? (
+                <Button size="sm" render={<Link href="/admin/collection">Collect data</Link>} />
+              ) : undefined
+            }
+          />
+        ) : (
+          <EmptyState
+            title="No leads match these filters"
+            description="Widen the filters, switch dataset scope, or run a sync from the admin area if this source is new."
+          />
+        )
       ) : (
         <>
           <div className={cn("flex flex-col gap-4 transition-opacity", isPlaceholderData && "opacity-60")}>
@@ -409,7 +454,12 @@ export function LeadInbox() {
         </>
       )}
 
-      <LeadDetailSheet lead={selected} onClose={() => setSelected(null)} />
+      <LeadDetailSheet
+        lead={selected}
+        onClose={() => setSelected(null)}
+        onSelectLead={setSelected}
+        hasAiAssist={hasAiAssist}
+      />
     </div>
   );
 }

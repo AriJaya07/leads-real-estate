@@ -1,6 +1,6 @@
 "use client";
 
-import { Filter, LayoutGrid, RotateCcw, Search, Sparkles, Table2 } from "lucide-react";
+import { Download, Filter, LayoutGrid, RotateCcw, Search, Sparkles, Star, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -129,6 +129,20 @@ export function LeadFilterBar({
           Triage view
         </Button>
 
+        <Button
+          variant={params.get("bookmarked") === "true" ? "secondary" : "outline"}
+          size="sm"
+          aria-pressed={params.get("bookmarked") === "true"}
+          onClick={() =>
+            update((next) =>
+              next.get("bookmarked") === "true" ? next.delete("bookmarked") : next.set("bookmarked", "true"),
+            )
+          }
+        >
+          <Star className="size-3.5" aria-hidden />
+          Favorites
+        </Button>
+
         {activeCount > 0 && (
           <Button
             variant="ghost"
@@ -146,6 +160,15 @@ export function LeadFilterBar({
             <Badge variant="secondary">{activeCount}</Badge>
           </Button>
         )}
+
+        <Button
+          variant="outline"
+          size="sm"
+          render={<a href={`/api/leads/export?${params.toString()}`} download />}
+        >
+          <Download className="size-3.5" aria-hidden />
+          Export CSV
+        </Button>
 
         {isFetching && (
           <span className="text-muted-foreground text-xs" role="status" aria-live="polite">

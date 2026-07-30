@@ -81,6 +81,14 @@ export const leads = pgTable(
     classifierId: text("classifier_id").notNull().default("unclassified"),
     classifiedAt: timestamp("classified_at", { withTimezone: true }),
 
+    // --- AI assistant (on-demand, agent-triggered — application/leads/ai-assist.actions.ts).
+    // Distinct from the rollup above: nullable/optional since generation is a
+    // user action gated by the `aiAssistant` plan feature, not something every
+    // lead automatically gets. ---
+    aiSummary: text("ai_summary"),
+    aiSummaryModel: text("ai_summary_model"),
+    aiSummaryGeneratedAt: timestamp("ai_summary_generated_at", { withTimezone: true }),
+
     // --- Data validation / lead scoring (domain/scoring/lead-validation.ts) ---
     /** 0-100 composite across completeness, contactability, relevance, industry, location, engagement, business potential. */
     leadScore: integer("lead_score").notNull().default(0),
@@ -315,6 +323,18 @@ export const leadStates = pgTable(
     bookmarked: boolean("bookmarked").notNull().default(false),
     /** Stamped by the contact action — this is how time-to-first-touch is measured. */
     firstContactedAt: timestamp("first_contacted_at", { withTimezone: true }),
+    /**
+     * Actual closed-deal value in USD, entered by a human when a lead closes
+     * — see `application/leads/lead.actions.ts::setDealValue`. Deliberately
+     * separate from `leads.budgetUsdMin/Max` (the *stated asking* budget
+     * scraped from the lead's own posts): revenue reporting must be built on
+     * what a deal actually closed for, not an estimate, or "ensure all
+     * calculations are accurate" stops being true the moment the two get
+     * conflated.
+     */
+    dealValueUsd: integer("deal_value_usd"),
+    /** Set whenever `status` transitions to `closed` — the revenue-recognition timestamp for revenue/ROI trends. */
+    dealClosedAt: timestamp("deal_closed_at", { withTimezone: true }),
     updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -322,6 +342,12 @@ export const leadStates = pgTable(
     index("lead_states_status_idx").on(t.status),
     index("lead_states_assigned_idx").on(t.assignedTo),
     index("lead_states_company_idx").on(t.companyId),
+    /** Serves `application/automation/send-reminders.ts`'s stale-lead scan (`company_id` + `status IN (...)` + `updated_at <` cutoff) as one index instead of three separately-scanned single-column ones. */
+    index("lead_states_company_status_updated_idx").on(t.companyId, t.status, t.updatedAt),
+    /** Partial — only closed leads carry revenue — serves `application/analytics/revenue.ts`'s sum/trend queries, which already filter on `status = 'closed'` before touching `deal_closed_at`. */
+    index("lead_states_company_deal_closed_idx")
+      .on(t.companyId, t.dealClosedAt)
+      .where(sql`${t.status} = 'closed'`),
   ],
 );
 
@@ -345,6 +371,10 @@ export const leadEvents = pgTable(
   (t) => [
     index("lead_events_lead_at_idx").on(t.leadId, t.at),
     index("lead_events_company_idx").on(t.companyId),
+    /** Serves `application/analytics/conversion.ts`'s per-lead max-stage aggregation (`company_id` + `type = 'status_changed'`, grouped by `lead_id`). */
+    index("lead_events_company_type_idx").on(t.companyId, t.type),
+    /** Serves the date-range scans in `application/analytics/activity-trend.ts` and `application/leads/team-activity.ts` (`company_id` + `at >=` cutoff). */
+    index("lead_events_company_at_idx").on(t.companyId, t.at),
   ],
 );
 
@@ -369,6 +399,8 @@ export const savedViews = pgTable(
     index("saved_views_company_idx").on(t.companyId),
   ],
 );
+
+export type SavedViewRow = typeof savedViews.$inferSelect;
 
 /** Daily rollup for currency normalisation; refreshed by `refreshFxRates()`. */
 export const fxRates = pgTable("fx_rates", {

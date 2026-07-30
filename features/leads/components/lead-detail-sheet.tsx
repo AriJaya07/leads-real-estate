@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { ExternalLink, X } from "lucide-react";
+import { ExternalLink, MessageCircle, Star, X } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +12,17 @@ import { IntentBadge } from "@/components/common/intent-badge";
 import { ScoreBadge } from "@/components/common/score-badge";
 import { PotentialPill } from "@/components/common/potential-pill";
 import { Spinner } from "@/components/common/spinner";
-import { saveLeadNotes, setLeadStatus } from "@/application/leads/lead.actions";
+import { RelativeTime } from "@/components/common/relative-time";
+import { cn } from "@/lib/utils";
+import { useServerAction } from "@/hooks/use-server-action";
+import {
+  markContacted,
+  saveLeadNotes,
+  setDealValue,
+  setLeadStatus,
+  toggleBookmark,
+} from "@/application/leads/lead.actions";
+import { generateLeadSummaryAction, generateMessageDraftAction } from "@/application/leads/ai-assist.actions";
 import {
   linkLeadToCompany,
   linkLeadToExistingCompany,
@@ -24,6 +32,8 @@ import { LEAD_STATUSES, leadStatusLabel } from "@/application/leads/lead-status"
 import {
   useLeadAffiliationsQuery,
   useLeadAppearancesQuery,
+  useLeadEventsQuery,
+  useLeadSimilarQuery,
   useLeadValidationQuery,
   useTargetCompanySearchQuery,
 } from "@/features/leads/queries";
@@ -55,48 +65,109 @@ function formatAttributeValue(value: unknown): string {
 export function LeadDetailSheet({
   lead,
   onClose,
+  onSelectLead,
+  hasAiAssist = false,
 }: {
   lead: LeadListItem | null;
   onClose: () => void;
+  /** Lets "Similar leads" swap the open sheet to a recommended lead without closing it. */
+  onSelectLead?: (lead: LeadListItem) => void;
+  /** `aiAssistant` plan feature — gates the AI summary/message-draft buttons. */
+  hasAiAssist?: boolean;
 }) {
   if (!lead) return null;
   // Keyed on the lead id so selecting a different lead remounts with that
   // lead's notes, instead of syncing props into state from an effect.
-  return <LeadDetail key={lead.id} lead={lead} onClose={onClose} />;
+  return (
+    <LeadDetail key={lead.id} lead={lead} onClose={onClose} onSelectLead={onSelectLead} hasAiAssist={hasAiAssist} />
+  );
 }
 
-function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void }) {
-  const router = useRouter();
-  const queryClient = useQueryClient();
+function LeadDetail({
+  lead,
+  onClose,
+  onSelectLead,
+  hasAiAssist,
+}: {
+  lead: LeadListItem;
+  onClose: () => void;
+  onSelectLead?: (lead: LeadListItem) => void;
+  hasAiAssist: boolean;
+}) {
+  const { busyId, run } = useServerAction();
+  const saving = busyId !== null;
   const [notes, setNotes] = useState(lead.notes);
-  const [saving, setSaving] = useState(false);
+  const [dealValue, setDealValueInput] = useState(lead.dealValueUsd !== null ? String(lead.dealValueUsd) : "");
+  // Optimistic, local to this open sheet — same reasoning as `notes` above:
+  // `lead` is a snapshot captured at row-click time, so a mutation here has no
+  // way to flow back into it before the sheet is closed and reopened.
+  const [bookmarked, setBookmarked] = useState(lead.bookmarked);
   const { data: appearances = [], isLoading: loadingAppearances } = useLeadAppearancesQuery(lead.id);
 
   async function update(status: (typeof LEAD_STATUSES)[number]) {
-    setSaving(true);
-    await setLeadStatus({ leadId: lead.id, status });
-    setSaving(false);
-    void queryClient.invalidateQueries({ queryKey: ["leads"] });
-    router.refresh();
+    await run("status", () => setLeadStatus({ leadId: lead.id, status }), {
+      errorFallback: "Could not update the status",
+      invalidateKeys: [["leads"]],
+      onSuccess: () => toast.success(`Status changed to "${leadStatusLabel(status)}"`),
+    });
   }
 
   async function persistNotes() {
     if (notes === lead.notes) return;
-    setSaving(true);
-    await saveLeadNotes({ leadId: lead.id, notes });
-    setSaving(false);
-    void queryClient.invalidateQueries({ queryKey: ["leads"] });
-    router.refresh();
+    await run("notes", () => saveLeadNotes({ leadId: lead.id, notes }), {
+      errorFallback: "Could not save the notes",
+      invalidateKeys: [["leads"]],
+      onSuccess: () => toast.success("Notes saved"),
+    });
+  }
+
+  async function persistDealValue() {
+    const trimmed = dealValue.trim();
+    const parsed = trimmed === "" ? null : Number(trimmed);
+    if (parsed !== null && (Number.isNaN(parsed) || parsed < 0)) {
+      toast.error("Deal value must be a positive number");
+      return;
+    }
+    if (parsed === (lead.dealValueUsd ?? null)) return;
+
+    await run("deal-value", () => setDealValue({ leadId: lead.id, dealValueUsd: parsed }), {
+      errorFallback: "Could not save the deal value",
+      invalidateKeys: [["leads"]],
+      onSuccess: () =>
+        toast.success(parsed === null ? "Deal value cleared" : `Deal value set to $${parsed.toLocaleString()}`),
+    });
+  }
+
+  async function bookmark() {
+    const next = !bookmarked;
+    await run("bookmark", () => toggleBookmark({ leadId: lead.id }), {
+      errorFallback: "Could not update favorites",
+      invalidateKeys: [["leads"]],
+      onSuccess: () => {
+        setBookmarked(next);
+        toast.success(next ? "Added to favorites" : "Removed from favorites");
+      },
+    });
   }
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle className="flex flex-wrap items-center gap-2">
+          <SheetTitle className="flex flex-wrap items-center gap-2 pr-8">
             <IntentBadge intent={lead.leadType} />
             {lead.name ?? "Unknown"}
             <ScoreBadge score={primaryLeadScore(lead)} />
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label={bookmarked ? "Remove from favorites" : "Add to favorites"}
+              aria-pressed={bookmarked}
+              disabled={saving}
+              onClick={() => void bookmark()}
+            >
+              <Star className={cn("size-3.5", bookmarked && "fill-amber-400 text-amber-400")} aria-hidden />
+            </Button>
           </SheetTitle>
           <SheetDescription>
             {lead.username ? `@${lead.username}` : "Unknown handle"}
@@ -144,6 +215,9 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
             <p className="text-muted-foreground text-sm">{lead.aiExplanation || "No signal yet."}</p>
           </section>
 
+          {hasAiAssist && <AiSummarySection lead={lead} />}
+          {hasAiAssist && <MessageAssistant lead={lead} />}
+
           <LeadValidationSection leadId={lead.id} />
 
           <section className="grid grid-cols-2 gap-3 text-sm">
@@ -186,6 +260,8 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
 
           <AffiliatedCompanies leadId={lead.id} />
 
+          <SimilarLeadsSection leadId={lead.id} onSelectLead={onSelectLead} />
+
           <section>
             <h3 className="mb-1.5 text-sm font-semibold">Status</h3>
             <div className="flex flex-wrap gap-1.5">
@@ -204,6 +280,27 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
           </section>
 
           <section>
+            <h3 className="mb-1.5 text-sm font-semibold">Deal value</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground text-sm">$</span>
+              <Input
+                type="number"
+                min={0}
+                inputMode="numeric"
+                value={dealValue}
+                onChange={(event) => setDealValueInput(event.target.value)}
+                onBlur={() => void persistDealValue()}
+                placeholder="e.g. 250000"
+                className="max-w-40"
+              />
+            </div>
+            <p className="text-muted-foreground mt-1 text-xs">
+              Actual closed value in USD — feeds the revenue and ROI figures on the Analytics page. Separate from
+              this lead&rsquo;s own stated budget above.
+            </p>
+          </section>
+
+          <section>
             <h3 className="mb-1.5 text-sm font-semibold">Notes</h3>
             <Textarea
               value={notes}
@@ -214,6 +311,8 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
             />
           </section>
 
+          <ActivityTimeline leadId={lead.id} />
+
           {saving && (
             <div className="flex items-center gap-2">
               <Spinner className="text-muted-foreground size-4" />
@@ -222,6 +321,126 @@ function LeadDetail({ lead, onClose }: { lead: LeadListItem; onClose: () => void
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * Plain-English read on this lead — who they are, what they want, how strong
+ * the opportunity is, and a first-message angle — generated on demand and
+ * cached on `leads.aiSummary` (see `application/leads/ai-assist.actions.ts`).
+ * Only rendered when the company's plan has `aiAssistant` (checked by the
+ * caller, not here — same "hide, don't show-then-bounce" rule as the rest of
+ * this app's role/plan-gated UI).
+ */
+function AiSummarySection({ lead }: { lead: LeadListItem }) {
+  const { busyId, run } = useServerAction();
+  const busy = busyId === "ai-summary";
+  const [summary, setSummary] = useState(lead.aiSummary);
+  const [generatedAt, setGeneratedAt] = useState(lead.aiSummaryGeneratedAt);
+
+  async function generate() {
+    await run("ai-summary", () => generateLeadSummaryAction({ leadId: lead.id }), {
+      errorFallback: "Could not generate a summary",
+      invalidateKeys: [["leads"]],
+      onSuccess: (result) => {
+        setSummary(result.summary);
+        setGeneratedAt(new Date());
+      },
+    });
+  }
+
+  return (
+    <section>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">AI summary</h3>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void generate()}>
+          {busy && <Spinner className="size-3.5" />}
+          {summary ? "Regenerate" : "Generate"}
+        </Button>
+      </div>
+      {summary ? (
+        <>
+          <p className="text-muted-foreground text-sm">{summary}</p>
+          {generatedAt && (
+            <p className="text-muted-foreground mt-1 text-[11px]">
+              Generated <RelativeTime value={generatedAt} />
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-muted-foreground text-sm">
+          Not generated yet — a five-second read on this lead and a first-message angle.
+        </p>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Drafts a WhatsApp message — first-contact framing if nobody's reached this
+ * lead yet, follow-up framing (referencing days since last contact and
+ * current status) otherwise. "Send via WhatsApp" reuses the exact same
+ * `markContacted` action and `wa.me` deep-link pattern `lead-inbox.tsx`'s row
+ * actions use, so this is a second entry point into the same contact-logging
+ * path, not a parallel one. The WhatsApp tab opens regardless of whether the
+ * logging call itself succeeds — same reasoning as `lead-inbox.tsx::contact`:
+ * the metric must not depend on the tab opening.
+ */
+function MessageAssistant({ lead }: { lead: LeadListItem }) {
+  const { busyId, run } = useServerAction();
+  const [draft, setDraft] = useState<string | null>(null);
+  const drafting = busyId === "draft";
+  const sending = busyId === "send";
+  const mode = lead.firstContactedAt ? "follow-up" : "first message";
+
+  async function generate() {
+    await run("draft", () => generateMessageDraftAction({ leadId: lead.id }), {
+      errorFallback: "Could not draft a message",
+      onSuccess: (result) => setDraft(result.message),
+    });
+  }
+
+  async function copy() {
+    if (!draft) return;
+    await navigator.clipboard.writeText(draft);
+    toast.success("Copied");
+  }
+
+  async function sendViaWhatsapp() {
+    if (!draft) return;
+    await run("send", () => markContacted({ leadId: lead.id, channel: "whatsapp" }), {
+      errorFallback: "Contact logged locally but couldn't be saved — it may not count toward time-to-first-touch.",
+      invalidateKeys: [["leads"]],
+    });
+    const phone = lead.contact.whatsapp?.replace(/\D/g, "");
+    if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(draft)}`, "_blank", "noopener");
+  }
+
+  return (
+    <section>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Message assistant</h3>
+        <Button size="sm" variant="outline" disabled={drafting} onClick={() => void generate()}>
+          {drafting && <Spinner className="size-3.5" />}
+          Draft {mode}
+        </Button>
+      </div>
+      {draft && (
+        <div className="flex flex-col gap-2">
+          <Textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={3} />
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => void copy()}>
+              Copy
+            </Button>
+            <Button size="sm" disabled={!lead.contact.whatsapp || sending} onClick={() => void sendViaWhatsapp()}>
+              {sending && <Spinner className="size-3.5" />}
+              <MessageCircle className="size-3.5" aria-hidden />
+              Send via WhatsApp
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -356,51 +575,47 @@ function LeadValidationSection({ leadId }: { leadId: string }) {
  * Manual linking only — genuinely new scope, not wired into ingestion. See
  * docs/saas-database-schema.md's `target_companies` section for why.
  */
+const AFFILIATION_QUERY_KEYS = (leadId: string) =>
+  [["leads", "affiliations", leadId], ["target-companies"]] as const;
+
 function AffiliatedCompanies({ leadId }: { leadId: string }) {
-  const queryClient = useQueryClient();
+  const { busyId, run } = useServerAction();
+  const linking = busyId !== null;
   const { data: affiliations = [] } = useLeadAffiliationsQuery(leadId);
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<(typeof AFFILIATION_ROLES)[number]>("unknown");
-  const [linking, setLinking] = useState(false);
   const { data: suggestions = [] } = useTargetCompanySearchQuery(query);
 
-  function invalidate() {
-    void queryClient.invalidateQueries({ queryKey: ["leads", "affiliations", leadId] });
-    void queryClient.invalidateQueries({ queryKey: ["target-companies"] });
-  }
-
-  async function linkExisting(targetCompanyId: string) {
-    setLinking(true);
-    const result = await linkLeadToExistingCompany({ leadId, targetCompanyId, role });
-    setLinking(false);
-    if (result?.serverError || result?.validationErrors) {
-      toast.error(result?.serverError ?? "Could not link that company");
-      return;
-    }
-    setQuery("");
-    invalidate();
+  async function linkExisting(targetCompanyId: string, name: string) {
+    await run("link", () => linkLeadToExistingCompany({ leadId, targetCompanyId, role }), {
+      errorFallback: "Could not link that company",
+      invalidateKeys: AFFILIATION_QUERY_KEYS(leadId),
+      onSuccess: () => {
+        setQuery("");
+        toast.success(`Linked to ${name}`);
+      },
+    });
   }
 
   async function linkNew() {
     if (!query.trim()) return;
-    setLinking(true);
-    const result = await linkLeadToCompany({ leadId, companyName: query.trim(), role });
-    setLinking(false);
-    if (result?.serverError || result?.validationErrors) {
-      toast.error(result?.serverError ?? "Could not link that company");
-      return;
-    }
-    setQuery("");
-    invalidate();
+    const name = query.trim();
+    await run("link", () => linkLeadToCompany({ leadId, companyName: name, role }), {
+      errorFallback: "Could not link that company",
+      invalidateKeys: AFFILIATION_QUERY_KEYS(leadId),
+      onSuccess: () => {
+        setQuery("");
+        toast.success(`Linked to ${name}`);
+      },
+    });
   }
 
-  async function unlink(affiliationId: string) {
-    const result = await unlinkLeadFromCompany({ leadId, affiliationId });
-    if (result?.serverError) {
-      toast.error(result.serverError);
-      return;
-    }
-    invalidate();
+  async function unlink(affiliationId: string, name: string) {
+    await run(`unlink-${affiliationId}`, () => unlinkLeadFromCompany({ leadId, affiliationId }), {
+      errorFallback: "Could not unlink that company",
+      invalidateKeys: AFFILIATION_QUERY_KEYS(leadId),
+      onSuccess: () => toast.success(`Unlinked ${name}`),
+    });
   }
 
   const exactMatch = suggestions.find((s) => s.name.toLowerCase() === query.trim().toLowerCase());
@@ -420,8 +635,9 @@ function AffiliatedCompanies({ leadId }: { leadId: string }) {
               <button
                 type="button"
                 aria-label={`Unlink ${affiliation.targetCompany.name}`}
-                onClick={() => void unlink(affiliation.id)}
-                className="text-muted-foreground hover:text-foreground rounded-full p-0.5"
+                disabled={linking}
+                onClick={() => void unlink(affiliation.id, affiliation.targetCompany.name)}
+                className="text-muted-foreground hover:text-foreground rounded-full p-0.5 disabled:pointer-events-none disabled:opacity-50"
               >
                 <X className="size-3" aria-hidden />
               </button>
@@ -452,7 +668,7 @@ function AffiliatedCompanies({ leadId }: { leadId: string }) {
           size="sm"
           variant="outline"
           disabled={linking || !query.trim()}
-          onClick={() => void (exactMatch ? linkExisting(exactMatch.id) : linkNew())}
+          onClick={() => void (exactMatch ? linkExisting(exactMatch.id, exactMatch.name) : linkNew())}
         >
           {linking && <Spinner className="size-3.5" />}
           Link
@@ -465,14 +681,132 @@ function AffiliatedCompanies({ leadId }: { leadId: string }) {
             <li key={suggestion.id}>
               <button
                 type="button"
-                onClick={() => void linkExisting(suggestion.id)}
-                className="hover:bg-muted w-full rounded px-2 py-1 text-left text-xs"
+                disabled={linking}
+                onClick={() => void linkExisting(suggestion.id, suggestion.name)}
+                className="hover:bg-muted w-full rounded px-2 py-1 text-left text-xs disabled:pointer-events-none disabled:opacity-50"
               >
                 {suggestion.name}
               </button>
             </li>
           ))}
         </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * "Leads like this one" — reuses `getSimilarLeads`'s ranking (same
+ * `priorityScore` formula the main inbox sorts by), not a new recommendation
+ * model. Clicking a card swaps the open sheet to that lead via `onSelectLead`
+ * (the same `setSelected` the inbox already uses to open a row) rather than
+ * closing and reopening.
+ */
+function SimilarLeadsSection({
+  leadId,
+  onSelectLead,
+}: {
+  leadId: string;
+  onSelectLead?: (lead: LeadListItem) => void;
+}) {
+  const { data: similar = [], isLoading } = useLeadSimilarQuery(leadId);
+  if (!isLoading && similar.length === 0) return null;
+
+  return (
+    <section>
+      <h3 className="mb-1.5 text-sm font-semibold">Similar leads</h3>
+      {isLoading ? (
+        <p className="text-muted-foreground text-sm">Loading…</p>
+      ) : (
+        <ul className="flex flex-col gap-1.5">
+          {similar.map((candidate) => (
+            <li key={candidate.id}>
+              <button
+                type="button"
+                disabled={!onSelectLead}
+                onClick={() => onSelectLead?.(candidate)}
+                className="border-border hover:bg-accent/40 flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-sm disabled:pointer-events-none"
+              >
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <IntentBadge intent={candidate.leadType} />
+                  <span className="truncate font-medium">{candidate.name ?? "Unknown"}</span>
+                </span>
+                <span className="text-muted-foreground shrink-0 text-xs">
+                  {candidate.locations[0] ?? candidate.propertyTypes[0] ?? ""}
+                </span>
+                <ScoreBadge score={primaryLeadScore(candidate)} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+const EVENT_META: Record<string, { label: string; describe: (payload: Record<string, unknown> | null) => string | null }> = {
+  created: { label: "Lead created", describe: () => null },
+  status_changed: {
+    label: "Status changed",
+    describe: (payload) => (typeof payload?.status === "string" ? `→ ${leadStatusLabel(payload.status)}` : null),
+  },
+  assigned: {
+    label: "Assignment changed",
+    describe: (payload) => (payload?.assignedTo ? "Assigned to a teammate" : "Unassigned"),
+  },
+  note_added: { label: "Note saved", describe: () => null },
+  contacted: {
+    label: "Contacted",
+    describe: (payload) => (typeof payload?.channel === "string" ? `via ${payload.channel}` : null),
+  },
+  alerted: {
+    label: "Alert sent",
+    describe: (payload) =>
+      typeof payload?.rule === "string" ? `"${payload.rule}"${typeof payload.channel === "string" ? ` · ${payload.channel}` : ""}` : null,
+  },
+  reclassified: { label: "Re-scored", describe: () => null },
+  merged: {
+    label: "Matched to this person",
+    describe: (payload) =>
+      typeof payload?.matchedField === "string" ? `by ${payload.matchedField}` : "identity match",
+  },
+};
+
+/**
+ * Full history for this lead — status changes, assignment, notes, every
+ * contact touch (not just the first), alerts sent, and identity merges — all
+ * already written by existing actions (`lead.actions.ts`, `dispatch.ts`,
+ * `identity-resolution.ts`). This is the first place any of it is shown.
+ */
+function ActivityTimeline({ leadId }: { leadId: string }) {
+  const { data: events = [], isLoading } = useLeadEventsQuery(leadId);
+
+  return (
+    <section>
+      <h3 className="mb-1.5 text-sm font-semibold">Activity</h3>
+      {isLoading ? (
+        <p className="text-muted-foreground text-sm">Loading…</p>
+      ) : events.length === 0 ? (
+        <p className="text-muted-foreground text-sm">Nothing logged yet.</p>
+      ) : (
+        <ol className="flex flex-col gap-2">
+          {events.map((event) => {
+            const meta = EVENT_META[event.type] ?? { label: leadStatusLabel(event.type), describe: () => null };
+            const detail = meta.describe(event.payload);
+            return (
+              <li key={event.id} className="flex items-start justify-between gap-2 text-sm">
+                <div className="min-w-0">
+                  <span className="font-medium">{meta.label}</span>
+                  {detail && <span className="text-muted-foreground"> {detail}</span>}
+                  {event.actorName && <span className="text-muted-foreground"> · {event.actorName}</span>}
+                </div>
+                <span className="text-muted-foreground shrink-0 text-xs">
+                  {format(new Date(event.at), "d MMM, HH:mm")}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
       )}
     </section>
   );

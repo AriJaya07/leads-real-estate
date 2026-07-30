@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { describePredicate, evaluatePredicate, parseDurationMs } from "./predicate";
+import {
+  buildAllOfPredicate,
+  describePredicate,
+  evaluatePredicate,
+  flattenAllOf,
+  parseDurationMs,
+} from "./predicate";
 
 const NOW = Date.parse("2026-07-25T12:00:00Z");
 
@@ -128,5 +134,37 @@ describe("parseDurationMs", () => {
 describe("describePredicate", () => {
   it("renders prose for the admin UI", () => {
     expect(describePredicate(PRIORITY_BUYER)).toContain("intent eq buyer");
+  });
+});
+
+describe("buildAllOfPredicate / flattenAllOf", () => {
+  const conditions = [
+    { field: "leadType", op: "eq" as const, value: "buyer" },
+    { field: "buyerScore", op: "gte" as const, value: 60 },
+  ];
+
+  it("round-trips a flat list of comparisons", () => {
+    const predicate = buildAllOfPredicate(conditions);
+    expect(predicate).toEqual({ all: conditions });
+    expect(flattenAllOf(predicate)).toEqual(conditions);
+  });
+
+  it("evaluates the round-tripped predicate the same as evaluatePredicate expects", () => {
+    const predicate = buildAllOfPredicate(conditions);
+    expect(evaluatePredicate(predicate, { leadType: "buyer", buyerScore: 72 })).toBe(true);
+    expect(evaluatePredicate(predicate, { leadType: "buyer", buyerScore: 40 })).toBe(false);
+  });
+
+  it("returns null for a predicate with a nested any/not branch", () => {
+    expect(flattenAllOf(PRIORITY_BUYER)).toBeNull();
+  });
+
+  it("returns null for a bare comparison (not wrapped in all)", () => {
+    expect(flattenAllOf({ field: "a", op: "eq", value: 1 })).toBeNull();
+  });
+
+  it("returns null for a bare any/not predicate", () => {
+    expect(flattenAllOf({ any: [{ field: "a", op: "eq", value: 1 }] })).toBeNull();
+    expect(flattenAllOf({ not: { field: "a", op: "eq", value: 1 } })).toBeNull();
   });
 });

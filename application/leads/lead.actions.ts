@@ -3,9 +3,11 @@
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { updateTag } from "next/cache";
+import { after } from "next/server";
 import { db, schema } from "@/infrastructure/db/client";
 import { authActionClient, ActionError } from "@/application/safe-action";
 import { leadTag, leadsTag } from "@/application/cache-tags";
+import { dispatchWebhooksForLeads } from "@/application/automation/webhook-dispatch";
 import { LEAD_STATUSES } from "./lead-status";
 
 /**
@@ -42,7 +44,17 @@ export const setLeadStatus = authActionClient
     await ensureState(ctx.user.companyId, parsedInput.leadId);
     await db()
       .update(schema.leadStates)
-      .set({ status: parsedInput.status, updatedBy: ctx.user.userId, updatedAt: new Date() })
+      .set({
+        status: parsedInput.status,
+        // Every transition *to* closed stamps a fresh revenue-recognition
+        // timestamp — including re-closing after a reopen, a legitimate new
+        // closing event, not a correction of the old one. Any other status
+        // leaves it untouched, so "when did this last close" survives a
+        // reopen until it closes again.
+        dealClosedAt: parsedInput.status === "closed" ? new Date() : sql`${schema.leadStates.dealClosedAt}`,
+        updatedBy: ctx.user.userId,
+        updatedAt: new Date(),
+      })
       .where(eq(schema.leadStates.leadId, parsedInput.leadId));
 
     await db().insert(schema.leadEvents).values({
@@ -52,6 +64,38 @@ export const setLeadStatus = authActionClient
       actorId: ctx.user.userId,
       payload: { status: parsedInput.status },
     });
+
+    // `after()`, not a bare fire-and-forget call: a serverless invocation can
+    // be frozen/torn down the moment this action returns, which would cancel
+    // an un-awaited promise before the webhook fetch completes. Same pattern
+    // `app/api/webhooks/apify/route.ts` uses for its own post-response work.
+    // A slow/down customer endpoint must not make this button feel slow, and
+    // `dispatchWebhooksForLeads` never throws.
+    after(() => dispatchWebhooksForLeads(ctx.user.companyId, [parsedInput.leadId], "lead.status_changed"));
+
+    invalidate(parsedInput.leadId);
+    return { ok: true };
+  });
+
+/**
+ * Records (or clears, via `dealValueUsd: null`) the actual closed-deal value
+ * — the input to every revenue/ROI figure in `application/analytics/`.
+ * Callable regardless of current status: a deal's value is often known
+ * before the status is flipped to `closed`, or corrected afterward.
+ */
+export const setDealValue = authActionClient
+  .inputSchema(
+    z.object({
+      leadId: z.string().uuid(),
+      dealValueUsd: z.coerce.number().int().min(0).max(1_000_000_000).nullable(),
+    }),
+  )
+  .action(async ({ parsedInput, ctx }) => {
+    await ensureState(ctx.user.companyId, parsedInput.leadId);
+    await db()
+      .update(schema.leadStates)
+      .set({ dealValueUsd: parsedInput.dealValueUsd, updatedBy: ctx.user.userId, updatedAt: new Date() })
+      .where(eq(schema.leadStates.leadId, parsedInput.leadId));
 
     invalidate(parsedInput.leadId);
     return { ok: true };

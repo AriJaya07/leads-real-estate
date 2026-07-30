@@ -14,6 +14,7 @@ export const metadata: Metadata = { title: "Pricing" };
 const FEATURE_LABELS: Record<keyof PlanFeatures, string> = {
   whatsappAlerts: "WhatsApp alerts",
   llmShadowClassify: "AI-assisted lead classification",
+  aiAssistant: "AI lead summaries & message drafting",
   customBranding: "Custom branding",
   prioritySupport: "Priority support",
   sso: "Single sign-on (SSO)",

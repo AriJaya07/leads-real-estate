@@ -136,6 +136,7 @@ try {
       features: {
         whatsappAlerts: false,
         llmShadowClassify: false,
+        aiAssistant: false,
         customBranding: false,
         prioritySupport: false,
         sso: false,
@@ -156,6 +157,7 @@ try {
       features: {
         whatsappAlerts: true,
         llmShadowClassify: false,
+        aiAssistant: false,
         customBranding: false,
         prioritySupport: true,
         sso: false,
@@ -176,6 +178,7 @@ try {
       features: {
         whatsappAlerts: true,
         llmShadowClassify: true,
+        aiAssistant: true,
         customBranding: true,
         prioritySupport: true,
         sso: false,
@@ -198,6 +201,7 @@ try {
       features: {
         whatsappAlerts: true,
         llmShadowClassify: true,
+        aiAssistant: true,
         customBranding: true,
         prioritySupport: true,
         sso: true,

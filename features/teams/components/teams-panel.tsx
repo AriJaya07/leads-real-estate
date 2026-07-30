@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/common/spinner";
 import { EmptyState } from "@/components/common/empty-state";
+import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
 import { addTeamMember, createTeam, deleteTeam, removeTeamMember } from "@/application/teams/team.actions";
 import { useServerAction } from "@/hooks/use-server-action";
 import type { TeamSummary } from "@/application/teams/team-queries";
@@ -83,15 +84,17 @@ export function TeamsPanel({ teams, members }: { teams: TeamSummary[]; members: 
                       <div className="text-muted-foreground text-xs">{team.description}</div>
                     )}
                   </div>
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    aria-label={`Delete ${team.name}`}
-                    disabled={busy}
-                    onClick={() => void onDelete(team.id)}
-                  >
-                    <Trash2 className="size-3.5" aria-hidden />
-                  </Button>
+                  <ConfirmDeleteDialog
+                    trigger={
+                      <Button size="icon" variant="outline" aria-label={`Delete ${team.name}`} disabled={busy}>
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </Button>
+                    }
+                    title={`Delete "${team.name}"?`}
+                    description="Members lose this grouping. This can't be undone."
+                    confirmLabel="Delete"
+                    onConfirm={() => void onDelete(team.id)}
+                  />
                 </div>
 
                 <ul className="mb-2 flex flex-wrap gap-1.5">

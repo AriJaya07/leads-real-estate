@@ -8,3 +8,4 @@ export * from "./sync";
 export * from "./collection";
 export * from "./leads";
 export * from "./alerts";
+export * from "./automation";

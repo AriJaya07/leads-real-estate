@@ -53,6 +53,8 @@ const leadFiltersSchema = z.object({
   hasContact: z.coerce.boolean().optional(),
   assignedTo: z.string().uuid().optional(),
   unassigned: z.coerce.boolean().optional(),
+  /** `lead_states.bookmarked` — the agent's own "favorites" shortlist. */
+  bookmarked: z.coerce.boolean().optional(),
 
   /** Filters on `leads.latestAppearanceAt` — when this person was last active. */
   postedAfter: z.string().optional(),
@@ -148,6 +150,7 @@ export function serializeLeadFilters(filters: LeadFilters): URLSearchParams {
   put("hasContact", filters.hasContact);
   put("assignedTo", filters.assignedTo);
   put("unassigned", filters.unassigned);
+  put("bookmarked", filters.bookmarked);
   put("postedAfter", filters.postedAfter);
   put("postedBefore", filters.postedBefore);
   put("collectedAfter", filters.collectedAfter);

@@ -23,6 +23,7 @@ export async function resetDb(): Promise<void> {
       ${schema.leadEvents},
       ${schema.alertDeliveries},
       ${schema.alertRules},
+      ${schema.automationSettings},
       ${schema.savedViews},
       ${schema.leadTargetCompanyAffiliations},
       ${schema.targetCompanies},

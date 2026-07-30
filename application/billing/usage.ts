@@ -3,6 +3,7 @@ import { and, count, eq, sql } from "drizzle-orm";
 import { db, schema, type Database } from "@/infrastructure/db/client";
 import type { PlanFeatures } from "@/domain/billing/plan-features";
 import { createLogger } from "@/infrastructure/observability/logger";
+import { MAX_AI_REQUESTS_PER_MONTH } from "@/shared/constants";
 
 const log = createLogger("usage");
 
@@ -101,7 +102,12 @@ export function currentMonthBounds(referenceDate: Date = new Date()): { start: s
   return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
 }
 
-type MonthlyMetric = "leads_this_month" | "raw_records_month" | "apify_requests_month" | "storage_kb";
+type MonthlyMetric =
+  | "leads_this_month"
+  | "raw_records_month"
+  | "apify_requests_month"
+  | "storage_kb"
+  | "ai_requests_month";
 
 /** Structurally compatible with both `db()` and a `db().transaction(tx => ...)` callback's `tx`. */
 type QueryClient = Pick<Database, "select" | "insert">;
@@ -159,6 +165,19 @@ export async function isWithinMonthlyBudget(
 }
 
 /**
+ * A flat cap (`MAX_AI_REQUESTS_PER_MONTH`), not a per-plan column like the
+ * budgets above — `aiAssistant` is a plain feature flag today, not a
+ * numeric limit. Checked synchronously in a server action
+ * (`application/leads/ai-assist.actions.ts`), unlike `isWithinMonthlyBudget`
+ * — a real person is waiting on this call, so degrading to "unenforced"
+ * only applies to the no-subscription case, same as everywhere else.
+ */
+export async function isWithinAiRequestBudget(companyId: string): Promise<boolean> {
+  const used = await currentMonthValue(companyId, "ai_requests_month");
+  return used < MAX_AI_REQUESTS_PER_MONTH;
+}
+
+/**
  * Shared by every counter below. A logging/counting failure must never break
  * the real operation it's measuring — same rule `incrementMonthlyLeadUsage`
  * already established, just factored out now that four metrics need it.
@@ -213,6 +232,11 @@ export async function incrementRawRecordUsage(companyId: string, itemCount: numb
  */
 export async function incrementApifyRequestUsage(companyId: string, client: QueryClient = db()): Promise<void> {
   await incrementMonthlyCounter(companyId, "apify_requests_month", 1, client);
+}
+
+/** Called once per successful AI-assist generation (summary or message draft) — see `isWithinAiRequestBudget`. */
+export async function incrementAiRequestUsage(companyId: string): Promise<void> {
+  await incrementMonthlyCounter(companyId, "ai_requests_month", 1);
 }
 
 /**

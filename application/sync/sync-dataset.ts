@@ -24,6 +24,7 @@ import {
 import { processRawRecords } from "@/application/leads/process-records";
 import { SyncLogger } from "./sync-logger";
 import { dispatchAlertsForLeads } from "@/application/alerting/dispatch";
+import { dispatchWebhooksForLeads } from "@/application/automation/webhook-dispatch";
 import { incrementRawRecordUsage, incrementStorageUsage, isWithinMonthlyBudget } from "@/application/billing/usage";
 
 interface SyncCursor {
@@ -355,6 +356,7 @@ export async function syncDataset(
           if (alerted.sent > 0) {
             log.info("alert", `Dispatched ${alerted.sent} alert(s)`, { rules: alerted.ruleNames });
           }
+          await dispatchWebhooksForLeads(companyId, processed.leadIds, "lead.created_or_updated");
         }
       }
 
