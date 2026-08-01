@@ -11,7 +11,7 @@ try {
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
-    "DATABASE_URL is not set for integration tests. Copy .env.test.example to .env.test " +
-      "and point it at a disposable test database, or set the env vars directly in CI.",
+    "DATABASE_URL is not set for integration tests. Create .env.test and point it at a " +
+      "disposable test database, or set the env vars directly in CI.",
   );
 }

@@ -19,7 +19,7 @@ The architecture is in [docs/architecture.md](docs/architecture.md), business te
 createdb dreamrue_dev
 
 # 2. Configure
-cp .env.example .env      # fill in DATABASE_URL, APIFY_API_TOKEN, and the secrets
+nano .env                 # fill in DATABASE_URL, APIFY_API_TOKEN, and the secrets — see docs/environment.md
 
 # 3. Schema + baseline configuration
 npm run db:migrate
@@ -105,7 +105,7 @@ Sign-in is email + password; nothing about authentication depends on a mail serv
 
 Environment holds **secrets and deployment identity only**. Everything operational —
 which datasets sync, how often, who gets alerted, what counts as a hot lead — is database
-state managed from `/admin`. See `.env.example`.
+state managed from `/admin`. See [docs/environment.md](docs/environment.md).
 
 Scheduling runs through n8n: four `POST /api/trigger/{discover,sync,fx,retention}` routes,
 each guarded by `N8N_TRIGGER_SECRET`, are what an n8n workflow calls on a schedule

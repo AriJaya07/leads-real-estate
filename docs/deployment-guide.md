@@ -56,8 +56,8 @@ for each):
 - `ANTHROPIC_API_KEY` / `LLM_SHADOW_CLASSIFY_ENABLED` — optional shadow-mode
   classifier comparison logging; not required for launch.
 
-Never commit real values for any of these — `.env.example`/`.env.e2e.example` in the
-repo only ever contain placeholders.
+Never commit real values for any of these — `.env`/`.env.test`/`.env.e2e` are gitignored
+and never checked into the repo.
 
 ## 3. Run migrations
 

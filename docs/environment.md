@@ -10,7 +10,7 @@ operational, don't; add a column/config field instead. See
 
 ## Required variables
 
-Copy `.env.example` to `.env` and fill in:
+Create `.env` (single file, gitignored — no template checked into the repo) and fill in:
 
 | Variable | Required | Notes |
 | --- | --- | --- |
@@ -30,7 +30,7 @@ Copy `.env.example` to `.env` and fill in:
 
 Validation is Zod-based and fails fast with a readable message
 (`shared/config/env.ts::serverEnv()`) — if you add a new required secret, add it to the
-schema there, not just to `.env.example`.
+schema there, not just to `.env`.
 
 ## First-time local setup
 
@@ -39,7 +39,7 @@ schema there, not just to `.env.example`.
 createdb dreamrue_dev
 
 # 2. Configure
-cp .env.example .env      # fill in DATABASE_URL, APIFY_API_TOKEN, and the secrets
+nano .env                 # fill in DATABASE_URL, APIFY_API_TOKEN, and the secrets
 
 # 3. Schema + baseline configuration
 npm run db:migrate        # also creates the pg_trgm extension (trigram dedup needs it)
@@ -124,13 +124,13 @@ full detail; the short version:
 ```bash
 # Integration tests (application/domain logic against a real DB, no browser)
 createdb dreamrue_test
-cp .env.test.example .env.test   # edit DATABASE_URL to point at dreamrue_test
+nano .env.test             # set DATABASE_URL to point at dreamrue_test
 npm run db:migrate:test
 npm run test:integration
 
 # E2E tests (real build, real browser, real DB)
 createdb dreamrue_e2e
-cp .env.e2e.example .env.e2e     # edit DATABASE_URL to point at dreamrue_e2e
+nano .env.e2e               # set DATABASE_URL to point at dreamrue_e2e
 node --env-file=.env.e2e infrastructure/db/migrate.mjs
 npm run build && npm run test:e2e
 ```

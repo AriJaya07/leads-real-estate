@@ -66,7 +66,7 @@ async function hashPassword(password: string): Promise<string> {
 
 export default async function globalSetup(): Promise<void> {
   const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set — copy .env.e2e.example to .env.e2e first.");
+  if (!url) throw new Error("DATABASE_URL is not set — create .env.e2e and point it at a disposable e2e database.");
   const dbName = new URL(url).pathname.slice(1);
   if (!dbName.includes("e2e") && !dbName.includes("test")) {
     throw new Error(
