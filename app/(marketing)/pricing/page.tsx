@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Check, X } from "lucide-react";
 import { listPlans } from "@/application/billing/plan.actions";
-import { BrandMark } from "@/components/brand/brand-mark";
 import { Button } from "@/components/ui/button";
 import { formatCount, formatStorageKb, formatUsd } from "@/shared/format";
 import type { PlanFeatures } from "@/domain/billing/plan-features";
@@ -106,22 +105,7 @@ async function PricingGrid() {
 
 export default function PricingPage() {
   return (
-    <main id="main-content" className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-12 sm:px-6">
-      <header className="flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <BrandMark className="size-8" />
-          <span className="text-sm font-semibold tracking-tight">DreamRue</span>
-        </Link>
-        <nav className="flex items-center gap-4 text-sm">
-          <Link href="/login" className="text-muted-foreground hover:text-foreground">
-            Sign in
-          </Link>
-          <Button render={<Link href="/signup" />} size="sm">
-            Get started
-          </Button>
-        </nav>
-      </header>
-
+    <div className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-12 sm:px-6">
       <div className="text-center">
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Simple, usage-based pricing</h1>
         <p className="text-muted-foreground mt-3 text-balance">
@@ -133,6 +117,6 @@ export default function PricingPage() {
       <Suspense fallback={<p className="text-muted-foreground text-center">Loading plans…</p>}>
         <PricingGrid />
       </Suspense>
-    </main>
+    </div>
   );
 }

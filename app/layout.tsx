@@ -25,7 +25,6 @@ export const metadata: Metadata = {
   },
   description:
     "Real estate lead intelligence for Bali: automatically syncs every Apify and n8n dataset, scores buyer intent, and gets the sales team to high-intent buyers first.",
-  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

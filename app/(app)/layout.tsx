@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { currentUser } from "@/application/auth/current-user";
 import { AppSidebar } from "@/features/shell/components/app-sidebar";
@@ -8,6 +9,9 @@ import { listDatasets } from "@/application/datasets/dataset-queries";
 import { datasetsQueryKey } from "@/features/datasets/query-keys";
 import { getQueryClient } from "@/shared/query-client";
 import type { Role } from "@/domain/auth/permissions";
+
+/** Signed-in app screens stay out of search results; only the marketing site is public. */
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 async function DatasetSwitcherSlot({
   userEmail,

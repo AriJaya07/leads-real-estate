@@ -1,0 +1,70 @@
+import Link from "next/link";
+import { BrandMark } from "@/components/brand/brand-mark";
+
+const FOOTER_COLUMNS = [
+  {
+    heading: "Product",
+    links: [
+      { href: "/integrations", label: "Integrations" },
+      { href: "/pricing", label: "Pricing" },
+      { href: "/roadmap", label: "Roadmap" },
+    ],
+  },
+  {
+    heading: "Resources",
+    links: [
+      { href: "/docs", label: "Documentation" },
+      { href: "/docs/guide", label: "Step-by-step guide" },
+      { href: "/contact", label: "Contact us" },
+    ],
+  },
+  {
+    heading: "Account",
+    links: [
+      { href: "/login", label: "Sign in" },
+      { href: "/signup", label: "Create a company" },
+    ],
+  },
+] as const;
+
+export function MarketingFooter() {
+  return (
+    <footer className="border-border border-t">
+      <div className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-12 sm:px-6 md:flex-row md:justify-between">
+        <div className="flex flex-col gap-3">
+          <Link href="/" className="flex items-center gap-2">
+            <BrandMark className="size-7" />
+            <span className="text-sm font-semibold tracking-tight">DreamRue</span>
+          </Link>
+          <p className="text-muted-foreground max-w-xs text-sm">
+            Real estate lead intelligence for Bali — every Apify and n8n dataset synced, scored, and routed to the
+            first responder.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+          {FOOTER_COLUMNS.map((column) => (
+            <div key={column.heading} className="flex flex-col gap-3">
+              <h3 className="text-sm font-semibold">{column.heading}</h3>
+              <ul className="flex flex-col gap-2 text-sm">
+                {column.links.map((link) => (
+                  <li key={link.href}>
+                    <Link href={link.href} className="text-muted-foreground hover:text-foreground">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-border border-t">
+        <p className="text-muted-foreground mx-auto max-w-6xl px-4 py-6 text-xs sm:px-6">
+          © DreamRue. All rights reserved.
+        </p>
+      </div>
+    </footer>
+  );
+}

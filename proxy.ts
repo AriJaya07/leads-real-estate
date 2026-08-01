@@ -14,7 +14,7 @@ export function proxy(request: NextRequest) {
   if (!hasSession) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + search)}`;
+    url.search = `?next=${encodeURIComponent(pathname + search)}`;
     return NextResponse.redirect(url);
   }
 
@@ -24,10 +24,10 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /**
-     * App routes only. Auth routes, the Apify webhook (which carries its own
-     * bearer secret), and static assets are excluded.
+     * App routes only. `/` is the public landing page (handled in
+     * `app/page.tsx`), auth routes, the marketing site, the Apify webhook
+     * (which carries its own bearer secret), and static assets are excluded.
      */
-    "/",
     "/leads/:path*",
     "/pipeline/:path*",
     "/intelligence/:path*",
