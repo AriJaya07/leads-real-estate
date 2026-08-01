@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Eyebrow } from "@/components/marketing/eyebrow";
 
 export const metadata: Metadata = { title: "Step-by-step guide" };
 
@@ -34,7 +35,8 @@ export default function GuidePage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-10 px-4 py-16 sm:px-6">
       <div className="text-center">
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Step-by-step guide</h1>
+        <Eyebrow>Step-by-step guide</Eyebrow>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">From signup to your first reply</h1>
         <p className="text-muted-foreground mt-3 text-balance">
           What actually happens between signing up and your team working its first ranked inbox. For the concepts
           behind each step, see the{" "}
@@ -45,13 +47,14 @@ export default function GuidePage() {
         </p>
       </div>
 
-      <ol className="flex flex-col gap-8">
+      <ol className="relative flex flex-col gap-10">
+        <div className="bg-border absolute top-5 bottom-5 left-5 w-px" aria-hidden />
         {STEPS.map((step, index) => (
-          <li key={step.title} className="flex gap-4">
-            <span className="text-brand shrink-0 text-sm font-semibold tabular-nums">
+          <li key={step.title} className="relative flex gap-5">
+            <span className="border-brand bg-background text-brand relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border-2 font-serif text-sm font-semibold italic">
               {String(index + 1).padStart(2, "0")}
             </span>
-            <div>
+            <div className="pt-1.5">
               <h2 className="font-semibold tracking-tight">{step.title}</h2>
               <p className="text-muted-foreground mt-1 text-sm leading-relaxed">{step.body}</p>
             </div>

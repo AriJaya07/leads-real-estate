@@ -18,6 +18,9 @@
   --font-sans: var(--font-poppins);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
+  --font-serif: var(--font-fraunces);
+  --color-surface-alt: var(--surface-alt);
+  --color-accent-warm: var(--accent-warm);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -139,6 +142,10 @@
 :root {
   --brand: oklch(0.62 0.13 195);
 
+  /* Marketing-only decoration — never used for app-level lead/health semantics. */
+  --surface-alt: oklch(0.97 0.012 60);
+  --accent-warm: oklch(0.72 0.15 55);
+
   --intent-buyer: #2a78d6;
   --intent-seller: #eb6834;
   --intent-agent: #1baf7a;
@@ -173,6 +180,10 @@
 
 .dark {
   --brand: oklch(0.72 0.12 195);
+
+  /* Marketing-only decoration — never used for app-level lead/health semantics. */
+  --surface-alt: oklch(0.22 0.015 55);
+  --accent-warm: oklch(0.75 0.14 55);
 
   --intent-buyer: #3987e5;
   --intent-seller: #d95926;

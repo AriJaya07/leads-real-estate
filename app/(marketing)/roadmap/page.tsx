@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
+import { Eyebrow } from "@/components/marketing/eyebrow";
 
 export const metadata: Metadata = { title: "Roadmap" };
 
@@ -38,12 +40,12 @@ const NEXT_UP = [
 
 export default function RoadmapPage() {
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-12 px-4 py-16 sm:px-6">
-      <div className="text-center">
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Roadmap</h1>
+    <div className="mx-auto flex max-w-5xl flex-col gap-14 px-4 py-16 sm:px-6">
+      <div className="mx-auto max-w-2xl text-center">
+        <Eyebrow>Roadmap</Eyebrow>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">What&rsquo;s shipped, what&rsquo;s next</h1>
         <p className="text-muted-foreground mt-3 text-balance">
-          What&rsquo;s shipped, and what&rsquo;s next, in the order we&rsquo;re prioritizing it. Questions about
-          timing?{" "}
+          In the order we&rsquo;re prioritizing it. Questions about timing?{" "}
           <Link href="/contact" className="text-foreground underline underline-offset-4">
             Get in touch
           </Link>
@@ -51,7 +53,7 @@ export default function RoadmapPage() {
         </p>
       </div>
 
-      <div>
+      <div className="mx-auto w-full max-w-2xl">
         <h2 className="text-lg font-semibold tracking-tight">Shipped</h2>
         <ul className="mt-4 flex flex-col gap-3">
           {SHIPPED.map((item) => (
@@ -66,20 +68,31 @@ export default function RoadmapPage() {
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold tracking-tight">Next up</h2>
-        <ol className="mt-4 flex flex-col gap-6">
-          {NEXT_UP.map((item, index) => (
-            <li key={item.title} className="flex gap-4">
-              <span className="text-muted-foreground shrink-0 text-sm font-semibold tabular-nums">
-                {index + 1}
-              </span>
-              <div>
-                <h3 className="font-medium">{item.title}</h3>
-                <p className="text-muted-foreground mt-1 text-sm leading-relaxed">{item.body}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
+        <h2 className="text-center text-lg font-semibold tracking-tight">Next up</h2>
+        <div className="relative mt-10">
+          <div className="border-border absolute inset-x-0 top-4 hidden border-t border-dashed lg:block" aria-hidden />
+          <ol className="relative grid gap-8 lg:grid-cols-5 lg:gap-4">
+            {NEXT_UP.map((item, index) => (
+              <li
+                key={item.title}
+                className={cn("flex gap-4 lg:flex-col lg:gap-3", index % 2 === 1 && "lg:mt-10")}
+              >
+                <span
+                  className={cn(
+                    "relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums",
+                    index === 0 ? "bg-accent-warm text-background" : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {index + 1}
+                </span>
+                <div>
+                  <h3 className="font-medium">{item.title}</h3>
+                  <p className="text-muted-foreground mt-1 text-sm leading-relaxed">{item.body}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
     </div>
   );

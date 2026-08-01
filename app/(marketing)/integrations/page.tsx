@@ -1,35 +1,41 @@
 import type { Metadata } from "next";
 import { Check, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Eyebrow } from "@/components/marketing/eyebrow";
 
 export const metadata: Metadata = { title: "Integrations" };
 
 const INTEGRATIONS = [
   {
     name: "Apify",
+    category: "Data source",
     status: "live" as const,
     description:
       "The primary data connector: connect your Facebook/Instagram scraper actors and every dataset they produce is auto-discovered and synced — nobody configures a new feed by hand.",
   },
   {
     name: "n8n",
+    category: "Orchestration",
     status: "live" as const,
     description:
       "Used as the external scheduler and the orchestration layer for your Apify actors — trigger discovery, sync, reminders, FX refresh, and retention on a cadence via secured trigger endpoints, and drive the actor runs that produce your datasets.",
   },
   {
     name: "Email alerts",
+    category: "Alerts",
     status: "live" as const,
     description: "Digest emails for matching alert rules, one per rule per sync run rather than one per lead.",
   },
   {
     name: "WhatsApp alerts",
+    category: "Alerts",
     status: "plan-gated" as const,
     description:
       "Available on paid plans — the channel built for what actually gets read on a weekend. Requires connecting a WhatsApp Cloud API number for your workspace.",
   },
   {
     name: "Single sign-on (SSO)",
+    category: "Auth",
     status: "coming-soon" as const,
     description: "Listed on our plans, not yet built. Reach out if this is a blocker for your team.",
   },
@@ -41,41 +47,67 @@ const STATUS_LABEL: Record<(typeof INTEGRATIONS)[number]["status"], string> = {
   "coming-soon": "Coming soon",
 };
 
+function StatusBadge({ status }: { status: (typeof INTEGRATIONS)[number]["status"] }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap",
+        status === "live" && "bg-brand/10 text-brand",
+        status === "plan-gated" && "bg-accent-warm/15 text-accent-warm",
+        status === "coming-soon" && "bg-muted text-muted-foreground",
+      )}
+    >
+      {status === "live" ? <Check className="size-3" aria-hidden /> : <Clock className="size-3" aria-hidden />}
+      {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
 export default function IntegrationsPage() {
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-10 px-4 py-16 sm:px-6">
+    <div className="mx-auto flex max-w-4xl flex-col gap-10 px-4 py-16 sm:px-6">
       <div className="text-center">
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Integrations</h1>
+        <Eyebrow>Integrations</Eyebrow>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">What connects to DreamRue</h1>
         <p className="text-muted-foreground mt-3 text-balance">
           What&rsquo;s live today, what&rsquo;s gated to a plan, and what&rsquo;s still on the roadmap — no
           surprises after you sign up.
         </p>
       </div>
 
-      <div className="flex flex-col gap-4">
-        {INTEGRATIONS.map((integration) => (
-          <div key={integration.name} className="border-border flex flex-col gap-2 rounded-2xl border p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-semibold tracking-tight">{integration.name}</h2>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium",
-                  integration.status === "live" && "bg-brand/10 text-brand",
-                  integration.status === "plan-gated" && "bg-accent text-accent-foreground",
-                  integration.status === "coming-soon" && "text-muted-foreground",
-                )}
+      {/*
+       * No horizontal scroll / no forced min-width: on a narrow viewport a
+       * scrolled-off column just reads as a blank gap under each row, since
+       * the row height is set by wrapped text nobody can see. Instead let
+       * the table reflow — hide the least-essential column below `sm` and
+       * let every cell wrap within the viewport.
+       */}
+      <div className="border-border rounded-2xl border">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-border bg-surface-alt border-b text-left">
+              <th className="px-4 py-3 font-semibold sm:px-5">Integration</th>
+              <th className="hidden px-5 py-3 font-semibold sm:table-cell">Category</th>
+              <th className="px-4 py-3 font-semibold sm:px-5">Status</th>
+              <th className="px-4 py-3 font-semibold sm:px-5">Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            {INTEGRATIONS.map((integration, i) => (
+              <tr
+                key={integration.name}
+                className={cn("border-border border-b last:border-0", i % 2 === 1 && "bg-surface-alt/40")}
               >
-                {integration.status === "live" ? (
-                  <Check className="size-3" aria-hidden />
-                ) : (
-                  <Clock className="size-3" aria-hidden />
-                )}
-                {STATUS_LABEL[integration.status]}
-              </span>
-            </div>
-            <p className="text-muted-foreground text-sm">{integration.description}</p>
-          </div>
-        ))}
+                <td className="px-4 py-4 align-top font-medium sm:px-5">{integration.name}</td>
+                <td className="text-muted-foreground hidden px-5 py-4 align-top sm:table-cell">{integration.category}</td>
+                <td className="px-4 py-4 align-top sm:px-5">
+                  <StatusBadge status={integration.status} />
+                </td>
+                <td className="text-muted-foreground px-4 py-4 align-top leading-relaxed sm:px-5">{integration.description}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
