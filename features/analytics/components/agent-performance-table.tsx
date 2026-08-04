@@ -4,10 +4,23 @@ import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable, DataTableHead } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
+import { cn } from "@/lib/utils";
 import { toCsv } from "@/shared/csv";
 import { downloadCsv } from "@/shared/download-csv";
 import { formatCount, formatMinutes, formatUsd } from "@/shared/format";
 import type { AgentPerformance } from "@/application/analytics/agent-performance";
+
+/**
+ * Same warn/bad tone tokens `ScoreBadge`/`HealthPill` use, reused here on top
+ * of `formatMinutes`'s own text — the number is already the label, this just
+ * reinforces it the way the design doc colours other magnitude figures.
+ */
+function ttftToneClassName(minutes: number | null): string {
+  if (minutes === null) return "";
+  if (minutes >= 45) return "text-[var(--health-bad-fg)]";
+  if (minutes >= 15) return "text-[var(--health-warn-fg)]";
+  return "text-[var(--health-ok-fg)]";
+}
 
 export function AgentPerformanceTable({ rows }: { rows: AgentPerformance[] }) {
   function exportCsv() {
@@ -53,7 +66,9 @@ export function AgentPerformanceTable({ rows }: { rows: AgentPerformance[] }) {
               <td className="px-3 py-2.5">{formatCount(row.contactedCount)}</td>
               <td className="px-3 py-2.5">{formatCount(row.closedCount)}</td>
               <td className="px-3 py-2.5">{formatUsd(row.closedRevenueUsd)}</td>
-              <td className="px-3 py-2.5">{formatMinutes(row.medianTimeToFirstTouchMinutes)}</td>
+              <td className={cn("px-3 py-2.5 font-medium", ttftToneClassName(row.medianTimeToFirstTouchMinutes))}>
+                {formatMinutes(row.medianTimeToFirstTouchMinutes)}
+              </td>
               <td className="px-3 py-2.5">{row.conversionPct.toFixed(1)}%</td>
             </tr>
           ))}

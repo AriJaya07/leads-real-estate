@@ -6,11 +6,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DataTable, DataTableHead } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { RelativeTime } from "@/components/common/relative-time";
 import { ApiKeyRevealModal } from "@/components/common/api-key-reveal-modal";
 import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
+import { cn } from "@/lib/utils";
 
 interface ApiKeyRow {
   id: string;
@@ -64,6 +67,7 @@ export function ApiKeysManager() {
   const nameId = useId();
   const [keys, setKeys] = useState<ApiKeyRow[]>(seedKeys);
   const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
   const [reveal, setReveal] = useState<string | null>(null);
 
   function createKey(event: React.FormEvent<HTMLFormElement>) {
@@ -84,6 +88,7 @@ export function ApiKeysManager() {
       ...prev,
     ]);
     setNewName("");
+    setCreating(false);
     setReveal(secret);
   }
 
@@ -94,42 +99,63 @@ export function ApiKeysManager() {
 
   return (
     <div className="flex flex-col gap-4">
-      <form onSubmit={createKey} className="border-border flex flex-wrap items-end gap-3 rounded-xl border p-4">
-        <div className="flex min-w-56 flex-1 flex-col gap-1.5">
-          <Label htmlFor={nameId}>New key name</Label>
-          <Input
-            id={nameId}
-            value={newName}
-            onChange={(event) => setNewName(event.target.value)}
-            placeholder="e.g. CRM sync"
-            required
+      <div className="flex justify-end">
+        <Popover open={creating} onOpenChange={setCreating}>
+          <PopoverTrigger
+            render={
+              <Button size="sm">
+                <KeyRound className="size-3.5" aria-hidden />
+                Create key
+              </Button>
+            }
           />
-        </div>
-        <Button type="submit">
-          <KeyRound className="size-3.5" aria-hidden />
-          Create key
-        </Button>
-      </form>
+          <PopoverContent align="end" className="p-4">
+            <form onSubmit={createKey} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={nameId}>New key name</Label>
+                <Input
+                  id={nameId}
+                  value={newName}
+                  onChange={(event) => setNewName(event.target.value)}
+                  placeholder="e.g. CRM sync"
+                  autoFocus
+                  required
+                />
+              </div>
+              <Button type="submit" size="sm" className="self-end">
+                Create key
+              </Button>
+            </form>
+          </PopoverContent>
+        </Popover>
+      </div>
 
       {keys.length === 0 ? (
-        <EmptyState title="No API keys yet" description="Create one above to authenticate requests to the leads API." />
+        <EmptyState
+          title="No API keys yet"
+          description="Create one to authenticate requests to the leads API."
+        />
       ) : (
         <DataTable minWidth="min-w-[640px]">
           <DataTableHead>
             <th>Name</th>
             <th>Key</th>
-            <th>Scope</th>
-            <th className="w-32">Last used</th>
+            <th className="w-28">Scope</th>
+            <th className="w-28">Last used</th>
             <th className="w-24">Actions</th>
           </DataTableHead>
           <tbody>
             {keys.map((key) => (
-              <tr key={key.id} className="border-border border-t">
+              <tr key={key.id} className={cn("border-border border-t", key.revoked && "opacity-60")}>
                 <td className="px-3 py-2.5 font-medium">{key.name}</td>
-                <td className="text-muted-foreground px-3 py-2.5 font-mono text-xs">
-                  {key.revoked ? "Revoked" : key.prefix}
+                <td className="text-muted-foreground px-3 py-2.5 font-mono text-xs">{key.prefix}</td>
+                <td className="px-3 py-2.5">
+                  {key.revoked ? (
+                    <Badge variant="destructive">Revoked</Badge>
+                  ) : (
+                    <Badge variant="secondary">{key.scope}</Badge>
+                  )}
                 </td>
-                <td className="text-muted-foreground px-3 py-2.5 text-xs">{key.scope}</td>
                 <td className="text-muted-foreground px-3 py-2.5 text-xs">
                   <RelativeTime value={key.lastUsedAt} />
                 </td>
@@ -137,7 +163,7 @@ export function ApiKeysManager() {
                   {!key.revoked && (
                     <ConfirmDeleteDialog
                       trigger={
-                        <Button size="sm" variant="outline">
+                        <Button size="sm" variant="destructive">
                           Revoke
                         </Button>
                       }

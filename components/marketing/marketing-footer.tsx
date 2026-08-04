@@ -15,8 +15,8 @@ const FOOTER_COLUMNS = [
   {
     heading: "Resources",
     links: [
-      { href: "/docs", label: "Documentation" },
-      { href: "/docs/guide", label: "Step-by-step guide" },
+      { href: "/docs", label: "Docs" },
+      { href: "/docs/guide", label: "User guide" },
       { href: "/docs/api", label: "API reference" },
       { href: "/faq", label: "FAQ" },
     ],
@@ -26,7 +26,7 @@ const FOOTER_COLUMNS = [
     links: [
       { href: "/about", label: "About" },
       { href: "/blog", label: "Blog" },
-      { href: "/contact", label: "Contact us" },
+      { href: "/contact", label: "Contact" },
     ],
   },
   {
@@ -34,13 +34,6 @@ const FOOTER_COLUMNS = [
     links: [
       { href: "/privacy", label: "Privacy" },
       { href: "/terms", label: "Terms" },
-    ],
-  },
-  {
-    heading: "Account",
-    links: [
-      { href: "/login", label: "Sign in" },
-      { href: "/signup", label: "Create a company" },
     ],
   },
 ] as const;
@@ -55,12 +48,11 @@ export function MarketingFooter() {
             <span className="text-sm font-semibold tracking-tight">DreamRue</span>
           </Link>
           <p className="text-muted-foreground max-w-xs text-sm">
-            Real estate lead intelligence for Bali — every Apify and n8n dataset synced, scored, and routed to the
-            first responder.
+            Buyer-intent lead intelligence for Bali property teams.
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
           {FOOTER_COLUMNS.map((column) => (
             <div key={column.heading} className="flex flex-col gap-3">
               <h3 className="text-sm font-semibold">{column.heading}</h3>

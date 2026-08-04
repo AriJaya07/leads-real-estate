@@ -1,9 +1,15 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { format } from "date-fns";
 import { TriangleAlert } from "lucide-react";
 import { requireOwner } from "@/application/auth/current-user";
-import { getCompanyPlan, getSubscriptionStatus, getUsageSummary } from "@/application/billing/usage";
+import {
+  getCompanyPlan,
+  getSubscriptionStatus,
+  getUsageSummary,
+  type SubscriptionStatus,
+} from "@/application/billing/usage";
 import { listPlans } from "@/application/billing/plan.actions";
 import { PageHeader } from "@/components/common/page-header";
 import { StatRowSkeleton } from "@/components/common/stat-row-skeleton";
@@ -11,7 +17,8 @@ import { TableSkeleton } from "@/components/common/table-skeleton";
 import { UsageMeter } from "@/components/common/usage-meter";
 import { Button } from "@/components/ui/button";
 import { PlanPicker } from "@/features/billing/components/plan-picker";
-import { formatCount, formatStorageKb } from "@/shared/format";
+import { cn } from "@/lib/utils";
+import { formatCount, formatStorageKb, formatUsd } from "@/shared/format";
 
 export const metadata: Metadata = { title: "Billing" };
 
@@ -19,6 +26,27 @@ export const metadata: Metadata = { title: "Billing" };
 function daysUntil(date: Date): number {
   return Math.max(0, Math.ceil((date.getTime() - Date.now()) / 86_400_000));
 }
+
+/**
+ * Same three-tier palette `HealthPill`/`UsageMeter` use — trialing reads as
+ * "watch" (amber), past_due as "bad" (red), active as "ok" (green). No new
+ * colour scheme invented for subscription status.
+ */
+const STATUS_TONE: Record<SubscriptionStatus["status"], string> = {
+  trialing: "bg-[var(--health-warn-bg)] text-[var(--health-warn-fg)]",
+  active: "bg-[var(--health-ok-bg)] text-[var(--health-ok-fg)]",
+  past_due: "bg-[var(--health-bad-bg)] text-[var(--health-bad-fg)]",
+  canceled: "bg-muted text-muted-foreground",
+  paused: "bg-muted text-muted-foreground",
+};
+
+const STATUS_LABEL: Record<SubscriptionStatus["status"], string> = {
+  trialing: "Trialing",
+  active: "Active",
+  past_due: "Past due",
+  canceled: "Canceled",
+  paused: "Paused",
+};
 
 /**
  * Stripe isn't wired yet (Tier-1 gap, `docs/final-recommendations.md`) — this
@@ -35,10 +63,12 @@ async function StatusBanner({ companyId }: { companyId: string }) {
   if (sub.status === "trialing" && sub.currentPeriodEnd) {
     const daysLeft = daysUntil(sub.currentPeriodEnd);
     return (
-      <div className="border-border bg-muted/40 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 text-sm">
-        <span>
-          Your trial ends in {daysLeft} day{daysLeft === 1 ? "" : "s"}. Nothing will be deleted — collection pauses
-          and the workspace goes read-only until you pick a plan.
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--health-warn-fg)]/25 bg-[var(--health-warn-bg)] p-4 text-sm text-[var(--health-warn-fg)]">
+        <span className="flex-1">
+          <strong className="font-medium">
+            Your trial ends in {daysLeft} day{daysLeft === 1 ? "" : "s"}.
+          </strong>{" "}
+          Nothing will be deleted — collection pauses and the workspace goes read-only until you pick a plan.
         </span>
         <Button size="sm" render={<Link href="#plans" />}>
           Choose a plan
@@ -70,42 +100,96 @@ async function StatusBanner({ companyId }: { companyId: string }) {
   return null;
 }
 
-async function Usage({ companyId }: { companyId: string }) {
-  const [plan, usage] = await Promise.all([getCompanyPlan(companyId), getUsageSummary(companyId)]);
-  if (!plan || !usage) return null;
+/**
+ * Left: the plan the company is actually on, read from `subscriptions` +
+ * `plans` (no fabricated seat counts or renewal dates). Right: the same
+ * `UsageMeter` grid as before, now including `alertRules` — `getUsageSummary`
+ * already returns it, it just wasn't rendered here yet. "Manage billing"
+ * stays a disabled stub with an explicit note rather than looking live,
+ * since Stripe checkout isn't wired (see `StatusBanner`'s comment above).
+ */
+async function BillingOverview({ companyId }: { companyId: string }) {
+  const [companyPlan, usage, subscription, plans] = await Promise.all([
+    getCompanyPlan(companyId),
+    getUsageSummary(companyId),
+    getSubscriptionStatus(companyId),
+    listPlans(),
+  ]);
+  if (!companyPlan || !usage) return null;
+
+  // `listPlans()` is ordered cheapest-first, so the next entry after the
+  // current one is always the next upgrade tier, never a lateral/downgrade.
+  const currentIndex = plans.findIndex((p) => p.id === companyPlan.planId);
+  const currentPlanRow = currentIndex >= 0 ? plans[currentIndex] : null;
+  const nextPlan = currentIndex >= 0 && currentIndex < plans.length - 1 ? plans[currentIndex + 1] : null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm">
-        Current plan: <span className="font-semibold">{plan.planName}</span>
-      </p>
-      <div className="border-border grid gap-5 rounded-xl border p-4 sm:grid-cols-2 xl:grid-cols-3">
-        <UsageMeter label="Seats" used={usage.seats.used} limit={usage.seats.limit} />
-        <UsageMeter label="Datasets" used={usage.datasets.used} limit={usage.datasets.limit} />
-        <UsageMeter
-          label="Records / month"
-          used={usage.rawRecordsThisMonth.used}
-          limit={usage.rawRecordsThisMonth.limit}
-          formatValue={formatCount}
-        />
-        <UsageMeter
-          label="Leads identified / month"
-          used={usage.leadsThisMonth.used}
-          limit={usage.leadsThisMonth.limit}
-          formatValue={formatCount}
-        />
-        <UsageMeter
-          label="Apify requests / month"
-          used={usage.apifyRequestsThisMonth.used}
-          limit={usage.apifyRequestsThisMonth.limit}
-          formatValue={formatCount}
-        />
-        <UsageMeter
-          label="Storage"
-          used={usage.storageKb.used}
-          limit={usage.storageKb.limit}
-          formatValue={formatStorageKb}
-        />
+    <div className="grid gap-6 lg:grid-cols-[300px_1fr] lg:items-start">
+      <div className="border-border flex flex-col rounded-xl border p-5">
+        <p className="text-muted-foreground text-xs">Current plan</p>
+        <div className="mt-1.5 flex items-center gap-2">
+          <span className="text-xl font-semibold tracking-tight">{companyPlan.planName}</span>
+          {subscription && (
+            <span
+              className={cn(
+                "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium",
+                STATUS_TONE[subscription.status],
+              )}
+            >
+              {STATUS_LABEL[subscription.status]}
+            </span>
+          )}
+        </div>
+        <p className="text-muted-foreground mt-1 text-sm">
+          {currentPlanRow?.monthlyPriceUsd == null ? "Contact sales" : `${formatUsd(currentPlanRow.monthlyPriceUsd)}/mo`}
+          {subscription?.currentPeriodEnd ? ` · renews ${format(subscription.currentPeriodEnd, "d MMM yyyy")}` : null}
+        </p>
+
+        <div className="mt-4 flex flex-col gap-2">
+          <Button size="sm" render={<Link href="#plans" />}>
+            {nextPlan ? `Upgrade to ${nextPlan.name}` : "Compare plans"}
+          </Button>
+          <Button size="sm" variant="outline" disabled title="Stripe checkout isn't wired up yet">
+            Manage billing
+          </Button>
+        </div>
+        <p className="text-muted-foreground mt-2.5 text-xs leading-relaxed">
+          Opens the hosted checkout. Stripe isn&apos;t wired yet — the button is a stub, and we say so rather than
+          faking it.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <p className="text-sm font-medium">Usage this period</p>
+        <div className="border-border grid gap-5 rounded-xl border p-4 sm:grid-cols-2 xl:grid-cols-3">
+          <UsageMeter label="Seats" used={usage.seats.used} limit={usage.seats.limit} />
+          <UsageMeter label="Datasets" used={usage.datasets.used} limit={usage.datasets.limit} />
+          <UsageMeter
+            label="Records / month"
+            used={usage.rawRecordsThisMonth.used}
+            limit={usage.rawRecordsThisMonth.limit}
+            formatValue={formatCount}
+          />
+          <UsageMeter
+            label="Leads identified / month"
+            used={usage.leadsThisMonth.used}
+            limit={usage.leadsThisMonth.limit}
+            formatValue={formatCount}
+          />
+          <UsageMeter label="Alert rules" used={usage.alertRules.used} limit={usage.alertRules.limit} />
+          <UsageMeter
+            label="Apify requests / month"
+            used={usage.apifyRequestsThisMonth.used}
+            limit={usage.apifyRequestsThisMonth.limit}
+            formatValue={formatCount}
+          />
+          <UsageMeter
+            label="Storage"
+            used={usage.storageKb.used}
+            limit={usage.storageKb.limit}
+            formatValue={formatStorageKb}
+          />
+        </div>
       </div>
     </div>
   );
@@ -131,8 +215,8 @@ export default async function AdminBillingPage() {
         <StatusBanner companyId={user.companyId} />
       </Suspense>
 
-      <Suspense fallback={<StatRowSkeleton />}>
-        <Usage companyId={user.companyId} />
+      <Suspense fallback={<StatRowSkeleton count={7} />}>
+        <BillingOverview companyId={user.companyId} />
       </Suspense>
 
       <div id="plans">

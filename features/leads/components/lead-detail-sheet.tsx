@@ -439,6 +439,10 @@ function MessageAssistant({ lead }: { lead: LeadListItem }) {
       {draft && (
         <div className="flex flex-col gap-2">
           <Textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={3} />
+          <p className="text-muted-foreground text-xs">
+            Built from this lead&apos;s parsed signals. Always your words before it&apos;s sent — nothing is sent
+            from DreamRue automatically.
+          </p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" onClick={() => void copy()}>
               Copy
@@ -468,7 +472,11 @@ function AppearanceCard({ appearance }: { appearance: LeadAppearanceListItem }) 
           {format(new Date(appearance.postedAt), "d MMM yyyy, HH:mm")}
           {appearance.duplicateCount > 0 && ` · +${appearance.duplicateCount} reposts`}
         </span>
-        <ScoreBadge score={appearance.intentScore} />
+        {isEngagement ? (
+          <span className="text-muted-foreground text-xs italic">Context only — never scored</span>
+        ) : (
+          <ScoreBadge score={appearance.intentScore} />
+        )}
       </div>
 
       {isEngagement ? (

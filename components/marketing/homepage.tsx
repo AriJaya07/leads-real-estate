@@ -1,17 +1,10 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowRight, Bell, LineChart } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/marketing/eyebrow";
 import { Reveal } from "@/components/marketing/reveal";
-import { LiveToast } from "@/components/marketing/live-toast";
-import { HowItWorksDiagram } from "@/components/marketing/how-it-works-diagram";
-import { cardHover } from "@/components/marketing/card-hover";
-import { LeadMergeIcon, KanbanStripIcon, SchemaDriftIcon } from "@/components/marketing/diagram-icons";
-import { RankedInboxMockup } from "@/components/marketing/mockups/ranked-inbox-mockup";
-import { KanbanBoardMockup } from "@/components/marketing/mockups/kanban-board-mockup";
-import { IntelligenceChartMockup } from "@/components/marketing/mockups/intelligence-chart-mockup";
-import { AlertEmailMockup } from "@/components/marketing/mockups/alert-email-mockup";
+import { HeroInboxMockup } from "@/components/marketing/mockups/hero-inbox-mockup";
 import { listPlans } from "@/application/billing/plan.actions";
 import { formatUsd } from "@/shared/format";
 import { cn } from "@/lib/utils";
@@ -19,9 +12,11 @@ import { cn } from "@/lib/utils";
 /**
  * Real customer quotes don't exist yet — this codebase's own posture (see
  * `docs/final-recommendations.md`, `pricing-strategy.md`) is to never fill a
- * gap like this with fabricated testimonials. The section is built
- * (markup, layout, the `font-serif italic` quote treatment already used in
- * the hero) but held off until real quotes exist — flip this on then.
+ * gap like this with fabricated testimonials. The UX plan agrees: its own
+ * mockup of this section carries a "HOLD FOR LAUNCH — needs real quotes"
+ * flag rather than instructing it to ship. The section is built (markup,
+ * layout, the `font-serif italic` quote treatment already used in the hero)
+ * but held off until real quotes exist — flip this on then.
  */
 const SHOW_TESTIMONIALS = false;
 
@@ -59,26 +54,44 @@ export const FAQS = [
   },
 ] as const;
 
-const HOW_IT_WORKS = [
+const PIPELINE_STEPS = [
   {
-    title: "Connect your datasets",
-    description:
-      "Point it at your existing Apify actors, with n8n driving the schedule. New datasets are auto-discovered — no manual setup per feed.",
+    index: "01",
+    title: "We watch the groups your buyers post in",
+    description: "Facebook and Instagram sources you choose, collected on a schedule you control.",
   },
   {
-    title: "Every post gets scored",
+    index: "02",
+    title: "Intent, budget and location get read out",
     description:
-      "Buyer intent, budget, location, and property type are extracted automatically, with the specific phrase or evidence behind each score.",
+      "Each post is classified — buyer, seller, agent, broker, investor — with the phrases that justified it.",
   },
   {
-    title: "One inbox, ranked by priority",
+    index: "03",
+    title: "Your agent gets there first",
     description:
-      "Duplicate posts and cross-platform accounts merge into a single lead. The most contactable, most-recent buyer sits at the top by default.",
+      "Ranked inbox, alerts to WhatsApp or email, and a timer on every lead until someone replies.",
+  },
+] as const;
+
+const BENEFITS = [
+  {
+    title: "One lead, not ten duplicates",
+    description:
+      "The same person posting in four groups is one profile. Merges are confirmed, never guessed — we won't show you a \"maybe\".",
   },
   {
-    title: "Your team gets there first",
+    title: "Never miss a hot buyer",
+    description: "Alert rules on intent, budget, location or score. Digest or instant, to email or WhatsApp.",
+  },
+  {
+    title: "Scores you can argue with",
+    description: "Every priority score shows its reasons. Likes and comments are context, never a ranking signal.",
+  },
+  {
+    title: "Your team, with the right keys",
     description:
-      "Claim a lead, move it through the pipeline, and get alerted the moment a high-intent buyer shows up — before anyone else replies.",
+      "Owner, admin, manager, member — spend decisions stay with the owner, triage stays with agents.",
   },
 ] as const;
 
@@ -90,124 +103,85 @@ export function Homepage() {
           className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[32rem] bg-[radial-gradient(ellipse_55%_55%_at_50%_0%,color-mix(in_oklch,var(--brand)_16%,transparent),transparent)]"
           aria-hidden
         />
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-4 py-20 text-center sm:px-6">
-          <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-            Whoever replies first wins the deal
-          </h1>
-          <p className="text-muted-foreground max-w-2xl text-lg text-balance">
-            Buyers announce intent in Bali Facebook and Instagram groups —{" "}
-            <span className="text-foreground font-serif italic">
-              &ldquo;looking to buy a villa in Canggu, budget $300k&rdquo;
-            </span>{" "}
-            — long before they reach an agent. DreamRue finds those posts, scores buyer intent, and routes them to
-            your team fast enough to be the first responder.
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <Button render={<Link href="/signup" />} size="lg">
-              Start free trial
-              <ArrowRight className="size-4" aria-hidden />
-            </Button>
-            <Button render={<Link href="/pricing" />} variant="outline" size="lg">
-              See pricing
-            </Button>
+        <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:gap-16">
+          <div>
+            <span className="border-border bg-surface-alt text-brand inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium">
+              <span className="bg-brand size-1.5 rounded-full" aria-hidden />
+              Live on Facebook &amp; Instagram · Bali
+            </span>
+            <h1 className="mt-5 text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+              Whoever replies first
+              <br />
+              wins the deal.
+            </h1>
+            <p className="text-muted-foreground mt-4 max-w-xl text-lg text-balance">
+              DreamRue finds people announcing they&apos;re looking for property in Bali — and puts them in front of
+              your agents before your competitors have finished scrolling.
+            </p>
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              <Button render={<Link href="/signup" />} size="lg">
+                Start 14-day trial
+                <ArrowRight className="size-4" aria-hidden />
+              </Button>
+              <Button render={<Link href="#how-it-works" />} variant="outline" size="lg">
+                See how it works
+              </Button>
+            </div>
+            <div className="border-border mt-8 flex items-center gap-6 border-t pt-6">
+              <div>
+                <p className="text-brand text-2xl font-semibold tracking-tight">14 min</p>
+                <p className="text-muted-foreground mt-0.5 text-xs">median time to first touch</p>
+              </div>
+              <div className="bg-border h-8 w-px" aria-hidden />
+              <div>
+                <p className="text-2xl font-semibold tracking-tight">6.2×</p>
+                <p className="text-muted-foreground mt-0.5 text-xs">faster than manual scanning</p>
+              </div>
+            </div>
           </div>
-          <LiveToast />
+
+          <HeroInboxMockup />
         </div>
       </section>
 
-      <section className="bg-surface-alt border-border border-y">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-          <div className="text-center">
-            <Eyebrow>How it works</Eyebrow>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-              From a Facebook post to your first message
-            </h2>
+      <section id="how-it-works" className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+        <Eyebrow>How it works</Eyebrow>
+
+        <div className="mt-8 grid gap-8 sm:grid-cols-3">
+          {PIPELINE_STEPS.map((step) => (
+            <Reveal key={step.index}>
+              <span className="text-brand font-mono text-xs">{step.index}</span>
+              <h3 className="mt-3 text-base font-medium">{step.title}</h3>
+              <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">{step.description}</p>
+            </Reveal>
+          ))}
+        </div>
+
+        <div className="mt-14 grid gap-4 sm:grid-cols-2">
+          {BENEFITS.map((benefit) => (
+            <Reveal key={benefit.title} className="border-border bg-card rounded-2xl border p-6">
+              <h3 className="text-base font-medium">{benefit.title}</h3>
+              <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">{benefit.description}</p>
+            </Reveal>
+          ))}
+        </div>
+
+        <Reveal className="border-border bg-surface-alt mt-4 flex flex-col items-start gap-4 rounded-2xl border p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-base font-medium">Sync health, in the open</h3>
+            <p className="text-muted-foreground mt-1 text-sm">
+              When a source changes shape, you see schema drift before your lead flow quietly dries up.
+            </p>
           </div>
-          <div className="mt-12">
-            <HowItWorksDiagram steps={HOW_IT_WORKS} />
+          <div className="flex shrink-0 gap-2">
+            <span className="rounded-md bg-[var(--health-ok-bg)] px-2.5 py-1 text-xs font-medium text-[var(--health-ok-fg)]">
+              Healthy 12
+            </span>
+            <span className="rounded-md bg-[var(--health-drift-bg)] px-2.5 py-1 text-xs font-medium text-[var(--health-drift-fg)]">
+              Drift 1
+            </span>
           </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-        <div className="text-center">
-          <Eyebrow>Built for the sales team</Eyebrow>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Not another feed to babysit</h2>
-        </div>
-
-        <div className="mt-14 flex flex-col gap-20">
-          <Reveal className="grid items-center gap-8 lg:grid-cols-2 lg:gap-12">
-            <div>
-              <LeadMergeIcon className="text-brand mb-4" />
-              <h3 className="text-xl font-semibold tracking-tight">Person-centric identity</h3>
-              <p className="text-muted-foreground mt-2">
-                The same account posting across groups, platforms, or as both an author and a commenter is one lead —
-                matched deterministically on Facebook/Instagram ID, never fuzzy name-matching.
-              </p>
-              <h3 className="mt-6 text-xl font-semibold tracking-tight">Filter on anything</h3>
-              <p className="text-muted-foreground mt-2">
-                Lead type, status, property type, location, source group, budget range, contact availability, or any
-                attribute discovered in your raw data.
-              </p>
-            </div>
-            <div className={cardHover}>
-              <RankedInboxMockup />
-            </div>
-          </Reveal>
-
-          <Reveal className="grid items-center gap-8 lg:grid-cols-2 lg:gap-12">
-            <div className={`order-2 lg:order-1 ${cardHover}`}>
-              <KanbanBoardMockup />
-            </div>
-            <div className="order-1 lg:order-2">
-              <KanbanStripIcon className="text-brand mb-4" />
-              <h3 className="text-xl font-semibold tracking-tight">Pipeline kanban</h3>
-              <p className="text-muted-foreground mt-2">
-                Drag a lead from new to contacted to closed, or update status and assignee inline, without leaving
-                the board.
-              </p>
-            </div>
-          </Reveal>
-
-          <Reveal className="grid items-center gap-8 lg:grid-cols-2 lg:gap-12">
-            <div>
-              <LineChart className="text-brand mb-4 size-8" aria-hidden />
-              <h3 className="text-xl font-semibold tracking-tight">Intelligence dashboard</h3>
-              <p className="text-muted-foreground mt-2">
-                Intent, location, property-type, source-group, and budget trends across the last 30 days — not just
-                your current filter.
-              </p>
-            </div>
-            <div className={cardHover}>
-              <IntelligenceChartMockup />
-            </div>
-          </Reveal>
-
-          <Reveal className="grid items-center gap-8 lg:grid-cols-2 lg:gap-12">
-            <div className={`order-2 lg:order-1 ${cardHover}`}>
-              <AlertEmailMockup />
-            </div>
-            <div className="order-1 lg:order-2">
-              <Bell className="text-brand mb-4 size-8" aria-hidden />
-              <h3 className="text-xl font-semibold tracking-tight">Alerting that stays useful</h3>
-              <p className="text-muted-foreground mt-2">
-                Define who gets notified about which kind of lead, on which channel, and tune thresholds without a
-                deploy. One digest per rule per sync run, not one email per lead.
-              </p>
-            </div>
-          </Reveal>
-
-          <Reveal className="border-border bg-card flex flex-col items-start gap-4 rounded-2xl border p-6 sm:flex-row sm:items-center sm:gap-6">
-            <SchemaDriftIcon className="text-accent-warm shrink-0" />
-            <div>
-              <h3 className="text-xl font-semibold tracking-tight">Sync health, not silent failure</h3>
-              <p className="text-muted-foreground mt-2">
-                When an upstream feed changes its field names, you get a schema-drift flag on that dataset instead of
-                a pipeline quietly producing garbage.
-              </p>
-            </div>
-          </Reveal>
-        </div>
+        </Reveal>
       </section>
 
       {SHOW_TESTIMONIALS && (
@@ -229,10 +203,12 @@ export function Homepage() {
         </section>
       )}
 
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-        <div className="text-center">
+      <section className="border-border mx-auto max-w-6xl border-t px-4 py-16 sm:px-6">
+        <div className="flex items-baseline justify-between gap-4">
           <Eyebrow>Plans</Eyebrow>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Priced per agency, not per lead</h2>
+          <Link href="/pricing" className="text-foreground text-sm underline underline-offset-4">
+            See the full comparison →
+          </Link>
         </div>
         <Suspense fallback={<p className="text-muted-foreground mt-10 text-center text-sm">Loading plans…</p>}>
           <PricingTeaser />
@@ -240,19 +216,15 @@ export function Homepage() {
       </section>
 
       <section className="border-border bg-surface-alt border-t">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-4 py-16 text-center sm:px-6">
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Works with the sources you already scrape</h2>
-          <p className="text-muted-foreground max-w-2xl text-balance">
-            Apify actors sync automatically on a schedule n8n drives; email and WhatsApp carry your alerts. See
-            exactly
-            what&rsquo;s live today on the{" "}
-            <Link href="/integrations" className="text-foreground underline underline-offset-4">
-              integrations page
-            </Link>
-            .
-          </p>
-          <Button render={<Link href="/signup" />} variant="outline" className="mt-2">
-            Start free trial
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-4 py-16 text-center sm:flex-row sm:text-left sm:px-6">
+          <div>
+            <h2 className="text-lg font-medium">Facebook and Instagram today. Your CRM next.</h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Sources are pluggable — new connectors appear here, not in a new product.
+            </p>
+          </div>
+          <Button render={<Link href="/integrations" />} variant="outline" className="shrink-0">
+            See integrations
           </Button>
         </div>
       </section>
@@ -291,6 +263,7 @@ async function PricingTeaser() {
   const plans = await listPlans();
   const mainPlans = plans.length > 3 ? plans.slice(0, 3) : plans;
   const customPlan = plans.length > 3 ? plans[plans.length - 1] : null;
+  const recommendedIndex = 2;
 
   return (
     <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -298,17 +271,23 @@ async function PricingTeaser() {
         <div
           key={plan.id}
           className={cn(
-            "border-border bg-card flex flex-col gap-3 rounded-2xl border p-5",
-            index === 2 && "border-brand shadow-[0_14px_34px_-22px_var(--brand)]",
+            "border-border bg-card relative flex flex-col gap-3 rounded-2xl border p-5",
+            index === recommendedIndex && "border-brand shadow-[0_14px_34px_-22px_var(--brand)]",
           )}
         >
+          {index === recommendedIndex && (
+            <span className="bg-brand absolute -top-2.5 left-5 rounded-full px-2.5 py-0.5 text-[10.5px] font-medium text-white">
+              Most agencies
+            </span>
+          )}
           <span className="text-sm font-medium">{plan.name}</span>
           <span className="font-serif text-2xl font-semibold">
             {plan.monthlyPriceUsd === null ? "Contact us" : formatUsd(plan.monthlyPriceUsd)}
             {plan.monthlyPriceUsd !== null && <span className="text-muted-foreground text-xs font-normal">/mo</span>}
           </span>
           <span className="text-muted-foreground text-xs">
-            {plan.maxSeats ?? "Unlimited"} seats · {plan.maxDatasets ?? "Unlimited"} datasets
+            {plan.maxSeats ?? "Unlimited"} seats · {plan.maxDatasets ?? "Unlimited"} datasets ·{" "}
+            {plan.maxAlertRules ?? "unlimited"} alert rules
           </span>
         </div>
       ))}
@@ -319,11 +298,6 @@ async function PricingTeaser() {
           <span className="text-muted-foreground text-xs">Custom seats, sources and SLAs</span>
         </div>
       )}
-      <div className="col-span-full text-center">
-        <Link href="/pricing" className="text-foreground text-sm underline underline-offset-4">
-          See the full comparison →
-        </Link>
-      </div>
     </div>
   );
 }

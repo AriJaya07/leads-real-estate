@@ -18,7 +18,9 @@ import { ScoreBadge, ScoreReasons } from "@/components/common/score-badge";
 import { PotentialPill } from "@/components/common/potential-pill";
 import { LeadFilterBar } from "./lead-filter-bar";
 import { SavedSearchesBar } from "./saved-searches-bar";
+import { FirstLeadTooltip } from "./first-lead-tooltip";
 import { markContacted } from "@/application/leads/lead.actions";
+import { setLocalStorageValue, useLocalStorageValue } from "@/hooks/use-local-storage-value";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { useLeadFacetsQuery, useLeadsQuery, useSavedViewsQuery } from "@/features/leads/queries";
 import { parseLeadFilters, type LeadFilters } from "@/application/leads/filters.schema";
@@ -64,6 +66,10 @@ function countActiveFilters(filters: LeadFilters): number {
 }
 
 type ContactChannel = "whatsapp" | "phone" | "post";
+
+const FIRST_LEAD_TOOLTIP_DISMISSED_KEY = "dreamrue:first-lead-tooltip:dismissed";
+/** Same "high" cutoff `components/common/score-badge.tsx`'s internal `tone()` uses — a middling top lead gets no tooltip. */
+const FIRST_LEAD_TOOLTIP_SCORE_THRESHOLD = 70;
 
 /**
  * Memoized: `page.items` keeps a stable reference between renders that don't
@@ -136,10 +142,15 @@ const LeadCard = memo(function LeadCard({
   lead,
   onSelect,
   onContact,
+  highlightFirst = false,
+  onDismissHighlight,
 }: {
   lead: LeadListItem;
   onSelect: (lead: LeadListItem) => void;
   onContact: (lead: LeadListItem, channel: ContactChannel) => void;
+  /** True only for the single top-ranked lead, and only while the first-lead tooltip hasn't been dismissed. */
+  highlightFirst?: boolean;
+  onDismissHighlight?: () => void;
 }) {
   const appearance = lead.primaryAppearance;
   return (
@@ -154,8 +165,9 @@ const LeadCard = memo(function LeadCard({
         }
       }}
       className={cn(
-        "border-border bg-card hover:bg-accent/40 focus-visible:ring-ring flex cursor-pointer flex-col gap-2 rounded-xl border p-3 transition-colors outline-none focus-visible:ring-2",
+        "border-border bg-card hover:bg-accent/40 focus-visible:ring-ring relative flex cursor-pointer flex-col gap-2 rounded-xl border p-3 transition-colors outline-none focus-visible:ring-2",
         lead.status !== "new" && "opacity-70",
+        highlightFirst && "ring-2 ring-[var(--brand)] ring-offset-2 ring-offset-background",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -202,6 +214,8 @@ const LeadCard = memo(function LeadCard({
         </span>
         <ContactActions lead={lead} onContact={onContact} />
       </div>
+
+      {highlightFirst && onDismissHighlight && <FirstLeadTooltip onDismiss={onDismissHighlight} />}
     </div>
   );
 });
@@ -211,10 +225,15 @@ const LeadRow = memo(function LeadRow({
   lead,
   onSelect,
   onContact,
+  highlightFirst = false,
+  onDismissHighlight,
 }: {
   lead: LeadListItem;
   onSelect: (lead: LeadListItem) => void;
   onContact: (lead: LeadListItem, channel: ContactChannel) => void;
+  /** True only for the single top-ranked lead, and only while the first-lead tooltip hasn't been dismissed. */
+  highlightFirst?: boolean;
+  onDismissHighlight?: () => void;
 }) {
   const appearance = lead.primaryAppearance;
   return (
@@ -222,16 +241,18 @@ const LeadRow = memo(function LeadRow({
       className={cn(
         "border-border hover:bg-accent/40 cursor-pointer border-t align-top transition-colors",
         lead.status !== "new" && "opacity-70",
+        highlightFirst && "bg-[var(--brand)]/5",
       )}
       onClick={() => onSelect(lead)}
     >
       <td className="px-3 py-3">
-        <div className="flex flex-col gap-1">
+        <div className={cn("flex flex-col gap-1", highlightFirst && "relative")}>
           <ScoreBadge score={primaryLeadScore(lead)} />
           <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
             c{lead.confidenceScore}
           </span>
           <PotentialPill potential={lead.dataQualityTier} />
+          {highlightFirst && onDismissHighlight && <FirstLeadTooltip onDismiss={onDismissHighlight} />}
         </div>
       </td>
 
@@ -311,6 +332,27 @@ export function LeadInbox({
   } = useLeadsQuery(filters);
   const { data: facets = [] } = useLeadFacetsQuery(filters.datasetId);
   const { data: savedViews = [] } = useSavedViewsQuery();
+
+  /**
+   * One tooltip, not a tour: fires once, around the single top-ranked lead,
+   * only on an unfiltered first page (a filtered/paginated "top" lead isn't
+   * really the inbox's top lead). `tooltipClosed` dismisses it immediately
+   * on click without waiting for the `localStorage` round-trip that
+   * `firstLeadTooltipDismissed` depends on.
+   */
+  const firstLeadTooltipDismissed = useLocalStorageValue(FIRST_LEAD_TOOLTIP_DISMISSED_KEY) === "true";
+  const [tooltipClosed, setTooltipClosed] = useState(false);
+  const dismissFirstLeadTooltip = useCallback(() => {
+    setTooltipClosed(true);
+    setLocalStorageValue(FIRST_LEAD_TOOLTIP_DISMISSED_KEY, "true");
+  }, []);
+  const showFirstLeadTooltip =
+    !firstLeadTooltipDismissed &&
+    !tooltipClosed &&
+    page?.page === 1 &&
+    countActiveFilters(filters) === 0;
+  const isFirstLeadHighlighted = (index: number, lead: LeadListItem) =>
+    index === 0 && showFirstLeadTooltip && primaryLeadScore(lead) >= FIRST_LEAD_TOOLTIP_SCORE_THRESHOLD;
 
   /**
    * Logs the touch first, then opens the channel — the metric must not depend
@@ -402,8 +444,15 @@ export function LeadInbox({
           <div className={cn("flex flex-col gap-4 transition-opacity", isPlaceholderData && "opacity-60")}>
             {/* Below md, a fixed-column table can't fit — cards regardless of view preference. */}
             <div className="grid gap-3 md:hidden" data-testid="lead-list-mobile">
-              {page.items.map((lead) => (
-                <LeadCard key={lead.id} lead={lead} onSelect={setSelected} onContact={contact} />
+              {page.items.map((lead, index) => (
+                <LeadCard
+                  key={lead.id}
+                  lead={lead}
+                  onSelect={setSelected}
+                  onContact={contact}
+                  highlightFirst={isFirstLeadHighlighted(index, lead)}
+                  onDismissHighlight={dismissFirstLeadTooltip}
+                />
               ))}
             </div>
 
@@ -413,8 +462,15 @@ export function LeadInbox({
                 className="hidden gap-3 md:grid md:grid-cols-2 xl:grid-cols-3"
                 data-testid="lead-list-desktop"
               >
-                {page.items.map((lead) => (
-                  <LeadCard key={lead.id} lead={lead} onSelect={setSelected} onContact={contact} />
+                {page.items.map((lead, index) => (
+                  <LeadCard
+                    key={lead.id}
+                    lead={lead}
+                    onSelect={setSelected}
+                    onContact={contact}
+                    highlightFirst={isFirstLeadHighlighted(index, lead)}
+                    onDismissHighlight={dismissFirstLeadTooltip}
+                  />
                 ))}
               </div>
             ) : (
@@ -433,8 +489,15 @@ export function LeadInbox({
                   <th className="w-36">Act</th>
                 </DataTableHead>
                 <tbody>
-                  {page.items.map((lead) => (
-                    <LeadRow key={lead.id} lead={lead} onSelect={setSelected} onContact={contact} />
+                  {page.items.map((lead, index) => (
+                    <LeadRow
+                      key={lead.id}
+                      lead={lead}
+                      onSelect={setSelected}
+                      onContact={contact}
+                      highlightFirst={isFirstLeadHighlighted(index, lead)}
+                      onDismissHighlight={dismissFirstLeadTooltip}
+                    />
                   ))}
                 </tbody>
               </DataTable>

@@ -15,8 +15,6 @@ const PRODUCT_LINKS = [
   { href: "/features", label: "Features" },
   { href: "/solutions/villa-property-agencies", label: "Solutions" },
   { href: "/integrations", label: "Integrations" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/roadmap", label: "Roadmap" },
 ] as const;
 
 const RESOURCE_LINKS = [
@@ -64,6 +62,12 @@ export function MarketingHeader() {
         <nav className="hidden items-center gap-6 md:flex" aria-label="Main">
           <NavDropdown label="Product" links={PRODUCT_LINKS} />
           <NavDropdown label="Resources" links={RESOURCE_LINKS} />
+          <Link href="/pricing" className="text-muted-foreground hover:text-foreground text-sm">
+            Pricing
+          </Link>
+          <Link href="/roadmap" className="text-muted-foreground hover:text-foreground text-sm">
+            Roadmap
+          </Link>
         </nav>
 
         <div className="flex items-center gap-4 text-sm">

@@ -22,6 +22,36 @@ const FEATURE_LABELS: Record<keyof PlanFeatures, string> = {
   sso: "Single sign-on (SSO)",
 };
 
+/**
+ * `domain/billing/plan-features.ts` is explicit that these three flags are
+ * "display-only for now (no code path yet)" — advertised, but nothing in the
+ * product actually checks them. The doc's pricing philosophy is "anything we
+ * haven't built yet is marked as such" (see the honesty pattern already used
+ * on `/docs/api` and the homepage FAQ's "planned, not shipped" API answer) —
+ * so these get a "planned" tag instead of silently reading as shipped.
+ */
+const FEATURE_PLANNED: Partial<Record<keyof PlanFeatures, true>> = {
+  customBranding: true,
+  prioritySupport: true,
+  sso: true,
+};
+
+/** Doc copy, keyed by the real plan names from `infrastructure/db/seed.mjs` — not shown for a plan name it doesn't recognize. */
+const PLAN_TAGLINES: Record<string, string> = {
+  Starter: "One agent testing the water.",
+  Professional: "A small team working one market.",
+  Business: "Multiple areas, multiple agents, one board.",
+  Enterprise: "Franchise groups and multi-island operators.",
+};
+
+function PlannedTag() {
+  return (
+    <span className="ml-1.5 rounded bg-[var(--health-warn-bg)] px-1.5 py-0.5 font-mono text-[10px] font-medium text-[var(--health-warn-fg)]">
+      planned
+    </span>
+  );
+}
+
 function limitText(value: number | null, unit: string): string {
   return value === null ? `Unlimited ${unit}` : `${formatCount(value)} ${unit}`;
 }
@@ -44,6 +74,9 @@ function PlanCard({ plan, index, plansCount, highlighted }: { plan: Plan; index:
       )}
       <div>
         <h2 className="text-lg font-semibold tracking-tight">{plan.name}</h2>
+        {PLAN_TAGLINES[plan.name] && (
+          <p className="text-muted-foreground mt-1 text-sm leading-snug">{PLAN_TAGLINES[plan.name]}</p>
+        )}
         <div className="mt-2 flex items-baseline gap-1">
           {plan.monthlyPriceUsd === null ? (
             <span className="font-serif text-2xl font-semibold italic">Contact us</span>
@@ -88,6 +121,7 @@ function PlanCard({ plan, index, plansCount, highlighted }: { plan: Plan; index:
                 <X className="size-3.5 shrink-0 opacity-50" aria-hidden />
               )}
               {FEATURE_LABELS[key]}
+              {included && FEATURE_PLANNED[key] && <PlannedTag />}
             </li>
           );
         })}
@@ -117,9 +151,16 @@ async function PricingGrid() {
         <div className="border-border bg-surface-alt flex flex-col items-center justify-between gap-4 rounded-2xl border p-6 sm:flex-row sm:pl-8">
           <div className="text-center sm:text-left">
             <h2 className="text-lg font-semibold tracking-tight">{customPlan.name}</h2>
+            {PLAN_TAGLINES[customPlan.name] && (
+              <p className="text-muted-foreground mt-1 text-sm">{PLAN_TAGLINES[customPlan.name]}</p>
+            )}
             <p className="text-muted-foreground mt-1 max-w-md text-sm">
               {limitText(customPlan.maxSeats, "team members")} · {formatCount(customPlan.maxLeadsPerMonth)} leads/mo
               · custom SLA and onboarding.
+            </p>
+            <p className="text-muted-foreground mt-1 flex items-center justify-center text-sm sm:justify-start">
+              API access
+              <PlannedTag />
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-4">
@@ -141,16 +182,22 @@ export default function PricingPage() {
     <div className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-12 sm:px-6">
       <div className="text-center">
         <Eyebrow>Pricing</Eyebrow>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Simple, usage-based pricing</h1>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Priced per agency, not per lead</h1>
         <p className="text-muted-foreground mt-3 text-balance">
-          Every plan includes the full lead pipeline — sourcing through alerting. Pick the tier that matches how
-          much data you move; every plan starts with a 14-day free trial, no card required.
+          Every limit below is enforced in the product. Anything we haven&rsquo;t built yet is marked as such.
         </p>
       </div>
 
       <Suspense fallback={<p className="text-muted-foreground text-center">Loading plans…</p>}>
         <PricingGrid />
       </Suspense>
+
+      <div className="border-border bg-surface-alt mx-auto max-w-3xl rounded-2xl border p-5 text-center text-sm sm:text-left">
+        <p className="text-muted-foreground">
+          <strong className="text-foreground font-medium">14 days, no card.</strong> If you downgrade or cancel,
+          nothing is deleted — collection pauses and seats lock, your leads stay where they are.
+        </p>
+      </div>
     </div>
   );
 }

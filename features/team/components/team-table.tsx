@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, KeyRound, Mail, Trash2, X } from "lucide-react";
+import { Copy, KeyRound, Mail, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RelativeTime } from "@/components/common/relative-time";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/common/empty-state";
-import { DataTable, DataTableHead } from "@/components/common/data-table";
 import { Spinner } from "@/components/common/spinner";
 import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { Role } from "@/domain/auth/permissions";
 import {
   removeTeamMember,
@@ -19,6 +19,7 @@ import {
 } from "@/application/auth/team.actions";
 import { inviteTeamMember, revokeInvite } from "@/application/auth/invite.actions";
 import { useServerAction } from "@/hooks/use-server-action";
+import { cn } from "@/lib/utils";
 
 const ASSIGNABLE_ROLES: { value: Role; label: string }[] = [
   { value: "owner", label: "Owner" },
@@ -44,6 +45,33 @@ interface PendingInvite {
   expiresAt: Date;
   createdAt: Date;
   expired: boolean;
+}
+
+/**
+ * Purely decorative — a deterministic pick from the app's own intent hues so
+ * every row gets a distinct avatar colour without inventing a new palette.
+ * Never carries meaning (unlike `IntentBadge`'s use of the same tokens), so
+ * no label is needed alongside it.
+ */
+const AVATAR_PALETTE = [
+  "bg-intent-buyer/15 text-intent-buyer",
+  "bg-intent-seller/15 text-intent-seller",
+  "bg-intent-agent/15 text-intent-agent",
+  "bg-intent-broker/15 text-intent-broker",
+  "bg-intent-investor/15 text-intent-investor",
+];
+
+function avatarTone(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
+
+function initials(name: string | null, email: string): string {
+  const source = (name?.trim() || email).trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return source.slice(0, 2).toUpperCase();
 }
 
 /** Shown once. It is not recoverable afterwards — only the hash is stored. */
@@ -97,6 +125,7 @@ export function TeamTable({
   const { busyId, run } = useServerAction();
   const busy = busyId !== null;
   const [notice, setNotice] = useState<{ title: string; credential: string } | null>(null);
+  const [inviting, setInviting] = useState(false);
 
   const assignableRoles = ASSIGNABLE_ROLES.filter((r) => r.value !== "owner" || viewerRole === "owner");
 
@@ -116,6 +145,7 @@ export function TeamTable({
         errorFallback: "Could not send the invite",
         onSuccess: (result) => {
           form.reset();
+          setInviting(false);
           if (result.emailSent) {
             toast.success(`Invite emailed to ${result.email}`);
           } else {
@@ -155,152 +185,165 @@ export function TeamTable({
     <div className="flex flex-col gap-4">
       {notice && <CredentialNotice {...notice} onDismiss={() => setNotice(null)} />}
 
-      <form
-        onSubmit={invite}
-        className="border-border flex flex-wrap items-end gap-3 rounded-xl border p-4"
-      >
-        <div className="flex min-w-56 flex-1 flex-col gap-1.5">
-          <Label htmlFor="invite-email">Email</Label>
-          <Input
-            id="invite-email"
-            name="email"
-            type="email"
-            required
-            placeholder="teammate@company.com"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="invite-role">Role</Label>
-          <select
-            id="invite-role"
-            name="role"
-            defaultValue="member"
-            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-          >
-            {assignableRoles.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <Button type="submit" disabled={busy}>
-          {busy ? <Spinner className="size-3.5" /> : <Mail className="size-3.5" aria-hidden />}
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-medium">Members</h2>
+        <Button size="sm" onClick={() => setInviting(true)}>
+          <Mail className="size-3.5" aria-hidden />
           Invite
         </Button>
-      </form>
+      </div>
 
-      {pendingInvites.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h3 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-            Pending invites
-          </h3>
-          <div className="flex flex-col gap-2">
-            {pendingInvites.map((invite) => (
-              <div
-                key={invite.id}
-                className="border-border flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
-              >
-                <div>
-                  <span className="font-medium">{invite.email}</span>{" "}
-                  <span className="text-muted-foreground capitalize">· {invite.role}</span>
-                  {invite.expired && <span className="text-destructive"> · expired</span>}
-                </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  aria-label={`Cancel invite for ${invite.email}`}
-                  disabled={busy}
-                  onClick={() => void cancelInvite(invite)}
-                >
-                  <X className="size-3.5" aria-hidden />
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {members.length === 0 ? (
+      {members.length === 0 && pendingInvites.length === 0 ? (
         <EmptyState
           title="No team members yet"
           description="Invite the first teammate above — they&rsquo;ll get an email to set their password."
         />
       ) : (
-        <DataTable minWidth="min-w-[720px]">
-          <DataTableHead>
-            <th>Member</th>
-            <th className="w-32">Role</th>
-            <th className="w-36">Last seen</th>
-            <th className="w-44">Actions</th>
-          </DataTableHead>
-          <tbody>
-              {members.map((member) => (
-                <tr key={member.id} className="border-border border-t">
-                  <td className="px-3 py-2.5">
-                    <div className="font-medium">
-                      {member.name ?? member.email}
-                    </div>
-                    <div className="text-muted-foreground text-xs">
-                      {member.name ? member.email : null}
-                      {member.mustChangePassword && " · must change password"}
-                      {member.id === currentUserId && " · you"}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <select
+        <div className="border-border divide-border flex flex-col divide-y rounded-xl border">
+          {members.map((member) => (
+            <div key={member.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <div
+                className={cn(
+                  "grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold",
+                  avatarTone(member.id),
+                )}
+                aria-hidden
+              >
+                {initials(member.name, member.email)}
+              </div>
+
+              <div className="min-w-40 flex-1">
+                <div className="truncate text-sm font-medium">{member.name ?? member.email}</div>
+                <div className="text-muted-foreground truncate text-xs">
+                  {member.name ? member.email : "Last active "}
+                  {!member.name && <RelativeTime value={member.lastSeenAt} />}
+                  {member.mustChangePassword && " · must change password"}
+                  {member.id === currentUserId && " · you"}
+                </div>
+              </div>
+
+              {member.name && (
+                <span className="text-muted-foreground hidden shrink-0 text-xs sm:inline">
+                  Last seen <RelativeTime value={member.lastSeenAt} />
+                </span>
+              )}
+
+              <select
+                disabled={busy || member.id === currentUserId}
+                value={member.role}
+                onChange={(event) => void changeRole(member, event.target.value as Role)}
+                title={member.id === currentUserId ? "You cannot change your own role" : "Change role"}
+                className="border-input bg-background h-8 shrink-0 rounded-lg border px-2 text-xs capitalize disabled:opacity-60"
+              >
+                {ASSIGNABLE_ROLES.filter(
+                  (r) => r.value === member.role || r.value !== "owner" || viewerRole === "owner",
+                ).map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+
+              <div className="flex shrink-0 gap-1">
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label={`Reset password for ${member.email}`}
+                  title="Reset password"
+                  disabled={busy}
+                  onClick={() => void resetPassword(member)}
+                >
+                  <KeyRound className="size-3.5" aria-hidden />
+                </Button>
+                <ConfirmDeleteDialog
+                  trigger={
+                    <Button
+                      size="icon-sm"
+                      variant="outline"
+                      aria-label={`Remove ${member.email}`}
                       disabled={busy || member.id === currentUserId}
-                      value={member.role}
-                      onChange={(event) => void changeRole(member, event.target.value as Role)}
-                      title={member.id === currentUserId ? "You cannot change your own role" : "Change role"}
-                      className="border-input bg-background h-8 rounded-md border px-2 text-xs capitalize disabled:opacity-60"
                     >
-                      {ASSIGNABLE_ROLES.filter(
-                        (r) => r.value === member.role || r.value !== "owner" || viewerRole === "owner",
-                      ).map((r) => (
-                        <option key={r.value} value={r.value}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="text-muted-foreground px-3 py-2.5 text-xs">
-                    <RelativeTime value={member.lastSeenAt} />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => void resetPassword(member)}
-                      >
-                        <KeyRound className="size-3.5" aria-hidden />
-                        Reset
-                      </Button>
-                      <ConfirmDeleteDialog
-                        trigger={
-                          <Button
-                            size="icon"
-                            variant="outline"
-                            aria-label={`Remove ${member.email}`}
-                            disabled={busy || member.id === currentUserId}
-                          >
-                            <Trash2 className="size-3.5" aria-hidden />
-                          </Button>
-                        }
-                        title={`Remove ${member.name ?? member.email}?`}
-                        description="They lose access to this company immediately. They'd need a new invite to rejoin."
-                        confirmLabel="Remove"
-                        onConfirm={() => void remove(member)}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </DataTable>
+                      <Trash2 className="size-3.5" aria-hidden />
+                    </Button>
+                  }
+                  title={`Remove ${member.name ?? member.email}?`}
+                  description="They lose access to this company immediately. They'd need a new invite to rejoin."
+                  confirmLabel="Remove"
+                  onConfirm={() => void remove(member)}
+                />
+              </div>
+            </div>
+          ))}
+
+          {pendingInvites.map((invite) => (
+            <div key={invite.id} className="flex items-center gap-3 px-4 py-3">
+              <div className="border-muted-foreground/40 size-8 shrink-0 rounded-full border border-dashed" aria-hidden />
+              <div className="min-w-40 flex-1">
+                <div className="text-muted-foreground truncate text-sm">{invite.email}</div>
+                <div className="text-muted-foreground text-xs">
+                  {invite.expired ? "Invite expired" : (
+                    <>
+                      Invited <RelativeTime value={invite.createdAt} />
+                    </>
+                  )}
+                  {" · "}
+                  <span className="capitalize">{invite.role}</span>
+                </div>
+              </div>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label={`Cancel invite for ${invite.email}`}
+                disabled={busy}
+                onClick={() => void cancelInvite(invite)}
+              >
+                <X className="size-3.5" aria-hidden />
+              </Button>
+            </div>
+          ))}
+        </div>
       )}
+
+      <Sheet open={inviting} onOpenChange={setInviting}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Invite a teammate</SheetTitle>
+            <SheetDescription>
+              Without a mail provider configured, the invite link is shown on screen to copy and send yourself.
+            </SheetDescription>
+          </SheetHeader>
+          <form onSubmit={invite} className="flex flex-1 flex-col gap-4 p-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="invite-email">Email</Label>
+              <Input id="invite-email" name="email" type="email" required placeholder="teammate@company.com" autoFocus />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="invite-role">Role</Label>
+              <select
+                id="invite-role"
+                name="role"
+                defaultValue="member"
+                className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+              >
+                {assignableRoles.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-auto flex gap-2 pt-2">
+              <Button type="submit" size="sm" disabled={busyId === "invite"}>
+                {busyId === "invite" ? <Spinner className="size-3.5" /> : <UserPlus className="size-3.5" aria-hidden />}
+                Send invite
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setInviting(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

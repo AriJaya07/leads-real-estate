@@ -6,12 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/common/spinner";
+import { FormError } from "@/features/auth/components/form-error";
+import { PasswordStrengthMeter } from "@/features/auth/components/password-strength-meter";
 import { acceptInvite } from "@/application/auth/invite.actions";
 
 export function AcceptInviteForm({ token }: { token: string }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [password, setPassword] = useState("");
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,11 +45,7 @@ export function AcceptInviteForm({ token }: { token: string }) {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      {error && (
-        <p className="text-destructive text-sm" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <FormError>{error}</FormError>}
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="name">Your name</Label>
@@ -54,7 +53,7 @@ export function AcceptInviteForm({ token }: { token: string }) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">Set a password</Label>
         <Input
           id="password"
           name="password"
@@ -62,7 +61,10 @@ export function AcceptInviteForm({ token }: { token: string }) {
           required
           autoComplete="new-password"
           placeholder="At least 10 characters"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
         />
+        <PasswordStrengthMeter password={password} />
       </div>
 
       <Button type="submit" disabled={pending}>

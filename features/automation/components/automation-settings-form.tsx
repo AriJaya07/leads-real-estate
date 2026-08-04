@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/common/spinner";
+import { Switch } from "@/components/ui/switch";
 import { useServerAction } from "@/hooks/use-server-action";
 import { regenerateWebhookSecret, updateAutomationSettings } from "@/application/automation/automation-settings.actions";
 import type { AutomationSettingsRow } from "@/infrastructure/db/schema/automation";
@@ -74,12 +75,7 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
     <form onSubmit={save} className="flex flex-col gap-6">
       <section className="border-border flex flex-col gap-3 rounded-xl border p-4">
         <label className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            checked={autoAssignEnabled}
-            onChange={(event) => setAutoAssignEnabled(event.target.checked)}
-            className="border-input mt-0.5 size-4 rounded"
-          />
+          <Switch checked={autoAssignEnabled} onCheckedChange={setAutoAssignEnabled} className="mt-0.5" />
           <span>
             <span className="font-medium">Automatic lead assignment</span>
             <p className="text-muted-foreground text-sm">
@@ -92,12 +88,7 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
 
       <section className="border-border flex flex-col gap-3 rounded-xl border p-4">
         <label className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            checked={reminderEnabled}
-            onChange={(event) => setReminderEnabled(event.target.checked)}
-            className="border-input mt-0.5 size-4 rounded"
-          />
+          <Switch checked={reminderEnabled} onCheckedChange={setReminderEnabled} className="mt-0.5" />
           <span>
             <span className="font-medium">Stale lead reminders</span>
             <p className="text-muted-foreground text-sm">
@@ -135,12 +126,7 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
 
       <section className="border-border flex flex-col gap-3 rounded-xl border p-4">
         <label className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            checked={weeklyReportEnabled}
-            onChange={(event) => setWeeklyReportEnabled(event.target.checked)}
-            className="border-input mt-0.5 size-4 rounded"
-          />
+          <Switch checked={weeklyReportEnabled} onCheckedChange={setWeeklyReportEnabled} className="mt-0.5" />
           <span>
             <span className="font-medium">Weekly performance report</span>
             <p className="text-muted-foreground text-sm">
@@ -164,12 +150,7 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
 
       <section className="border-border flex flex-col gap-3 rounded-xl border p-4">
         <label className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            checked={webhookEnabled}
-            onChange={(event) => setWebhookEnabled(event.target.checked)}
-            className="border-input mt-0.5 size-4 rounded"
-          />
+          <Switch checked={webhookEnabled} onCheckedChange={setWebhookEnabled} className="mt-0.5" />
           <span>
             <span className="font-medium">Outbound webhook</span>
             <p className="text-muted-foreground text-sm">

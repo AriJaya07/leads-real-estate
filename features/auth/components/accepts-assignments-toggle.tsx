@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { setAcceptsAssignments } from "@/application/auth/profile.actions";
+import { Switch } from "@/components/ui/switch";
 import { useServerAction } from "@/hooks/use-server-action";
 
 /** Self-service opt-out of the automatic lead-assignment round-robin — e.g. while on leave. */
@@ -23,12 +24,11 @@ export function AcceptsAssignmentsToggle({ initialValue }: { initialValue: boole
 
   return (
     <label className="flex items-start gap-2 text-sm">
-      <input
-        type="checkbox"
+      <Switch
         checked={checked}
         disabled={busy}
-        onChange={(event) => void toggle(event.target.checked)}
-        className="border-input mt-0.5 size-4 rounded"
+        onCheckedChange={(next) => void toggle(next)}
+        className="mt-0.5"
       />
       <span>
         <span className="font-medium">Receive automatically-assigned leads</span>

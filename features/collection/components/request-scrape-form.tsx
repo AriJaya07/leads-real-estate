@@ -8,8 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/common/spinner";
 import { EmptyState } from "@/components/common/empty-state";
+import { UsageMeter } from "@/components/common/usage-meter";
 import { requestScrape } from "@/application/collection/scrape-requests.actions";
 import { useServerAction } from "@/hooks/use-server-action";
+import { cn } from "@/lib/utils";
+import { formatCount } from "@/shared/format";
 import type { ActorTemplateRow } from "@/infrastructure/db/schema/collection";
 
 /**
@@ -20,8 +23,21 @@ import type { ActorTemplateRow } from "@/infrastructure/db/schema/collection";
  * one input per key because a template is admin-registered against an arbitrary
  * Apify actor — there's no fixed shape to build a typed form against, the same
  * reason `mapping_profiles.rules` and `sources.config` are JSON too.
+ *
+ * The platform picker below is a card grid rather than a plain `<select>`
+ * specifically because it's driven off `templates` — any platform with at
+ * least one registered actor template shows up as its own card with no code
+ * change (`SCRAPE_PLATFORMS` already lists `linkedin`, waiting on nothing but
+ * a registered template to appear here).
  */
-export function RequestScrapeForm({ templates }: { templates: ActorTemplateRow[] }) {
+export function RequestScrapeForm({
+  templates,
+  quota = null,
+}: {
+  templates: ActorTemplateRow[];
+  /** This company's current Apify-request budget for the month, `null` when there's no subscription row (see `getUsageSummary`). */
+  quota?: { used: number; limit: number } | null;
+}) {
   const router = useRouter();
   const { busyId, run } = useServerAction();
 
@@ -92,38 +108,47 @@ export function RequestScrapeForm({ templates }: { templates: ActorTemplateRow[]
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="scrape-platform">Data source</Label>
-          <select
-            id="scrape-platform"
-            value={platform}
-            onChange={(event) => selectPlatform(event.target.value)}
-            className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm capitalize"
-          >
-            {platforms.map((p) => (
-              <option key={p} value={p} className="capitalize">
-                {p}
-              </option>
-            ))}
-          </select>
+      <div className="flex flex-col gap-1.5">
+        <Label>Data source</Label>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          {platforms.map((p) => {
+            const count = templates.filter((t) => t.platform === p).length;
+            const active = p === platform;
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => selectPlatform(p)}
+                aria-pressed={active}
+                className={cn(
+                  "flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                  active ? "border-brand bg-brand/5" : "border-border hover:bg-accent/40",
+                )}
+              >
+                <span className="text-sm font-medium capitalize">{p}</span>
+                <span className="text-muted-foreground text-xs">
+                  {count} requirement{count === 1 ? "" : "s"}
+                </span>
+              </button>
+            );
+          })}
         </div>
+      </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="scrape-requirement">Requirement</Label>
-          <select
-            id="scrape-requirement"
-            value={template?.id ?? ""}
-            onChange={(event) => selectTemplate(templatesForPlatform.find((t) => t.id === event.target.value))}
-            className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
-          >
-            {templatesForPlatform.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.requirementKind} — {t.name}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="flex flex-col gap-1.5 sm:max-w-xs">
+        <Label htmlFor="scrape-requirement">Requirement</Label>
+        <select
+          id="scrape-requirement"
+          value={template?.id ?? ""}
+          onChange={(event) => selectTemplate(templatesForPlatform.find((t) => t.id === event.target.value))}
+          className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
+        >
+          {templatesForPlatform.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.requirementKind} — {t.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {template?.description && <p className="text-muted-foreground text-sm">{template.description}</p>}
@@ -148,10 +173,21 @@ export function RequestScrapeForm({ templates }: { templates: ActorTemplateRow[]
         {error && <p className="text-destructive text-xs">{error}</p>}
       </div>
 
-      <Button type="submit" disabled={busy || !template} className="self-start">
-        {busy && <Spinner className="size-3.5" />}
-        Start collecting
-      </Button>
+      <div className="border-border bg-muted/30 flex flex-wrap items-center gap-4 rounded-xl border p-3">
+        {quota && (
+          <UsageMeter
+            label="Apify requests this month"
+            used={quota.used}
+            limit={quota.limit}
+            formatValue={formatCount}
+            className="min-w-48 flex-1"
+          />
+        )}
+        <Button type="submit" disabled={busy || !template} className="ml-auto self-start">
+          {busy && <Spinner className="size-3.5" />}
+          Start collecting
+        </Button>
+      </div>
     </form>
   );
 }

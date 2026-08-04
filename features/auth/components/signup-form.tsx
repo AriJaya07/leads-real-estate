@@ -6,12 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/common/spinner";
+import { FormError } from "@/features/auth/components/form-error";
+import { PasswordStrengthMeter } from "@/features/auth/components/password-strength-meter";
 import { signUp } from "@/application/auth/signup.actions";
 
 export function SignupForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [password, setPassword] = useState("");
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,26 +45,29 @@ export function SignupForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      {error && (
-        <p className="text-destructive text-sm" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <FormError>{error}</FormError>}
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="companyName">Company name</Label>
-        <Input id="companyName" name="companyName" type="text" required autoFocus placeholder="Acme Realty" />
+        <Label htmlFor="companyName">Agency name</Label>
+        <Input
+          id="companyName"
+          name="companyName"
+          type="text"
+          required
+          autoFocus
+          placeholder="Bukit Villa Partners"
+        />
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="email">Your email</Label>
+        <Label htmlFor="email">Work email</Label>
         <Input
           id="email"
           name="email"
           type="email"
           required
           autoComplete="username"
-          placeholder="you@company.com"
+          placeholder="you@agency.com"
         />
       </div>
 
@@ -74,12 +80,15 @@ export function SignupForm() {
           required
           autoComplete="new-password"
           placeholder="At least 10 characters"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
         />
+        <PasswordStrengthMeter password={password} />
       </div>
 
       <Button type="submit" disabled={pending}>
         {pending && <Spinner className="size-4" />}
-        Create company
+        Create workspace
       </Button>
     </form>
   );

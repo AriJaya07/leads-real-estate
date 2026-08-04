@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/common/spinner";
+import { FormError } from "@/features/auth/components/form-error";
 import { signIn } from "@/application/auth/login.actions";
 
 export function LoginForm() {
@@ -42,11 +43,7 @@ export function LoginForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      {error && (
-        <p className="text-destructive text-sm" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <FormError>{error}</FormError>}
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="email">Email</Label>

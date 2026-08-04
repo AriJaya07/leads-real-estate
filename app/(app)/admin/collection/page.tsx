@@ -4,6 +4,7 @@ import { requireManager } from "@/application/auth/current-user";
 import { roleAtLeast } from "@/domain/auth/permissions";
 import { listActorTemplates } from "@/application/collection/actor-templates.queries";
 import { listScrapeRequests, getCollectionOverview } from "@/application/collection/scrape-requests.queries";
+import { getUsageSummary } from "@/application/billing/usage";
 import { PageHeader } from "@/components/common/page-header";
 import { StatTile } from "@/components/common/stat-tile";
 import { StatRowSkeleton } from "@/components/common/stat-row-skeleton";
@@ -36,9 +37,14 @@ async function Overview({ companyId }: { companyId: string }) {
   );
 }
 
-async function RequestSection() {
-  const templates = await listActorTemplates();
-  return <RequestScrapeForm templates={templates.filter((t) => t.enabled)} />;
+async function RequestSection({ companyId }: { companyId: string }) {
+  const [templates, usage] = await Promise.all([listActorTemplates(), getUsageSummary(companyId)]);
+  return (
+    <RequestScrapeForm
+      templates={templates.filter((t) => t.enabled)}
+      quota={usage?.apifyRequestsThisMonth ?? null}
+    />
+  );
 }
 
 async function HistorySection({ companyId }: { companyId: string }) {
@@ -68,7 +74,7 @@ export default async function AdminCollectionPage() {
       <section className="border-border flex flex-col gap-3 rounded-xl border p-4 sm:p-6">
         <h2 className="text-sm font-semibold">Request a scrape</h2>
         <Suspense fallback={<TableSkeleton />}>
-          <RequestSection />
+          <RequestSection companyId={user.companyId} />
         </Suspense>
       </section>
 

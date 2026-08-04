@@ -41,8 +41,10 @@ export function Reveal({
       ref={ref}
       style={delay ? { animationDelay: `${delay}ms` } : undefined}
       className={cn(
-        "transition-opacity",
-        visible ? "animate-in fade-in slide-in-from-bottom-4 fill-mode-both duration-700" : "opacity-0",
+        "transition-opacity motion-reduce:transition-none",
+        visible
+          ? "animate-in fade-in slide-in-from-bottom-4 fill-mode-both duration-700 motion-reduce:animate-none motion-reduce:opacity-100"
+          : "opacity-0 motion-reduce:opacity-100",
         className,
       )}
     >

@@ -32,10 +32,15 @@ export function PlanPicker({ plans, currentPlanId }: { plans: PlanRow[]; current
           <div
             key={plan.id}
             className={cn(
-              "border-border flex flex-col gap-4 rounded-xl border p-4",
-              isCurrent && "border-foreground",
+              "border-border bg-card relative flex flex-col gap-4 rounded-xl border p-4",
+              isCurrent && "border-brand ring-brand/15 ring-1",
             )}
           >
+            {isCurrent && (
+              <span className="bg-brand absolute -top-2.5 left-4 rounded-full px-2.5 py-0.5 text-[10.5px] font-medium text-white">
+                Current plan
+              </span>
+            )}
             <div>
               <h3 className="font-semibold">{plan.name}</h3>
               <p className="text-muted-foreground text-sm">
@@ -59,7 +64,7 @@ export function PlanPicker({ plans, currentPlanId }: { plans: PlanRow[]; current
               className="mt-auto"
             >
               {busy && busyId === "switch" ? <Spinner className="size-3.5" /> : null}
-              {isCurrent ? "Current plan" : "Switch to this plan"}
+              {isCurrent ? "Your plan" : "Switch to this plan"}
             </Button>
           </div>
         );

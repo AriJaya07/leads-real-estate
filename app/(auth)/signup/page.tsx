@@ -1,33 +1,40 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SignupForm } from "@/features/auth/components/signup-form";
-import { BrandMark } from "@/components/brand/brand-mark";
+import { AuthCard } from "@/components/auth/auth-card";
 
-export const metadata: Metadata = { title: "Create your company" };
+export const metadata: Metadata = { title: "Create your workspace" };
 
 export default function SignupPage() {
   return (
-    <main id="main-content" className="grid min-h-dvh place-items-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <BrandMark className="size-11" />
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">Create your company</h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              You&apos;ll be the first admin — invite your team once you&apos;re in.
-            </p>
-          </div>
-        </div>
+    <>
+      <AuthCard>
+        <h1 className="text-xl font-semibold tracking-tight">Create your workspace</h1>
+        <p className="text-muted-foreground mt-1.5 mb-6 text-sm">
+          14 days free. No card. You&apos;ll be the owner.
+        </p>
 
         <SignupForm />
 
-        <p className="text-muted-foreground mt-6 text-center text-sm">
-          Already have an account?{" "}
-          <Link href="/login" className="text-foreground underline underline-offset-4">
-            Sign in
+        <p className="text-muted-foreground mt-5 text-center text-xs leading-relaxed">
+          By continuing you agree to the{" "}
+          <Link href="/terms" className="underline underline-offset-4">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="underline underline-offset-4">
+            Privacy Policy
           </Link>
+          .
         </p>
-      </div>
-    </main>
+      </AuthCard>
+
+      <p className="text-muted-foreground mt-6 text-center text-sm">
+        Already have an account?{" "}
+        <Link href="/login" className="text-brand font-medium underline underline-offset-4">
+          Sign in
+        </Link>
+      </p>
+    </>
   );
 }

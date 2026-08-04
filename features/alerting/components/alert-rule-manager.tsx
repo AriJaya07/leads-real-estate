@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Spinner } from "@/components/common/spinner";
 import { DataTable, DataTableHead } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
+import { IntentBadge } from "@/components/common/intent-badge";
 import { ConfirmDeleteDialog } from "@/components/common/confirm-delete-dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useServerAction } from "@/hooks/use-server-action";
@@ -60,6 +62,16 @@ const OP_LABELS: Record<ComparisonOp, string> = {
   intersects: "includes any of",
   exists: "is present",
   within: "is within",
+};
+
+/** Compact symbols for the condition chips on the rule list — `OP_LABELS`'s prose form is used in the form's dropdown instead. */
+const OP_SYMBOLS: Partial<Record<ComparisonOp, string>> = {
+  eq: "=",
+  neq: "≠",
+  gt: ">",
+  gte: "≥",
+  lt: "<",
+  lte: "≤",
 };
 
 type FieldKind = "enum" | "number" | "boolean" | "text" | "textList" | "duration";
@@ -164,6 +176,13 @@ function getEditableConditions(rule: AlertRuleRow, metas: FieldMetaMap): Compari
     return meta !== undefined && meta.ops.includes(c.op);
   });
   return ok ? flat : null;
+}
+
+/** `score ≥ 80`, `Location in Canggu, Seminyak` — the compact form used by the condition chips on the rule list. */
+function conditionChipLabel(condition: Comparison, meta: FieldMeta): string {
+  const symbol = OP_SYMBOLS[condition.op] ?? OP_LABELS[condition.op];
+  const value = Array.isArray(condition.value) ? condition.value.join(", ") : String(condition.value);
+  return `${meta.label} ${symbol} ${value}`;
 }
 
 interface RuleCondition {
@@ -479,13 +498,7 @@ function AlertRuleForm({
           />
         </div>
         <div className="flex items-center gap-2 pt-6">
-          <input
-            id="rule-enabled"
-            type="checkbox"
-            checked={enabled}
-            onChange={(event) => setEnabled(event.target.checked)}
-            className="border-input size-4 rounded"
-          />
+          <Switch id="rule-enabled" checked={enabled} onCheckedChange={setEnabled} />
           <Label htmlFor="rule-enabled" className="font-normal">
             Enabled
           </Label>
@@ -586,16 +599,35 @@ const AlertRuleTableRow = memo(function AlertRuleTableRow({
   onDelete: () => void;
   onEdit: () => void;
 }) {
-  const editable = getEditableConditions(rule, metas) !== null;
+  const editableConditions = getEditableConditions(rule, metas);
+  const editable = editableConditions !== null;
   const summary = describePredicate(rule.predicate as Predicate);
 
   return (
     <tr className="border-border border-t align-middle">
       <td className="px-3 py-2.5">
         <div className="font-medium">{rule.name}</div>
-        <div className="text-muted-foreground max-w-md truncate text-xs" title={summary}>
-          {summary}
-        </div>
+        {editableConditions && editableConditions.length > 0 ? (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {editableConditions.map((condition, index) => {
+              const meta = metas[condition.field as ConditionField];
+              return meta.field === "leadType" && typeof condition.value === "string" ? (
+                <IntentBadge key={index} intent={condition.value} />
+              ) : (
+                <span
+                  key={index}
+                  className="bg-muted text-muted-foreground rounded-md px-1.5 py-0.5 font-mono text-[11px]"
+                >
+                  {conditionChipLabel(condition, meta)}
+                </span>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-muted-foreground max-w-md truncate text-xs" title={summary}>
+            {summary}
+          </div>
+        )}
       </td>
       <td className="px-3 py-2.5">
         <div className="flex flex-wrap gap-1">
@@ -607,7 +639,15 @@ const AlertRuleTableRow = memo(function AlertRuleTableRow({
         </div>
       </td>
       <td className="px-3 py-2.5">
-        <Badge variant={rule.enabled ? "default" : "outline"}>{rule.enabled ? "Enabled" : "Disabled"}</Badge>
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={rule.enabled}
+            disabled={busy}
+            onCheckedChange={onToggle}
+            aria-label={rule.enabled ? `Disable ${rule.name}` : `Enable ${rule.name}`}
+          />
+          {busy && <Spinner className="size-3.5" />}
+        </div>
         {!editable && (
           <div className="text-muted-foreground mt-1 text-[11px]">Custom logic</div>
         )}
@@ -620,10 +660,6 @@ const AlertRuleTableRow = memo(function AlertRuleTableRow({
               Edit
             </Button>
           )}
-          <Button size="sm" variant="outline" disabled={busy} onClick={onToggle}>
-            {busy && <Spinner className="size-3.5" />}
-            {rule.enabled ? "Disable" : "Enable"}
-          </Button>
           <ConfirmDeleteDialog
             trigger={
               <Button size="icon" variant="outline" aria-label={`Delete ${rule.name}`} disabled={busy}>

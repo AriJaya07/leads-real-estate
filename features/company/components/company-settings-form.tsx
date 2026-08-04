@@ -62,8 +62,8 @@ export function CompanySettingsForm({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <form onSubmit={save} className="border-border flex max-w-md flex-col gap-4 rounded-xl border p-4 sm:p-6">
+    <div className="grid gap-6 sm:grid-cols-2 sm:items-start">
+      <form onSubmit={save} className="border-border flex flex-col gap-4 rounded-xl border p-4 sm:p-6">
         <h2 className="text-sm font-medium">Company</h2>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`${companyId}-name`}>Company name</Label>
@@ -76,7 +76,7 @@ export function CompanySettingsForm({
       </form>
 
       {canDelete && (
-        <div className="border-destructive/30 flex max-w-md flex-col gap-3 rounded-xl border p-4 sm:p-6">
+        <div className="border-destructive/30 flex flex-col gap-3 rounded-xl border p-4 sm:p-6">
           <h2 className="text-destructive text-sm font-medium">Danger zone</h2>
           <p className="text-muted-foreground text-sm">
             Deleting the workspace removes every lead, dataset and run permanently. This is the one place in

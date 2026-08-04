@@ -12,6 +12,12 @@ const SIDEBAR = [
   },
 ] as const;
 
+/** Only items with a route that actually exists today become links — the rest are honest placeholders. */
+const SIDEBAR_HREFS: Record<string, string> = {
+  Overview: "/docs",
+  "User guide": "/docs/guide",
+};
+
 const RATE_LIMITS = [
   { plan: "professional", perMinute: "60", burst: "120" },
   { plan: "business", perMinute: "180", burst: "360" },
@@ -33,14 +39,20 @@ export default function DocsApiPage() {
                 {group.heading}
               </div>
               <div className="flex flex-col gap-1 text-sm">
-                {group.items.map((item) => (
-                  <span
-                    key={item}
-                    className={"active" in group && group.active === item ? "text-brand font-medium" : "text-muted-foreground"}
-                  >
-                    {item}
-                  </span>
-                ))}
+                {group.items.map((item) => {
+                  const isActive = "active" in group && group.active === item;
+                  const className = isActive ? "text-brand font-medium" : "text-muted-foreground hover:text-foreground";
+                  const href = SIDEBAR_HREFS[item];
+                  return href ? (
+                    <Link key={item} href={href} className={className}>
+                      {item}
+                    </Link>
+                  ) : (
+                    <span key={item} className={className}>
+                      {item}
+                    </span>
+                  );
+                })}
               </div>
             </div>
           ))}

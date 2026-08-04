@@ -1,8 +1,8 @@
 "use client";
 
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { Archive, Pause, Play, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, Archive, Pause, Play, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,12 +18,22 @@ import { cn } from "@/lib/utils";
 import { formatCount } from "@/shared/format";
 import { datasetsQueryKey } from "@/features/datasets/query-keys";
 
+/** Same "error, degraded or drifted" definition `getSyncOverview`'s `needsAttention` count uses. */
+const ATTENTION_HEALTH = new Set(["schema_drift", "error", "degraded"]);
+
 export function DatasetTable({ datasets }: { datasets: DatasetSummary[] }) {
   const [query, setQuery] = useState("");
   const { busyId, run } = useServerAction();
 
   const filtered = datasets.filter((dataset) =>
     `${dataset.label} ${dataset.externalId}`.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+
+  // Independent of the search box on purpose — this flags datasets that need
+  // a human regardless of what's currently filtered into view.
+  const needsAttention = useMemo(
+    () => datasets.filter((dataset) => ATTENTION_HEALTH.has(dataset.health)),
+    [datasets],
   );
 
   // useCallback (with `run` itself now stable, see use-server-action.ts) so
@@ -66,6 +76,27 @@ export function DatasetTable({ datasets }: { datasets: DatasetSummary[] }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {needsAttention.length > 0 && (
+        <div className="border-border bg-[var(--health-warn-bg)]/50 flex items-start gap-3 rounded-xl border p-3">
+          <AlertTriangle className="text-[var(--health-warn-fg)] mt-0.5 size-4 shrink-0" aria-hidden />
+          <p className="text-sm">
+            <span className="font-medium">
+              {needsAttention.length} dataset{needsAttention.length === 1 ? "" : "s"} need
+              {needsAttention.length === 1 ? "s" : ""} attention:
+            </span>{" "}
+            {needsAttention.slice(0, 3).map((dataset, index) => (
+              <span key={dataset.id}>
+                {index > 0 && ", "}
+                <Link href={`/admin/sync/${dataset.id}`} className="hover:underline">
+                  {dataset.label}
+                </Link>
+              </span>
+            ))}
+            {needsAttention.length > 3 && ` and ${needsAttention.length - 3} more`}
+          </p>
+        </div>
+      )}
+
       <div className="relative max-w-sm">
         <Search
           className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
@@ -102,6 +133,11 @@ export function DatasetTable({ datasets }: { datasets: DatasetSummary[] }) {
           ))}
         </tbody>
       </DataTable>
+
+      <p className="text-muted-foreground text-xs">
+        Mapping profiles are still reviewed as JSON — a visual mapping editor is next up on the
+        roadmap, right after buyer-side data sourcing.
+      </p>
     </div>
   );
 }

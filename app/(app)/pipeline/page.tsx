@@ -22,7 +22,15 @@ type SearchParams = Promise<{ datasetId?: string }>;
  * reads each through the same `useLeadsQuery` hook the inbox uses, so the
  * prefetch and the client read share a query key and the fetch never repeats.
  */
-async function Board({ searchParams, companyId }: { searchParams: SearchParams; companyId: string }) {
+async function Board({
+  searchParams,
+  companyId,
+  currentUserId,
+}: {
+  searchParams: SearchParams;
+  companyId: string;
+  currentUserId: string;
+}) {
   const { datasetId } = await searchParams;
   const queryClient = getQueryClient();
 
@@ -39,7 +47,7 @@ async function Board({ searchParams, companyId }: { searchParams: SearchParams; 
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
-      <PipelineBoard teamMembers={teamMembers} />
+      <PipelineBoard teamMembers={teamMembers} currentUserId={currentUserId} />
     </HydrationBoundary>
   );
 }
@@ -51,11 +59,11 @@ export default async function PipelinePage({ searchParams }: { searchParams: Sea
     <div className="flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="Pipeline"
-        description="Every lead's status, from new to converted. Drag a card to another column, or use its dropdowns."
+        description="Every lead's status, from new to converted. Drag a card to another column, or use the Move dropdown on any card."
       />
 
       <Suspense fallback={<TableSkeleton />}>
-        <Board searchParams={searchParams} companyId={user.companyId} />
+        <Board searchParams={searchParams} companyId={user.companyId} currentUserId={user.userId} />
       </Suspense>
     </div>
   );
