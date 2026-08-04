@@ -5,6 +5,8 @@ const FOOTER_COLUMNS = [
   {
     heading: "Product",
     links: [
+      { href: "/features", label: "Features" },
+      { href: "/solutions/villa-property-agencies", label: "Solutions" },
       { href: "/integrations", label: "Integrations" },
       { href: "/pricing", label: "Pricing" },
       { href: "/roadmap", label: "Roadmap" },
@@ -15,7 +17,23 @@ const FOOTER_COLUMNS = [
     links: [
       { href: "/docs", label: "Documentation" },
       { href: "/docs/guide", label: "Step-by-step guide" },
+      { href: "/docs/api", label: "API reference" },
+      { href: "/faq", label: "FAQ" },
+    ],
+  },
+  {
+    heading: "Company",
+    links: [
+      { href: "/about", label: "About" },
+      { href: "/blog", label: "Blog" },
       { href: "/contact", label: "Contact us" },
+    ],
+  },
+  {
+    heading: "Legal",
+    links: [
+      { href: "/privacy", label: "Privacy" },
+      { href: "/terms", label: "Terms" },
     ],
   },
   {
@@ -42,7 +60,7 @@ export function MarketingFooter() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-5">
           {FOOTER_COLUMNS.map((column) => (
             <div key={column.heading} className="flex flex-col gap-3">
               <h3 className="text-sm font-semibold">{column.heading}</h3>

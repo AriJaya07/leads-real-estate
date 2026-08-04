@@ -296,7 +296,7 @@ export function LeadInbox({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { searchParams, goToPage } = useUrlFilters();
+  const { searchParams, setParams, goToPage } = useUrlFilters();
   const filters = useMemo(() => parseLeadFilters(searchParams), [searchParams]);
   const wantsCards = filters.view === "cards";
 
@@ -380,6 +380,21 @@ export function LeadInbox({
           <EmptyState
             title="No leads match these filters"
             description="Widen the filters, switch dataset scope, or run a sync from the admin area if this source is new."
+            action={
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setParams((next) => {
+                    const datasetId = next.get("datasetId");
+                    for (const key of [...next.keys()]) next.delete(key);
+                    if (datasetId) next.set("datasetId", datasetId);
+                  })
+                }
+              >
+                Clear filters
+              </Button>
+            }
           />
         )
       ) : (

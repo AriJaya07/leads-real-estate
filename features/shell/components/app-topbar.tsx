@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, Layers, LogOut, User as UserIcon } from "lucide-react";
+import { Check, ChevronDown, HelpCircle, Layers, LogOut, User as UserIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,8 +13,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "./theme-toggle";
 import { MobileNav } from "./mobile-nav";
+import { CommandPalette } from "./command-palette";
+import { NotificationPanel } from "./notification-panel";
 import { cn } from "@/lib/utils";
 import { formatCount } from "@/shared/format";
 import { signOut } from "@/application/auth/login.actions";
@@ -94,8 +96,13 @@ export function AppTopbar({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <CommandPalette role={role} />
       <div className="flex-1" />
-      <ThemeToggle />
+
+      <Button variant="ghost" size="icon" aria-label="Help and documentation" render={<Link href="/docs/guide" />}>
+        <HelpCircle className="size-4" aria-hidden />
+      </Button>
+      <NotificationPanel />
 
       <DropdownMenu>
         <DropdownMenuTrigger

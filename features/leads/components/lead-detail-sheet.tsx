@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { IntentBadge } from "@/components/common/intent-badge";
-import { ScoreBadge } from "@/components/common/score-badge";
+import { ScoreBadge, ScoreReasons } from "@/components/common/score-badge";
 import { PotentialPill } from "@/components/common/potential-pill";
 import { Spinner } from "@/components/common/spinner";
 import { RelativeTime } from "@/components/common/relative-time";
@@ -177,6 +177,36 @@ function LeadDetail({
         </SheetHeader>
 
         <div className="flex flex-col gap-5 px-4 pb-6">
+          {/* Promoted to the top — "why is this lead first" is the single most
+              important thing an agent needs on open, ahead of bio/contact
+              fields that are just reference data. */}
+          <section className="border-border bg-muted/30 rounded-xl border p-3">
+            <h3 className="mb-1.5 text-sm font-semibold">Why this lead is at the top</h3>
+            <p className="text-muted-foreground text-sm">{lead.aiExplanation || "No signal yet."}</p>
+            {(lead.primaryAppearance?.scoreReasons.length ?? 0) > 0 && (
+              <ScoreReasons
+                reasons={lead.primaryAppearance!.scoreReasons}
+                limit={6}
+                showWeight
+                className="mt-2"
+              />
+            )}
+            <div className="mt-2 flex flex-wrap gap-3 text-xs">
+              <span className="flex items-center gap-1">
+                <ScoreBadge score={lead.buyerScore} label="buyer" /> buyer
+              </span>
+              <span className="flex items-center gap-1">
+                <ScoreBadge score={lead.sellerScore} label="seller" /> seller
+              </span>
+              <span className="flex items-center gap-1">
+                <ScoreBadge score={lead.investorScore} label="investor" /> investor
+              </span>
+              <span className="flex items-center gap-1">
+                <ScoreBadge score={lead.confidenceScore} label="confidence" /> confidence
+              </span>
+            </div>
+          </section>
+
           {lead.avatarUrl && (
             // Plain <img>: these are signed CDN URLs that expire, so the
             // optimizer would cache a URL that stops resolving.
@@ -195,25 +225,6 @@ function LeadDetail({
               <p className="text-muted-foreground text-sm whitespace-pre-wrap">{lead.bio}</p>
             </section>
           )}
-
-          <section>
-            <h3 className="mb-1.5 text-sm font-semibold">AI analysis</h3>
-            <div className="mb-2 flex flex-wrap gap-3 text-xs">
-              <span className="flex items-center gap-1">
-                <ScoreBadge score={lead.buyerScore} label="buyer" /> buyer
-              </span>
-              <span className="flex items-center gap-1">
-                <ScoreBadge score={lead.sellerScore} label="seller" /> seller
-              </span>
-              <span className="flex items-center gap-1">
-                <ScoreBadge score={lead.investorScore} label="investor" /> investor
-              </span>
-              <span className="flex items-center gap-1">
-                <ScoreBadge score={lead.confidenceScore} label="confidence" /> confidence
-              </span>
-            </div>
-            <p className="text-muted-foreground text-sm">{lead.aiExplanation || "No signal yet."}</p>
-          </section>
 
           {hasAiAssist && <AiSummarySection lead={lead} />}
           {hasAiAssist && <MessageAssistant lead={lead} />}

@@ -37,10 +37,13 @@ export function ScoreBadge({
 export function ScoreReasons({
   reasons,
   limit = 3,
+  showWeight = false,
   className,
 }: {
   reasons: ScoreReason[];
   limit?: number;
+  /** Shows each reason's point contribution ("+24") — the detail sheet's "argue with the score" view. */
+  showWeight?: boolean;
   className?: string;
 }) {
   const shown = reasons.filter((r) => r.weight > 0).slice(0, limit);
@@ -51,10 +54,11 @@ export function ScoreReasons({
       {shown.map((reason) => (
         <li
           key={reason.code + reason.label}
-          className="text-muted-foreground border-border/60 rounded border px-1.5 py-0.5 text-[11px] leading-4"
+          className="text-muted-foreground border-border/60 flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] leading-4"
           title={reason.evidence ?? undefined}
         >
           {reason.label}
+          {showWeight && <span className="text-foreground font-mono font-medium">+{reason.weight}</span>}
         </li>
       ))}
     </ul>

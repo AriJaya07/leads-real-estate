@@ -52,6 +52,26 @@ export async function getCompanyPlan(companyId: string): Promise<CompanyPlan | n
   return row ?? null;
 }
 
+export interface SubscriptionStatus {
+  status: "trialing" | "active" | "past_due" | "canceled" | "paused";
+  currentPeriodEnd: Date | null;
+}
+
+/**
+ * Separate from `getCompanyPlan` on purpose — `CompanyPlan` is read from deep
+ * inside feature-gating code all over the app (AI-assist actions, the
+ * pricing page, etc.), so it stays limited to plan/feature shape. Billing
+ * status is only ever needed by the billing page's banner.
+ */
+export async function getSubscriptionStatus(companyId: string): Promise<SubscriptionStatus | null> {
+  const [row] = await db()
+    .select({ status: schema.subscriptions.status, currentPeriodEnd: schema.subscriptions.currentPeriodEnd })
+    .from(schema.subscriptions)
+    .where(eq(schema.subscriptions.companyId, companyId))
+    .limit(1);
+  return row ?? null;
+}
+
 export class LimitExceededError extends Error {
   constructor(
     readonly metric: "datasets" | "seats",

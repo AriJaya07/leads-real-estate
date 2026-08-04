@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowRight, Bell, LineChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,52 @@ import { RankedInboxMockup } from "@/components/marketing/mockups/ranked-inbox-m
 import { KanbanBoardMockup } from "@/components/marketing/mockups/kanban-board-mockup";
 import { IntelligenceChartMockup } from "@/components/marketing/mockups/intelligence-chart-mockup";
 import { AlertEmailMockup } from "@/components/marketing/mockups/alert-email-mockup";
+import { listPlans } from "@/application/billing/plan.actions";
+import { formatUsd } from "@/shared/format";
+import { cn } from "@/lib/utils";
+
+/**
+ * Real customer quotes don't exist yet — this codebase's own posture (see
+ * `docs/final-recommendations.md`, `pricing-strategy.md`) is to never fill a
+ * gap like this with fabricated testimonials. The section is built
+ * (markup, layout, the `font-serif italic` quote treatment already used in
+ * the hero) but held off until real quotes exist — flip this on then.
+ */
+const SHOW_TESTIMONIALS = false;
+
+/** Placeholder — deliberately labelled as such so a flipped flag can't ship as real quotes by accident. */
+const TESTIMONIALS = [
+  { quote: "We stopped scrolling groups at 11pm. The inbox does it.", name: "Agency name", role: "Head of sales · placeholder" },
+  { quote: "First reply in under ten minutes changed our close rate.", name: "Agency name", role: "Owner · placeholder" },
+  { quote: "Four agents, one list, no more arguing over who saw it first.", name: "Agency name", role: "Broker · placeholder" },
+] as const;
+
+export const FAQS = [
+  {
+    q: "Do you support LinkedIn?",
+    a: "Not yet. Facebook and Instagram are live; the connector layer is built so LinkedIn can be added without a new product. It's on the roadmap, not in the box.",
+  },
+  {
+    q: "Is this a CRM?",
+    a: "No — and we're not becoming one. You get status, notes and tags so a lead never gets lost between here and the CRM you already pay for.",
+  },
+  {
+    q: "What happens to my data if I downgrade?",
+    a: "Nothing is deleted. Access degrades — collection pauses, seats lock — the leads stay yours and come back the moment you upgrade.",
+  },
+  {
+    q: "Will it merge two people who look similar?",
+    a: "Never on a guess. Identity resolution only joins profiles on confirmed signals — you'll never be asked “is this the same person?”",
+  },
+  {
+    q: "How fast is “fast”?",
+    a: "Sync cadence is yours to set. Every lead carries a live timer from the moment we see it to the moment someone on your team replies.",
+  },
+  {
+    q: "Is there an API?",
+    a: "Planned, not shipped. We'd rather tell you that than sell you a page of endpoints that don't exist yet.",
+  },
+] as const;
 
 const HOW_IT_WORKS = [
   {
@@ -163,6 +210,35 @@ export function Homepage() {
         </div>
       </section>
 
+      {SHOW_TESTIMONIALS && (
+        <section className="border-border bg-surface-alt border-t">
+          <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+            <div className="text-center">
+              <Eyebrow>What agencies say</Eyebrow>
+            </div>
+            <div className="mt-10 grid gap-5 sm:grid-cols-3">
+              {TESTIMONIALS.map((t) => (
+                <div key={t.name} className="border-border bg-card rounded-2xl border p-6">
+                  <p className="font-serif text-lg italic">&ldquo;{t.quote}&rdquo;</p>
+                  <p className="mt-4 text-sm font-medium">{t.name}</p>
+                  <p className="text-muted-foreground text-xs">{t.role}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+        <div className="text-center">
+          <Eyebrow>Plans</Eyebrow>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Priced per agency, not per lead</h2>
+        </div>
+        <Suspense fallback={<p className="text-muted-foreground mt-10 text-center text-sm">Loading plans…</p>}>
+          <PricingTeaser />
+        </Suspense>
+      </section>
+
       <section className="border-border bg-surface-alt border-t">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-4 py-16 text-center sm:px-6">
           <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Works with the sources you already scrape</h2>
@@ -180,6 +256,74 @@ export function Homepage() {
           </Button>
         </div>
       </section>
+
+      <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+        <div className="text-center">
+          <Eyebrow>Questions we actually get</Eyebrow>
+        </div>
+        <div className="mt-10 grid gap-x-10 gap-y-6 sm:grid-cols-2">
+          {FAQS.map((faq) => (
+            <div key={faq.q} className="border-border border-b pb-6">
+              <h3 className="text-base font-medium">{faq.q}</h3>
+              <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">{faq.a}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="border-border bg-foreground text-background border-t">
+        <div className="mx-auto flex max-w-3xl flex-col items-center gap-5 px-4 py-20 text-center sm:px-6">
+          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Fourteen days. No card.</h2>
+          <p className="max-w-md text-balance opacity-75">
+            Connect one source and see what your team has been missing this week.
+          </p>
+          <Button render={<Link href="/signup" />} size="lg" variant="secondary">
+            Start free trial
+            <ArrowRight className="size-4" aria-hidden />
+          </Button>
+        </div>
+      </section>
     </>
+  );
+}
+
+async function PricingTeaser() {
+  const plans = await listPlans();
+  const mainPlans = plans.length > 3 ? plans.slice(0, 3) : plans;
+  const customPlan = plans.length > 3 ? plans[plans.length - 1] : null;
+
+  return (
+    <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {mainPlans.map((plan, index) => (
+        <div
+          key={plan.id}
+          className={cn(
+            "border-border bg-card flex flex-col gap-3 rounded-2xl border p-5",
+            index === 2 && "border-brand shadow-[0_14px_34px_-22px_var(--brand)]",
+          )}
+        >
+          <span className="text-sm font-medium">{plan.name}</span>
+          <span className="font-serif text-2xl font-semibold">
+            {plan.monthlyPriceUsd === null ? "Contact us" : formatUsd(plan.monthlyPriceUsd)}
+            {plan.monthlyPriceUsd !== null && <span className="text-muted-foreground text-xs font-normal">/mo</span>}
+          </span>
+          <span className="text-muted-foreground text-xs">
+            {plan.maxSeats ?? "Unlimited"} seats · {plan.maxDatasets ?? "Unlimited"} datasets
+          </span>
+        </div>
+      ))}
+      {customPlan && (
+        <div className="border-border bg-card flex flex-col gap-3 rounded-2xl border border-dashed p-5">
+          <span className="text-sm font-medium">{customPlan.name}</span>
+          <span className="font-serif text-2xl font-semibold">Contact us</span>
+          <span className="text-muted-foreground text-xs">Custom seats, sources and SLAs</span>
+        </div>
+      )}
+      <div className="col-span-full text-center">
+        <Link href="/pricing" className="text-foreground text-sm underline underline-offset-4">
+          See the full comparison →
+        </Link>
+      </div>
+    </div>
   );
 }

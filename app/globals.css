@@ -2,8 +2,6 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme inline {
   --color-brand: var(--brand);
   --color-intent-buyer: var(--intent-buyer);
@@ -94,40 +92,6 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
-
 /* ---------------------------------------------------------------------------
    Semantic tokens.
 
@@ -176,45 +140,6 @@
   --chart-5: #4a3aa7;
 
   --surface-chart: oklch(0.995 0 0);
-}
-
-.dark {
-  --brand: oklch(0.72 0.12 195);
-
-  /* Marketing-only decoration — never used for app-level lead/health semantics. */
-  --surface-alt: oklch(0.22 0.015 55);
-  --accent-warm: oklch(0.75 0.14 55);
-
-  --intent-buyer: #3987e5;
-  --intent-seller: #d95926;
-  --intent-agent: #199e70;
-  --intent-broker: #6552c9;
-  --intent-investor: #eda100;
-  --intent-other: oklch(0.708 0 0);
-
-  --score-high-bg: oklch(0.32 0.06 150);
-  --score-high-fg: oklch(0.85 0.11 150);
-  --score-mid-bg: oklch(0.33 0.06 80);
-  --score-mid-fg: oklch(0.87 0.11 85);
-  --score-low-bg: oklch(0.3 0 0);
-  --score-low-fg: oklch(0.75 0 0);
-
-  --health-ok-bg: oklch(0.32 0.06 150);
-  --health-ok-fg: oklch(0.85 0.11 150);
-  --health-warn-bg: oklch(0.33 0.06 80);
-  --health-warn-fg: oklch(0.87 0.11 85);
-  --health-drift-bg: oklch(0.32 0.07 285);
-  --health-drift-fg: oklch(0.83 0.11 285);
-  --health-bad-bg: oklch(0.32 0.08 25);
-  --health-bad-fg: oklch(0.84 0.13 25);
-
-  --chart-1: #3987e5;
-  --chart-2: #d95926;
-  --chart-3: #199e70;
-  --chart-4: #c98500;
-  --chart-5: #9085e9;
-
-  --surface-chart: oklch(0.19 0 0);
 }
 
 @layer base {
