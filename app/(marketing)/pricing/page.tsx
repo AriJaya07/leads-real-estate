@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Check, Sparkles, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { listPlans } from "@/application/billing/plan.actions";
 import { Button } from "@/components/ui/button";
 import { formatCount, formatStorageKb, formatUsd } from "@/shared/format";
@@ -67,9 +67,8 @@ function PlanCard({ plan, index, plansCount, highlighted }: { plan: Plan; index:
       )}
     >
       {highlighted && (
-        <span className="bg-accent-warm text-background absolute -top-3 left-6 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold">
-          <Sparkles className="size-3" aria-hidden />
-          Recommended
+        <span className="bg-brand absolute -top-3 left-6 rounded-full px-3 py-1 text-xs font-medium text-white">
+          Most agencies
         </span>
       )}
       <div>
@@ -164,9 +163,11 @@ async function PricingGrid() {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-4">
-            <span className="font-serif text-xl font-semibold italic">
-              {customPlan.monthlyPriceUsd === null ? "Contact us" : `From ${formatUsd(customPlan.monthlyPriceUsd)}/mo`}
-            </span>
+            {/* Enterprise is custom-quoted — the plan record carries an internal
+                monthlyPriceUsd for accounting, but the public page never shows
+                a number for this tier (see seed.mjs: "Enterprise deals are
+                custom-quoted"). */}
+            <span className="font-serif text-xl font-semibold italic">Talk to us</span>
             <Button render={<Link href="/signup" />} variant="outline">
               Contact sales
             </Button>

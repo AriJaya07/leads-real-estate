@@ -76,6 +76,10 @@ export default async function AdminTeamPage() {
         <Team currentUserId={user.userId} companyId={user.companyId} viewerRole={user.role} />
       </Suspense>
 
+      <p className="text-muted-foreground text-xs">
+        Only the owner can change billing; admins manage everything else, including this team.
+      </p>
+
       <div>
         <h2 className="mb-3 text-sm font-medium">Teams</h2>
         <Suspense fallback={<TableSkeleton rows={2} />}>

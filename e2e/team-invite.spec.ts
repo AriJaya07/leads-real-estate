@@ -36,7 +36,7 @@ test.describe("team invites", () => {
     const inviteeContext = await browser.newContext();
     const inviteePage = await inviteeContext.newPage();
     await inviteePage.goto(inviteUrl!);
-    await expect(inviteePage.getByRole("heading", { name: /Join/ })).toBeVisible();
+    await expect(inviteePage.getByRole("heading", { name: /invited you to/ })).toBeVisible();
 
     await inviteePage.getByLabel("Your name").fill("New Manager");
     await inviteePage.getByLabel("Password").fill("a-brand-new-password-123");

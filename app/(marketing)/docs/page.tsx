@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Eyebrow } from "@/components/marketing/eyebrow";
 import { ScoredPostIcon } from "@/components/marketing/diagram-icons";
-import { DocsToc } from "./docs-toc";
+import { DocsNav, DocsToc } from "./docs-toc";
 
 export const metadata: Metadata = { title: "Documentation" };
 
@@ -51,7 +51,7 @@ export default function DocsPage() {
       </div>
 
       <div className="flex gap-12">
-        <DocsToc entries={CONCEPTS.map(({ id, title }) => ({ id, label: title }))} />
+        <DocsNav active="Overview" />
 
         <div className="flex min-w-0 flex-1 flex-col gap-10">
           {CONCEPTS.map((concept) => (
@@ -66,6 +66,8 @@ export default function DocsPage() {
             </div>
           ))}
         </div>
+
+        <DocsToc entries={CONCEPTS.map(({ id, title }) => ({ id, label: title }))} />
       </div>
     </div>
   );

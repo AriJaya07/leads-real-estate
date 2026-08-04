@@ -664,6 +664,12 @@ export interface LeadStats {
   /** `dataQualityTier = 'high_potential'` — see domain/scoring/lead-validation.ts. */
   highPotential: number;
   medianTimeToFirstTouchMinutes: number | null;
+  /** Never contacted and created more than 2 hours ago — the inbox's "needs attention now" count. */
+  uncontactedOver2h: number;
+  /** This person's own type-matched score (same lookup as `domain/lead/ranking.ts::primaryLeadScore`) is 80 or above. */
+  highScore: number;
+  /** Status still `new` (untouched) — backs the sidebar's Inbox live count badge. */
+  newStatusCount: number;
 }
 
 /**
@@ -712,6 +718,16 @@ export async function getLeadStats(companyId: string, datasetId?: string): Promi
           ORDER BY EXTRACT(EPOCH FROM (${schema.leadStates.firstContactedAt} - ${schema.leads.createdAt})) / 60
         ) FILTER (WHERE ${schema.leadStates.firstContactedAt} IS NOT NULL)
       `,
+      uncontactedOver2h: sql<number>`count(*) FILTER (WHERE ${schema.leadStates.firstContactedAt} IS NULL AND ${schema.leads.createdAt} <= now() - interval '2 hours')::int`,
+      highScore: sql<number>`count(*) FILTER (WHERE (
+        CASE ${schema.leads.leadType}
+          WHEN 'buyer' THEN ${schema.leads.buyerScore}
+          WHEN 'seller' THEN ${schema.leads.sellerScore}
+          WHEN 'investor' THEN ${schema.leads.investorScore}
+          ELSE ${schema.leads.confidenceScore}
+        END
+      ) >= 80)::int`,
+      newStatusCount: sql<number>`count(*) FILTER (WHERE COALESCE(${schema.leadStates.status}, 'new') = 'new')::int`,
     })
     .from(schema.leads)
     .leftJoin(schema.leadStates, eq(schema.leadStates.leadId, schema.leads.id))
@@ -727,6 +743,9 @@ export async function getLeadStats(companyId: string, datasetId?: string): Promi
     highPotential: row.highPotential,
     medianTimeToFirstTouchMinutes:
       row.medianTtft === null ? null : Math.round(Number(row.medianTtft)),
+    uncontactedOver2h: row.uncontactedOver2h,
+    highScore: row.highScore,
+    newStatusCount: row.newStatusCount,
   };
 }
 

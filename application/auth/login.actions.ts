@@ -19,14 +19,27 @@ import { countRecentFailedAttempts, recordLoginAttempt } from "./login-attempts"
 import { bumpSessionVersion } from "./session-version";
 import { isLoginRateLimited } from "@/domain/auth/rate-limit";
 import type { Role } from "@/domain/auth/permissions";
+import { LOGIN_MAX_FAILED_ATTEMPTS } from "@/shared/constants";
 
 const credentialsSchema = z.object({
   email: z.string().email().transform((value) => value.trim().toLowerCase()),
   password: z.string().min(1, "Enter your password"),
 });
 
-/** Deliberately identical for "no such user" and "wrong password". */
-const INVALID_CREDENTIALS = "Email or password is incorrect.";
+/**
+ * Deliberately identical for "no such user" and "wrong password", and the
+ * attempts-remaining count appended below is derived purely from the
+ * per-email failure log (`countRecentFailedAttempts`) — computed the same way
+ * regardless of whether the account exists, so it can't be used to tell the
+ * two cases apart either.
+ */
+function invalidCredentialsMessage(attemptsRemaining: number): string {
+  const detail =
+    attemptsRemaining > 0
+      ? `${attemptsRemaining} attempt${attemptsRemaining === 1 ? "" : "s"} left before a cooldown.`
+      : "This was your last attempt before a cooldown.";
+  return `That email and password don't match. ${detail}`;
+}
 
 /** Exported for `signup.actions.ts::signUp` — same "issue a real session" step, new account or not. */
 export async function startSession(user: {
@@ -72,9 +85,12 @@ export const signIn = actionClient.inputSchema(credentialsSchema).action(async (
   const outcome = await db().transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${email}))`);
 
-    if (isLoginRateLimited(await countRecentFailedAttempts(email, tx))) {
+    const priorFailures = await countRecentFailedAttempts(email, tx);
+    if (isLoginRateLimited(priorFailures)) {
       return { status: "rate_limited" as const };
     }
+    // This request's own failure (if any) counts toward the total, hence -1.
+    const attemptsRemaining = LOGIN_MAX_FAILED_ATTEMPTS - priorFailures - 1;
 
     const [user] = await tx.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
 
@@ -82,12 +98,12 @@ export const signIn = actionClient.inputSchema(credentialsSchema).action(async (
       // Same cost as a real check, so a missing account is indistinguishable.
       await fakeVerify();
       await recordLoginAttempt(email, false, tx);
-      return { status: "invalid" as const };
+      return { status: "invalid" as const, attemptsRemaining };
     }
 
     if (!(await verifyPassword(password, user.passwordHash))) {
       await recordLoginAttempt(email, false, tx);
-      return { status: "invalid" as const };
+      return { status: "invalid" as const, attemptsRemaining };
     }
 
     await recordLoginAttempt(email, true, tx);
@@ -103,7 +119,7 @@ export const signIn = actionClient.inputSchema(credentialsSchema).action(async (
     throw new ActionError("Too many failed attempts. Try again in a few minutes.");
   }
   if (outcome.status === "invalid") {
-    throw new ActionError(INVALID_CREDENTIALS);
+    throw new ActionError(invalidCredentialsMessage(outcome.attemptsRemaining));
   }
 
   await startSession(outcome.user);

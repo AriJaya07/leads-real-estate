@@ -22,6 +22,7 @@ import { signOut } from "@/application/auth/login.actions";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { useDatasetsQuery } from "@/features/datasets/queries";
 import type { Role } from "@/domain/auth/permissions";
+import type { NavExtras } from "@/features/shell/nav-items";
 
 /**
  * The global dataset scope. This is what replaces switching APIFY_DATASET_ID:
@@ -36,9 +37,11 @@ import type { Role } from "@/domain/auth/permissions";
 export function AppTopbar({
   userEmail,
   role,
+  navExtras,
 }: {
   userEmail: string;
   role: Role;
+  navExtras: NavExtras;
 }) {
   const router = useRouter();
   const { searchParams, setParams } = useUrlFilters();
@@ -52,7 +55,7 @@ export function AppTopbar({
 
   return (
     <header className="border-border bg-background/80 sticky top-0 z-20 flex h-14 items-center gap-2 border-b px-3 backdrop-blur sm:gap-3 sm:px-4">
-      <MobileNav role={role} />
+      <MobileNav role={role} navExtras={navExtras} />
 
       <DropdownMenu>
         <DropdownMenuTrigger

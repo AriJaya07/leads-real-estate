@@ -187,7 +187,13 @@ export const acceptInvite = actionClient.inputSchema(acceptInviteSchema).action(
   return { ok: true };
 });
 
-/** For the /invite/[token] page to render "invited to join {company}" before the recipient sets a password. */
+/**
+ * For the /invite/[token] page to render "{inviter} invited you to join
+ * {company}" plus the real expiry, before the recipient sets a password.
+ * Joins to the inviting user for their display name (falling back to their
+ * email — `users.name` is optional, set from the account's own profile, and
+ * an invite must render something even when the inviter never set one).
+ */
 export async function getInviteByToken(token: string) {
   const tokenHash = hashToken(token);
   const [invite] = await db()
@@ -198,14 +204,23 @@ export async function getInviteByToken(token: string) {
       revokedAt: schema.invites.revokedAt,
       expiresAt: schema.invites.expiresAt,
       companyName: schema.companies.name,
+      invitedByName: schema.users.name,
+      invitedByEmail: schema.users.email,
     })
     .from(schema.invites)
     .innerJoin(schema.companies, eq(schema.companies.id, schema.invites.companyId))
+    .innerJoin(schema.users, eq(schema.users.id, schema.invites.invitedByUserId))
     .where(eq(schema.invites.tokenHash, tokenHash))
     .limit(1);
 
   if (!invite || invite.acceptedAt || invite.revokedAt || invite.expiresAt < new Date()) return null;
-  return { email: invite.email, role: invite.role, companyName: invite.companyName };
+  return {
+    email: invite.email,
+    role: invite.role,
+    companyName: invite.companyName,
+    invitedBy: invite.invitedByName?.trim() || invite.invitedByEmail,
+    expiresAt: invite.expiresAt,
+  };
 }
 
 export async function listPendingInvites(companyId: string) {

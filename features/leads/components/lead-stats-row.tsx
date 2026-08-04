@@ -26,29 +26,22 @@ export function LeadStatsRow() {
   if (!stats) return <StatRowSkeleton />;
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* North star: everything else on this row is context for this one number. */}
       <StatTile
-        label="Median first touch"
+        label="Median time to first touch"
         value={formatMinutes(stats.medianTimeToFirstTouchMinutes)}
         hint={stats.medianTimeToFirstTouchMinutes === null ? "No contacts logged yet" : "Post → outreach"}
         emphasis
       />
+      <StatTile label="New today" value={formatCount(stats.newLast24h)} hint="Arrived in the last 24h" />
       <StatTile
-        label="Hot buyers"
-        value={formatCount(stats.hotBuyers)}
-        hint="Buyer intent ≥ 60"
+        label="Uncontacted > 2h"
+        value={formatCount(stats.uncontactedOver2h)}
+        hint={stats.uncontactedOver2h > 0 ? "Needs attention" : "All caught up"}
+        tone={stats.uncontactedOver2h > 0 ? "bad" : undefined}
       />
-      <StatTile label="All buyers" value={formatCount(stats.buyers)} hint="Demand-side posts" />
-      <StatTile
-        label="Contactable"
-        value={formatCount(stats.contactable)}
-        hint="Phone or WhatsApp published"
-      />
-      <StatTile
-        label="Unassigned"
-        value={formatCount(stats.unassigned)}
-        hint={`${formatCount(stats.newLast24h)} arrived in 24h`}
-      />
+      <StatTile label="High score (80+)" value={formatCount(stats.highScore)} hint="Top of the priority sort" />
     </div>
   );
 }

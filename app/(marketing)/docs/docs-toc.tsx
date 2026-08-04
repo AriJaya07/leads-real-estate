@@ -1,7 +1,66 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
+
+/**
+ * Left nav for the docs shell, shared by `/docs`, `/docs/guide` and
+ * `/docs/api` so the three pages read as one section instead of three
+ * one-off layouts. Only items with a real route become links — the rest
+ * (Quickstart, Rate limits, Leads endpoint, Webhooks, Security practices)
+ * are honest placeholders for pages that don't exist yet, same pattern as
+ * the "planned" tags on `/pricing` and `/docs/api`.
+ */
+const DOCS_NAV = [
+  {
+    heading: "Getting started",
+    items: [
+      { label: "Overview", href: "/docs" },
+      { label: "Quickstart" },
+      { label: "User guide", href: "/docs/guide" },
+    ],
+  },
+  {
+    heading: "API",
+    items: [
+      { label: "Authentication", href: "/docs/api" },
+      { label: "Rate limits" },
+      { label: "Leads endpoint" },
+      { label: "Webhooks" },
+      { label: "Security practices" },
+    ],
+  },
+] as const;
+
+export function DocsNav({ active }: { active: string }) {
+  return (
+    <nav aria-label="Docs" className="hidden shrink-0 lg:block lg:w-[200px]">
+      {DOCS_NAV.map((group) => (
+        <div key={group.heading} className="mb-6">
+          <div className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-wider uppercase">
+            {group.heading}
+          </div>
+          <div className="flex flex-col gap-1 text-sm">
+            {group.items.map((item) => {
+              const isActive = item.label === active;
+              const className = isActive ? "text-brand font-medium" : "text-muted-foreground hover:text-foreground";
+              return "href" in item ? (
+                <Link key={item.label} href={item.href} className={className}>
+                  {item.label}
+                </Link>
+              ) : (
+                <span key={item.label} className={className}>
+                  {item.label}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </nav>
+  );
+}
 
 type TocEntry = { id: string; label: string };
 

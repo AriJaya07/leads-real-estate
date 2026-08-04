@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Eyebrow } from "@/components/marketing/eyebrow";
+import { DocsNav, DocsToc } from "../docs-toc";
 
 export const metadata: Metadata = { title: "Step-by-step guide" };
 
@@ -33,8 +34,8 @@ const STEPS = [
 
 export default function GuidePage() {
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-10 px-4 py-16 sm:px-6">
-      <div className="text-center">
+    <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+      <div className="mx-auto max-w-2xl text-center">
         <Eyebrow>Step-by-step guide</Eyebrow>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">From signup to your first reply</h1>
         <p className="text-muted-foreground mt-3 text-balance">
@@ -47,20 +48,29 @@ export default function GuidePage() {
         </p>
       </div>
 
-      <ol className="relative flex flex-col gap-10">
-        <div className="bg-border absolute top-5 bottom-5 left-5 w-px" aria-hidden />
-        {STEPS.map((step, index) => (
-          <li key={step.title} className="relative flex gap-5">
-            <span className="border-brand bg-background text-brand relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border-2 font-serif text-sm font-semibold italic">
-              {String(index + 1).padStart(2, "0")}
-            </span>
-            <div className="pt-1.5">
-              <h2 className="font-semibold tracking-tight">{step.title}</h2>
-              <p className="text-muted-foreground mt-1 text-sm leading-relaxed">{step.body}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
+      <div className="mt-12 flex gap-12">
+        <DocsNav active="User guide" />
+
+        <ol className="relative mx-auto flex max-w-2xl min-w-0 flex-1 flex-col gap-10">
+          <div className="bg-border absolute top-5 bottom-5 left-5 w-px" aria-hidden />
+          {STEPS.map((step, index) => {
+            const id = `step-${index + 1}`;
+            return (
+              <li key={step.title} id={id} className="relative flex scroll-mt-24 gap-5">
+                <span className="border-brand bg-background text-brand relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border-2 font-serif text-sm font-semibold italic">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <div className="pt-1.5">
+                  <h2 className="font-semibold tracking-tight">{step.title}</h2>
+                  <p className="text-muted-foreground mt-1 text-sm leading-relaxed">{step.body}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+
+        <DocsToc entries={STEPS.map((step, index) => ({ id: `step-${index + 1}`, label: step.title }))} />
+      </div>
     </div>
   );
 }

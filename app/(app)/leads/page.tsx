@@ -12,8 +12,6 @@ import { hasFeature } from "@/domain/billing/plan-features";
 import { getSyncOverview } from "@/application/datasets/dataset-queries";
 import { getCollectionOverview } from "@/application/collection/scrape-requests.queries";
 import { listSavedViews } from "@/application/leads/saved-views.queries";
-import { listTeamMembers } from "@/application/auth/team.actions";
-import { OnboardingChecklist } from "@/features/leads/components/onboarding-checklist";
 import {
   leadFacetsQueryKey,
   leadStatsQueryKey,
@@ -74,12 +72,6 @@ async function Stats({ searchParams, companyId }: { searchParams: SearchParams; 
  * client-side as the dataset scope changes) — a glance-level summary refreshed
  * on page load, not a number someone tunes with the filter panel.
  */
-/** Live setup-status widget — see `OnboardingChecklist`'s own doc comment for why it pulls real state. */
-async function Onboarding({ companyId }: { companyId: string }) {
-  const [syncOverview, members] = await Promise.all([getSyncOverview(companyId), listTeamMembers(companyId)]);
-  return <OnboardingChecklist hasSource={syncOverview.datasets > 0} hasTeammates={members.length > 1} />;
-}
-
 async function DashboardOverview({ searchParams, companyId }: { searchParams: SearchParams; companyId: string }) {
   const filters = parseLeadFilters(toURLSearchParams(await searchParams));
 
@@ -180,10 +172,6 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
         title="Lead inbox"
         description="Every customer record your sources have collected — searchable, filterable, and scored on how likely it is to convert."
       />
-
-      <Suspense fallback={null}>
-        <Onboarding companyId={user.companyId} />
-      </Suspense>
 
       <Suspense fallback={<StatRowSkeleton />}>
         <DashboardOverview searchParams={searchParams} companyId={user.companyId} />

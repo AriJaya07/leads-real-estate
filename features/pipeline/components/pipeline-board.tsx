@@ -113,7 +113,7 @@ function PipelineCard({
         <label className="text-muted-foreground flex items-center gap-1 text-xs">
           Move
           <select
-            aria-label={`Move ${lead.name ?? "lead"} to a different status`}
+            aria-label={`Status for ${lead.name ?? "lead"}`}
             value={lead.status}
             disabled={busy}
             onChange={(event) => onChangeStatus(lead.id, event.target.value as LeadStatusValue)}

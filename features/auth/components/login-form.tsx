@@ -72,6 +72,7 @@ export function LoginForm() {
           required
           autoComplete="current-password"
           placeholder="••••••••"
+          aria-invalid={error ? true : undefined}
         />
       </div>
 

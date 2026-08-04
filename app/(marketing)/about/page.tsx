@@ -16,11 +16,11 @@ export default function AboutPage() {
       <div className="mt-10 grid grid-cols-2 gap-6 sm:grid-cols-2">
         <div className="border-border rounded-xl border p-5">
           <div className="font-serif text-2xl font-semibold">2023</div>
-          <div className="text-muted-foreground mt-1 text-sm">First internal build</div>
+          <div className="text-muted-foreground mt-1 text-sm">first internal build</div>
         </div>
         <div className="border-border rounded-xl border p-5">
           <div className="font-serif text-2xl font-semibold">Bali</div>
-          <div className="text-muted-foreground mt-1 text-sm">One market, done properly</div>
+          <div className="text-muted-foreground mt-1 text-sm">one market, done properly</div>
         </div>
       </div>
 

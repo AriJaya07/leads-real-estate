@@ -23,8 +23,10 @@ test.describe("login", () => {
     await page.getByRole("button", { name: "Sign in" }).click();
 
     // Next's route announcer also carries role="alert", so scope to the form's
-    // own error message rather than getByRole("alert") alone.
-    await expect(page.getByText("Email or password is incorrect.")).toBeVisible();
+    // own error message rather than getByRole("alert") alone. Match on the
+    // stable prefix only — the trailing "N attempts left" varies with the
+    // account's recent-failure history.
+    await expect(page.getByText("That email and password don't match.")).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
   });
 
@@ -45,7 +47,7 @@ test.describe("login", () => {
       await page.getByLabel("Email").fill(E2E_THROTTLE_EMAIL);
       await page.getByLabel("Password").fill("wrong-password");
       await page.getByRole("button", { name: "Sign in" }).click();
-      await expect(page.getByText("Email or password is incorrect.")).toBeVisible();
+      await expect(page.getByText("That email and password don't match.")).toBeVisible();
     }
 
     await page.getByLabel("Email").fill(E2E_THROTTLE_EMAIL);

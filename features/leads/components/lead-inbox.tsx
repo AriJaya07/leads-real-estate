@@ -16,6 +16,7 @@ import { RelativeTime } from "@/components/common/relative-time";
 import { IntentBadge } from "@/components/common/intent-badge";
 import { ScoreBadge, ScoreReasons } from "@/components/common/score-badge";
 import { PotentialPill } from "@/components/common/potential-pill";
+import { LeadAvatar } from "@/components/common/lead-avatar";
 import { LeadFilterBar } from "./lead-filter-bar";
 import { SavedSearchesBar } from "./saved-searches-bar";
 import { FirstLeadTooltip } from "./first-lead-tooltip";
@@ -182,22 +183,28 @@ const LeadCard = memo(function LeadCard({
         </span>
       </div>
 
-      <div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{lead.name ?? "Unknown"}</span>
-          {lead.appearanceCount > 1 && (
-            <span className="text-muted-foreground text-xs">seen {lead.appearanceCount}×</span>
-          )}
-          {lead.status !== "new" && (
-            <span className="bg-muted rounded px-1.5 py-0.5 text-[11px]">
-              {leadStatusLabel(lead.status)}
-            </span>
-          )}
+      <div className="flex items-start gap-2.5">
+        <LeadAvatar name={lead.name} intent={lead.leadType} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{lead.name ?? "Unknown"}</span>
+            {lead.appearanceCount > 1 && (
+              <span className="text-muted-foreground text-xs">seen {lead.appearanceCount}×</span>
+            )}
+            {lead.status !== "new" && (
+              <span className="bg-muted rounded px-1.5 py-0.5 text-[11px]">
+                {leadStatusLabel(lead.status)}
+              </span>
+            )}
+          </div>
+          {/* The buyer's own words, not a paraphrase — quoted-language treatment
+              (font-serif italic) matches the design's rule that this is the one
+              place Fraunces shows up outside marketing. */}
+          <p className="text-muted-foreground font-serif mt-1 line-clamp-2 text-sm italic">
+            {appearance?.listingTitle ? `${appearance.listingTitle} — ` : ""}
+            {appearance?.body || "(no text)"}
+          </p>
         </div>
-        <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
-          {appearance?.listingTitle ? `${appearance.listingTitle} — ` : ""}
-          {appearance?.body || "(no text)"}
-        </p>
       </div>
 
       <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
@@ -257,24 +264,31 @@ const LeadRow = memo(function LeadRow({
       </td>
 
       <td className="px-3 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <IntentBadge intent={lead.leadType} />
-          <span className="font-medium">{lead.name ?? "Unknown"}</span>
-          {lead.bookmarked && <Star className="size-3.5 fill-amber-400 text-amber-400" aria-label="Favorite" />}
-          {lead.appearanceCount > 1 && (
-            <span className="text-muted-foreground text-xs">seen {lead.appearanceCount}×</span>
-          )}
-          {lead.status !== "new" && (
-            <span className="bg-muted rounded px-1.5 py-0.5 text-[11px]">
-              {leadStatusLabel(lead.status)}
-            </span>
-          )}
+        <div className="flex items-start gap-2.5">
+          <LeadAvatar name={lead.name} intent={lead.leadType} />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <IntentBadge intent={lead.leadType} />
+              <span className="font-medium">{lead.name ?? "Unknown"}</span>
+              {lead.bookmarked && <Star className="size-3.5 fill-amber-400 text-amber-400" aria-label="Favorite" />}
+              {lead.appearanceCount > 1 && (
+                <span className="text-muted-foreground text-xs">seen {lead.appearanceCount}×</span>
+              )}
+              {lead.status !== "new" && (
+                <span className="bg-muted rounded px-1.5 py-0.5 text-[11px]">
+                  {leadStatusLabel(lead.status)}
+                </span>
+              )}
+            </div>
+            {/* The buyer's own words, not a paraphrase — same quoted-language
+                (font-serif italic) treatment as the card view above. */}
+            <p className="text-muted-foreground font-serif mt-1 line-clamp-2 max-w-xl text-sm italic">
+              {appearance?.listingTitle ? `${appearance.listingTitle} — ` : ""}
+              {appearance?.body || "(no text)"}
+            </p>
+            <ScoreReasons reasons={appearance?.scoreReasons ?? []} className="mt-1.5" />
+          </div>
         </div>
-        <p className="text-muted-foreground mt-1 line-clamp-2 max-w-xl text-sm">
-          {appearance?.listingTitle ? `${appearance.listingTitle} — ` : ""}
-          {appearance?.body || "(no text)"}
-        </p>
-        <ScoreReasons reasons={appearance?.scoreReasons ?? []} className="mt-1.5" />
       </td>
 
       <td className="text-muted-foreground px-3 py-3 text-xs">

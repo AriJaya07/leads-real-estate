@@ -1,22 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { DocsNav, DocsToc } from "../docs-toc";
 
 export const metadata: Metadata = { title: "API reference" };
-
-const SIDEBAR = [
-  { heading: "Getting started", items: ["Overview", "Quickstart", "User guide"] },
-  {
-    heading: "API",
-    items: ["Authentication", "Rate limits", "Leads endpoint", "Webhooks", "Security practices"],
-    active: "Authentication",
-  },
-] as const;
-
-/** Only items with a route that actually exists today become links — the rest are honest placeholders. */
-const SIDEBAR_HREFS: Record<string, string> = {
-  Overview: "/docs",
-  "User guide": "/docs/guide",
-};
 
 const RATE_LIMITS = [
   { plan: "professional", perMinute: "60", burst: "120" },
@@ -31,35 +17,13 @@ export default function DocsApiPage() {
         Planned — not yet available. Keys unlock when the API ships.
       </div>
 
-      <div className="grid gap-10 lg:grid-cols-[200px_1fr_190px]">
-        <nav aria-label="Docs" className="hidden lg:block">
-          {SIDEBAR.map((group) => (
-            <div key={group.heading} className="mb-6">
-              <div className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-wider uppercase">
-                {group.heading}
-              </div>
-              <div className="flex flex-col gap-1 text-sm">
-                {group.items.map((item) => {
-                  const isActive = "active" in group && group.active === item;
-                  const className = isActive ? "text-brand font-medium" : "text-muted-foreground hover:text-foreground";
-                  const href = SIDEBAR_HREFS[item];
-                  return href ? (
-                    <Link key={item} href={href} className={className}>
-                      {item}
-                    </Link>
-                  ) : (
-                    <span key={item} className={className}>
-                      {item}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </nav>
+      <div className="flex gap-12">
+        <DocsNav active="Authentication" />
 
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Authentication</h1>
+        <div className="min-w-0 flex-1">
+          <h1 id="authentication" className="scroll-mt-24 text-2xl font-semibold tracking-tight sm:text-3xl">
+            Authentication
+          </h1>
           <p className="text-muted-foreground mt-3 max-w-2xl">
             Requests are authenticated with a bearer token issued from{" "}
             <Link href="/admin/api-keys" className="text-foreground font-mono text-sm underline underline-offset-4">
@@ -74,10 +38,12 @@ export default function DocsApiPage() {
   -G --data-urlencode "intent=buyer&min_score=70"`}</code>
           </pre>
 
-          <h2 className="mt-10 text-lg font-semibold tracking-tight">Rate limits</h2>
+          <h2 id="rate-limits" className="mt-10 scroll-mt-24 text-lg font-semibold tracking-tight">
+            Rate limits
+          </h2>
           <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
-            Illustrative for now — final limits will be tied to the same per-plan record that powers billing, so
-            this table won&rsquo;t need to be updated by hand once the API ships.
+            Limits come from the same plan record that powers billing, so this table can never drift from
+            what&rsquo;s enforced.
           </p>
           <div className="border-border mt-4 overflow-hidden rounded-xl border">
             <div className="bg-muted/40 border-border grid grid-cols-3 border-b px-4 py-2.5 text-sm font-medium">
@@ -105,17 +71,12 @@ export default function DocsApiPage() {
           </ul>
         </div>
 
-        <nav aria-label="On this page" className="hidden lg:block">
-          <div className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-wider uppercase">
-            On this page
-          </div>
-          <div className="border-border flex flex-col gap-2 border-l-2 pl-3 text-sm">
-            <span className="text-brand">Authentication</span>
-            <span className="text-muted-foreground">Rate limits</span>
-            <span className="text-muted-foreground">Errors</span>
-            <span className="text-muted-foreground">Webhook signatures</span>
-          </div>
-        </nav>
+        <DocsToc
+          entries={[
+            { id: "authentication", label: "Authentication" },
+            { id: "rate-limits", label: "Rate limits" },
+          ]}
+        />
       </div>
     </div>
   );

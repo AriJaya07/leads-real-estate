@@ -58,6 +58,8 @@ describe("getInviteByToken", () => {
       email: invite.email,
       role: "manager",
       companyName: company.name,
+      invitedBy: owner.email,
+      expiresAt: invite.expiresAt,
     });
   });
 

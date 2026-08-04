@@ -9,12 +9,15 @@ export function StatTile({
   value,
   hint,
   emphasis = false,
+  tone,
   className,
 }: {
   label: string;
   value: string | number;
   hint?: string;
   emphasis?: boolean;
+  /** Tints the value for a stat that needs attention (an SLA breach, a failure count) — same tone tokens `ScoreBadge`/`HealthPill` use. Colour is never the only signal: pair with a `hint` that says so in words. */
+  tone?: "warn" | "bad";
   className?: string;
 }) {
   return (
@@ -28,7 +31,15 @@ export function StatTile({
       <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
         {label}
       </span>
-      <span className="font-mono text-2xl leading-none font-semibold tabular-nums">{value}</span>
+      <span
+        className={cn(
+          "font-mono text-2xl leading-none font-semibold tabular-nums",
+          tone === "bad" && "text-[var(--health-bad-fg)]",
+          tone === "warn" && "text-[var(--health-warn-fg)]",
+        )}
+      >
+        {value}
+      </span>
       {hint && <span className="text-muted-foreground text-xs">{hint}</span>}
     </div>
   );

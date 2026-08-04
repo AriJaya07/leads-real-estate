@@ -1,9 +1,10 @@
 import { BrandMark } from "@/components/brand/brand-mark";
 import type { Role } from "@/domain/auth/permissions";
+import type { NavExtras } from "@/features/shell/nav-items";
 import { NavContent } from "./nav-content";
 
 /** Desktop only (`md:flex`) — below that, `MobileNav` covers the same nav via a drawer. */
-export function AppSidebar({ role }: { role: Role }) {
+export function AppSidebar({ role, navExtras }: { role: Role; navExtras: NavExtras }) {
   return (
     <aside
       aria-label="Main navigation"
@@ -14,7 +15,7 @@ export function AppSidebar({ role }: { role: Role }) {
         <span className="text-sm font-semibold tracking-tight">DreamRue</span>
       </div>
 
-      <NavContent role={role} />
+      <NavContent role={role} navExtras={navExtras} />
     </aside>
   );
 }

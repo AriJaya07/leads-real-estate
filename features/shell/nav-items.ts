@@ -20,6 +20,21 @@ export interface NavItem {
 }
 
 /**
+ * Live, request-scoped data `NavContent` needs beyond the static route list
+ * above — computed once per request in `app/(app)/layout.tsx` and handed down
+ * to both nav surfaces (desktop sidebar, mobile drawer) so neither re-fetches
+ * its own copy.
+ */
+export interface NavExtras {
+  /** Leads still in `new` status — the Inbox item's live count badge. */
+  inboxCount: number;
+  /** `null` when there are no datasets yet — the Sync item shows no dot rather than a false "healthy". */
+  syncTone: "ok" | "warn" | "bad" | null;
+  hasSource: boolean;
+  hasTeammates: boolean;
+}
+
+/**
  * Single source of truth for "what pages exist and what icon represents
  * them" — `nav-content.tsx` (sidebar/mobile drawer) and `command-palette.tsx`
  * (⌘K "Go to") both render off these same arrays, so the two navigation
