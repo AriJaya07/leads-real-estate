@@ -16,10 +16,12 @@ import { RelativeTime } from "@/components/common/relative-time";
 import { cn } from "@/lib/utils";
 import { useServerAction } from "@/hooks/use-server-action";
 import {
+  assignLead,
   markContacted,
   saveLeadNotes,
   setDealValue,
   setLeadStatus,
+  setLeadTags,
   toggleBookmark,
 } from "@/application/leads/lead.actions";
 import { generateLeadSummaryAction, generateMessageDraftAction } from "@/application/leads/ai-assist.actions";
@@ -41,6 +43,12 @@ import type { LeadAppearanceListItem, LeadListItem } from "@/application/leads/l
 import { primaryLeadScore } from "@/domain/lead/ranking";
 
 const AFFILIATION_ROLES = ["unknown", "owner", "agent", "employee"] as const;
+
+interface TeamMember {
+  id: string;
+  name: string | null;
+  email: string;
+}
 
 interface EngagementContext {
   targetPostExternalId?: string | null;
@@ -67,6 +75,7 @@ export function LeadDetailSheet({
   onClose,
   onSelectLead,
   hasAiAssist = false,
+  teamMembers = [],
 }: {
   lead: LeadListItem | null;
   onClose: () => void;
@@ -74,12 +83,21 @@ export function LeadDetailSheet({
   onSelectLead?: (lead: LeadListItem) => void;
   /** `aiAssistant` plan feature — gates the AI summary/message-draft buttons. */
   hasAiAssist?: boolean;
+  /** For the Assignee select — same list the pipeline board uses. */
+  teamMembers?: TeamMember[];
 }) {
   if (!lead) return null;
   // Keyed on the lead id so selecting a different lead remounts with that
   // lead's notes, instead of syncing props into state from an effect.
   return (
-    <LeadDetail key={lead.id} lead={lead} onClose={onClose} onSelectLead={onSelectLead} hasAiAssist={hasAiAssist} />
+    <LeadDetail
+      key={lead.id}
+      lead={lead}
+      onClose={onClose}
+      onSelectLead={onSelectLead}
+      hasAiAssist={hasAiAssist}
+      teamMembers={teamMembers}
+    />
   );
 }
 
@@ -88,16 +106,20 @@ function LeadDetail({
   onClose,
   onSelectLead,
   hasAiAssist,
+  teamMembers,
 }: {
   lead: LeadListItem;
   onClose: () => void;
   onSelectLead?: (lead: LeadListItem) => void;
   hasAiAssist: boolean;
+  teamMembers: TeamMember[];
 }) {
   const { busyId, run } = useServerAction();
   const saving = busyId !== null;
   const [notes, setNotes] = useState(lead.notes);
   const [dealValue, setDealValueInput] = useState(lead.dealValueUsd !== null ? String(lead.dealValueUsd) : "");
+  const [tags, setTags] = useState(lead.tags);
+  const [tagInput, setTagInput] = useState("");
   // Optimistic, local to this open sheet — same reasoning as `notes` above:
   // `lead` is a snapshot captured at row-click time, so a mutation here has no
   // way to flow back into it before the sheet is closed and reopened.
@@ -110,6 +132,36 @@ function LeadDetail({
       invalidateKeys: [["leads"]],
       onSuccess: () => toast.success(`Status changed to "${leadStatusLabel(status)}"`),
     });
+  }
+
+  async function assign(userId: string | null) {
+    await run("assignedTo", () => assignLead({ leadId: lead.id, userId }), {
+      errorFallback: "Could not assign the lead",
+      invalidateKeys: [["leads"]],
+      onSuccess: () => toast.success(userId ? "Lead assigned" : "Lead unassigned"),
+    });
+  }
+
+  async function persistTags(next: string[]) {
+    setTags(next);
+    await run("tags", () => setLeadTags({ leadId: lead.id, tags: next }), {
+      errorFallback: "Could not save tags",
+      invalidateKeys: [["leads"]],
+    });
+  }
+
+  function addTag() {
+    const next = tagInput.trim().toLowerCase();
+    if (!next || tags.includes(next)) {
+      setTagInput("");
+      return;
+    }
+    setTagInput("");
+    void persistTags([...tags, next]);
+  }
+
+  function removeTag(tag: string) {
+    void persistTags(tags.filter((t) => t !== tag));
   }
 
   async function persistNotes() {
@@ -291,6 +343,24 @@ function LeadDetail({
           </section>
 
           <section>
+            <h3 className="mb-1.5 text-sm font-semibold">Assignee</h3>
+            <select
+              aria-label={`Assignee for ${lead.name ?? "lead"}`}
+              value={lead.assignedTo ?? ""}
+              disabled={saving}
+              onChange={(event) => void assign(event.target.value || null)}
+              className="border-input bg-background w-full max-w-64 rounded-md border px-2.5 py-1.5 text-sm"
+            >
+              <option value="">Unassigned</option>
+              {teamMembers.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name ?? member.email}
+                </option>
+              ))}
+            </select>
+          </section>
+
+          <section>
             <h3 className="mb-1.5 text-sm font-semibold">Deal value</h3>
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground text-sm">$</span>
@@ -320,6 +390,43 @@ function LeadDetail({
               rows={4}
               placeholder="What happened on the call?"
             />
+          </section>
+
+          <section>
+            <h3 className="mb-1.5 text-sm font-semibold">Tags</h3>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="bg-muted text-foreground inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs"
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    aria-label={`Remove tag ${tag}`}
+                    disabled={saving}
+                    onClick={() => removeTag(tag)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="size-3" aria-hidden />
+                  </button>
+                </span>
+              ))}
+              <Input
+                value={tagInput}
+                onChange={(event) => setTagInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addTag();
+                  }
+                }}
+                onBlur={addTag}
+                disabled={saving}
+                placeholder="Add a tag…"
+                className="h-7 w-28 border-dashed text-xs"
+              />
+            </div>
           </section>
 
           <ActivityTimeline leadId={lead.id} />

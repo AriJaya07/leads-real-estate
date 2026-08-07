@@ -195,6 +195,12 @@ function buildConditions(companyId: string, filters: LeadFilters): SQL[] {
   if (filters.assignedTo) conditions.push(eq(schema.leadStates.assignedTo, filters.assignedTo));
   if (filters.unassigned) conditions.push(isNull(schema.leadStates.assignedTo));
   if (filters.bookmarked) conditions.push(eq(schema.leadStates.bookmarked, true));
+  // `leadStates` is a LEFT JOIN — a lead with no state row yet has `hidden`
+  // NULL, which reads as "not hidden," same as the NULL-defaulting the
+  // `TERMINAL_STATUSES` exclusion below already relies on.
+  if (!filters.showHidden) {
+    conditions.push(sql`(${schema.leadStates.hidden} IS NULL OR ${schema.leadStates.hidden} = false)`);
+  }
 
   if (filters.postedAfter) {
     const date = new Date(filters.postedAfter);

@@ -1,10 +1,41 @@
 import "server-only";
+import { db, schema } from "@/infrastructure/db/client";
 import { getLeadsForDigest } from "@/application/leads/lead-queries";
-import { sendWebhook } from "@/infrastructure/webhooks/outbound-webhook";
+import { sendWebhook, type OutboundWebhookPayload } from "@/infrastructure/webhooks/outbound-webhook";
 import { createLogger } from "@/infrastructure/observability/logger";
 import { getAutomationSettings } from "./automation-settings.queries";
 
 const log = createLogger("automation:webhooks");
+
+/**
+ * Records one delivery attempt for the API keys page's "Recent deliveries"
+ * card. Swallows its own error the same way `application/billing/usage.ts`'s
+ * increment functions do — a logging failure must never be the reason a
+ * webhook (or its retry) appears to fail.
+ */
+export async function recordDelivery(
+  companyId: string,
+  url: string,
+  payload: OutboundWebhookPayload,
+  result: { ok: boolean; status?: number; error?: string },
+): Promise<void> {
+  try {
+    await db().insert(schema.webhookDeliveries).values({
+      companyId,
+      event: payload.event,
+      url,
+      payload,
+      ok: result.ok,
+      statusCode: result.status ?? null,
+      error: result.error ?? null,
+    });
+  } catch (error) {
+    log.warn("failed to record webhook delivery", {
+      companyId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 export type WebhookEvent = "lead.created_or_updated" | "lead.status_changed";
 
@@ -31,7 +62,7 @@ export async function dispatchWebhooksForLeads(
     const leads = await getLeadsForDigest(companyId, leadIds);
     if (leads.length === 0) return;
 
-    const result = await sendWebhook(settings.webhookUrl, settings.webhookSecret, {
+    const payload: OutboundWebhookPayload = {
       event,
       companyId,
       timestamp: new Date().toISOString(),
@@ -48,7 +79,10 @@ export async function dispatchWebhooksForLeads(
         budgetCurrency: lead.budgetUsdMin !== null || lead.budgetUsdMax !== null ? "USD" : lead.budgetCurrency,
         contact: lead.contact,
       })),
-    });
+    };
+
+    const result = await sendWebhook(settings.webhookUrl, settings.webhookSecret, payload);
+    await recordDelivery(companyId, settings.webhookUrl, payload, result);
 
     if (!result.ok) {
       log.warn("webhook dispatch failed", { companyId, event, error: result.error, status: result.status });

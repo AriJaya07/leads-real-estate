@@ -60,6 +60,7 @@ function countActiveFilters(filters: LeadFilters): number {
   if (filters.minLeadScore !== undefined) count += 1;
   if (filters.hasContact) count += 1;
   if (filters.bookmarked) count += 1;
+  if (filters.showHidden) count += 1;
   if (filters.collectedAfter) count += 1;
   if (filters.collectedBefore) count += 1;
   count += Object.keys(filters.attr).length;
@@ -216,8 +217,9 @@ const LeadCard = memo(function LeadCard({
       <ScoreReasons reasons={appearance?.scoreReasons ?? []} />
 
       <div className="mt-1 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
-        <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
-          confidence {lead.confidenceScore}
+        <span className="text-muted-foreground flex items-center gap-2 text-[11px]">
+          <span className="font-mono tabular-nums">confidence {lead.confidenceScore}</span>
+          <span>· {lead.assignedToName ?? "Unassigned"}</span>
         </span>
         <ContactActions lead={lead} onContact={onContact} />
       </div>
@@ -301,6 +303,9 @@ const LeadRow = memo(function LeadRow({
       <td className="text-muted-foreground px-3 py-3 text-xs">
         <RelativeTime value={lead.latestAppearanceAt} />
       </td>
+      <td className="px-3 py-3 text-xs">
+        {lead.assignedToName ? lead.assignedToName : <span className="text-muted-foreground">Unassigned</span>}
+      </td>
 
       <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
         <ContactActions lead={lead} onContact={onContact} />
@@ -322,12 +327,15 @@ export function LeadInbox({
   currentUserId,
   canManageSharedSearches = false,
   hasAiAssist = false,
+  teamMembers = [],
 }: {
   canCollectData?: boolean;
   currentUserId: string;
   canManageSharedSearches?: boolean;
   /** `aiAssistant` plan feature — gates the summary/message-draft buttons in the detail sheet. */
   hasAiAssist?: boolean;
+  /** For the detail sheet's Assignee select — same list the pipeline board uses. */
+  teamMembers?: { id: string; name: string | null; email: string }[];
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -500,6 +508,7 @@ export function LeadInbox({
                   <th className="w-32">Where</th>
                   <th className="w-28">Budget</th>
                   <th className="w-24">Last seen</th>
+                  <th className="w-24">Owner</th>
                   <th className="w-36">Act</th>
                 </DataTableHead>
                 <tbody>
@@ -551,6 +560,7 @@ export function LeadInbox({
         onClose={() => setSelected(null)}
         onSelectLead={setSelected}
         hasAiAssist={hasAiAssist}
+        teamMembers={teamMembers}
       />
     </div>
   );

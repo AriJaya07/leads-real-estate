@@ -191,6 +191,31 @@ export const saveLeadNotes = authActionClient
     return { ok: true };
   });
 
+/**
+ * Replaces the lead's whole tag set — simplest correct model for a handful of
+ * short freeform labels, same "send the final state" shape as `saveLeadNotes`
+ * rather than separate add/remove actions.
+ */
+export const setLeadTags = authActionClient
+  .inputSchema(
+    z.object({
+      leadId: z.string().uuid(),
+      tags: z.array(z.string().trim().min(1).max(40)).max(20),
+    }),
+  )
+  .action(async ({ parsedInput, ctx }) => {
+    await ensureState(ctx.user.companyId, parsedInput.leadId);
+    const tags = Array.from(new Set(parsedInput.tags.map((t) => t.toLowerCase())));
+
+    await db()
+      .update(schema.leadStates)
+      .set({ tags, updatedBy: ctx.user.userId, updatedAt: new Date() })
+      .where(eq(schema.leadStates.leadId, parsedInput.leadId));
+
+    invalidate(parsedInput.leadId);
+    return { ok: true };
+  });
+
 export const toggleBookmark = authActionClient
   .inputSchema(z.object({ leadId: z.string().uuid() }))
   .action(async ({ parsedInput, ctx }) => {

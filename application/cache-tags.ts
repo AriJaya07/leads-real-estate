@@ -45,3 +45,7 @@ export function savedViewsTag(): string {
 export function automationSettingsTag(companyId: string): string {
   return `automation-settings:${companyId}`;
 }
+
+export function automationRulesTag(): string {
+  return "automation-rules";
+}

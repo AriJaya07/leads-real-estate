@@ -588,6 +588,7 @@ const AlertRuleTableRow = memo(function AlertRuleTableRow({
   rule,
   metas,
   busy,
+  fireCount,
   onToggle,
   onDelete,
   onEdit,
@@ -595,6 +596,8 @@ const AlertRuleTableRow = memo(function AlertRuleTableRow({
   rule: AlertRuleRow;
   metas: FieldMetaMap;
   busy: boolean;
+  /** Deliveries in the last 7 days — see `getAlertRuleFireCounts`. */
+  fireCount: number;
   onToggle: () => void;
   onDelete: () => void;
   onEdit: () => void;
@@ -606,7 +609,12 @@ const AlertRuleTableRow = memo(function AlertRuleTableRow({
   return (
     <tr className="border-border border-t align-middle">
       <td className="px-3 py-2.5">
-        <div className="font-medium">{rule.name}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="font-medium">{rule.name}</span>
+          <span className="text-muted-foreground font-mono text-[11px] tabular-nums">
+            fired {fireCount}× this week
+          </span>
+        </div>
         {editableConditions && editableConditions.length > 0 ? (
           <div className="mt-1 flex flex-wrap gap-1">
             {editableConditions.map((condition, index) => {
@@ -681,10 +689,13 @@ export function AlertRuleManager({
   rules,
   propertyTypeOptions,
   locationOptions,
+  fireCounts = {},
 }: {
   rules: AlertRuleRow[];
   propertyTypeOptions: Option[];
   locationOptions: Option[];
+  /** Rule id → deliveries in the last 7 days, from `getAlertRuleFireCounts`. */
+  fireCounts?: Record<string, number>;
 }) {
   const router = useRouter();
   const { busyId, run } = useServerAction();
@@ -755,6 +766,7 @@ export function AlertRuleManager({
                 rule={rule}
                 metas={metas}
                 busy={busyId === rule.id || busyId === `delete-${rule.id}`}
+                fireCount={fireCounts[rule.id] ?? 0}
                 onToggle={() => toggle(rule)}
                 onDelete={() => remove(rule)}
                 onEdit={() => setEditing(rule)}

@@ -22,7 +22,7 @@ export interface DispatchResult {
  * value so a threshold like "$50k+" means the same thing regardless of which
  * currency a lead's most recent stated budget was in.
  */
-function toSubject(lead: AlertableLead): Record<string, unknown> {
+export function toSubject(lead: AlertableLead): Record<string, unknown> {
   return {
     leadType: lead.leadType,
     buyerScore: lead.buyerScore,

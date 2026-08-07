@@ -25,6 +25,7 @@ import { processRawRecords } from "@/application/leads/process-records";
 import { SyncLogger } from "./sync-logger";
 import { dispatchAlertsForLeads } from "@/application/alerting/dispatch";
 import { dispatchWebhooksForLeads } from "@/application/automation/webhook-dispatch";
+import { applyAutomationRules } from "@/application/automation/apply-automation-rules";
 import { incrementRawRecordUsage, incrementStorageUsage, isWithinMonthlyBudget } from "@/application/billing/usage";
 
 interface SyncCursor {
@@ -352,6 +353,7 @@ export async function syncDataset(
         failed += processed.failed;
 
         if (processed.leadIds.length > 0) {
+          await applyAutomationRules(companyId, processed.leadIds);
           const alerted = await dispatchAlertsForLeads(companyId, processed.leadIds);
           if (alerted.sent > 0) {
             log.info("alert", `Dispatched ${alerted.sent} alert(s)`, { rules: alerted.ruleNames });

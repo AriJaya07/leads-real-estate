@@ -1,6 +1,8 @@
-import { boolean, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { companies } from "./company";
+import { users } from "./auth";
+import type { Predicate } from "@/domain/alerting/predicate";
 
 /**
  * One row per company — a 1:1 settings extension, same shape as a profile
@@ -43,3 +45,64 @@ export const automationSettings = pgTable("automation_settings", {
 });
 
 export type AutomationSettingsRow = typeof automationSettings.$inferSelect;
+
+/**
+ * One row per outbound-webhook attempt (initial send *and* every manual
+ * retry) — `infrastructure/webhooks/outbound-webhook.ts::sendWebhook` itself
+ * stays "single-attempt, best-effort, never throws"; this table is purely
+ * the visibility layer on top, read by the API keys page's "Recent
+ * deliveries" card. `payload` is stored so a retry can replay the exact same
+ * body rather than reconstructing it from current lead state.
+ */
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    event: text("event").notNull(),
+    url: text("url").notNull(),
+    payload: jsonb("payload").notNull(),
+    ok: boolean("ok").notNull(),
+    statusCode: integer("status_code"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("webhook_deliveries_company_idx").on(t.companyId, t.createdAt)],
+);
+
+export type WebhookDeliveryRow = typeof webhookDeliveries.$inferSelect;
+
+export const automationRuleActionEnum = pgEnum("automation_rule_action", ["assign", "hide"]);
+
+/**
+ * WHEN/THEN routing rules — "a Buyer in Canggu goes to Agus", "Brokers stay
+ * out of the inbox". Reuses the same `Predicate` JSON language and evaluator
+ * as `alert_rules` (`domain/alerting/predicate.ts`) rather than inventing a
+ * second condition DSL; only the action differs (notify vs. mutate lead
+ * state). Evaluated by `application/automation/apply-automation-rules.ts`
+ * from the same sync-pipeline hook alert/webhook dispatch already use.
+ */
+export const automationRules = pgTable(
+  "automation_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    predicate: jsonb("predicate").$type<Predicate>().notNull(),
+    action: automationRuleActionEnum("action").notNull(),
+    /** Only meaningful when `action = 'assign'`. */
+    assigneeId: uuid("assignee_id").references(() => users.id, { onDelete: "set null" }),
+    /** Lower runs first. Evaluation stops per-lead at the first matching rule, so order is the tie-breaker between overlapping conditions. */
+    priority: integer("priority").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("automation_rules_company_idx").on(t.companyId, t.priority)],
+);
+
+export type AutomationRuleRow = typeof automationRules.$inferSelect;

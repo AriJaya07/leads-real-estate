@@ -55,6 +55,8 @@ const leadFiltersSchema = z.object({
   unassigned: z.coerce.boolean().optional(),
   /** `lead_states.bookmarked` — the agent's own "favorites" shortlist. */
   bookmarked: z.coerce.boolean().optional(),
+  /** `lead_states.hidden` — off by default: an automation "hide" rule keeps a lead out of the inbox, not out of the database. */
+  showHidden: z.coerce.boolean().optional(),
 
   /** Filters on `leads.latestAppearanceAt` — when this person was last active. */
   postedAfter: z.string().optional(),
@@ -151,6 +153,7 @@ export function serializeLeadFilters(filters: LeadFilters): URLSearchParams {
   put("assignedTo", filters.assignedTo);
   put("unassigned", filters.unassigned);
   put("bookmarked", filters.bookmarked);
+  put("showHidden", filters.showHidden);
   put("postedAfter", filters.postedAfter);
   put("postedBefore", filters.postedBefore);
   put("collectedAfter", filters.collectedAfter);

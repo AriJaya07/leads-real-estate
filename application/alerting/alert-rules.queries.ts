@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
 import type { AlertRuleRow } from "@/infrastructure/db/schema/alerts";
 
@@ -49,4 +49,31 @@ export async function listRecentAlertDeliveries(
     .limit(limit);
 
   return rows;
+}
+
+/**
+ * "Fired N× this week" per rule, for the alert rule manager. A live `COUNT`
+ * over `alert_deliveries` grouped by rule — same posture as
+ * `assertWithinLimit`'s seats/datasets check (docs/pricing-strategy.md §3): a
+ * small, cheap-to-scan table read at request time, so this can never drift
+ * from a maintained counter the way an incremented `firedCount` column could.
+ * Deliveries are already deduped on insert (`dispatch.ts`'s `dedupeKey`), so
+ * this never double-counts a retried send.
+ */
+export async function getAlertRuleFireCounts(companyId: string): Promise<Record<string, number>> {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const rows = await db()
+    .select({
+      alertRuleId: schema.alertDeliveries.alertRuleId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(schema.alertDeliveries)
+    .where(and(eq(schema.alertDeliveries.companyId, companyId), gte(schema.alertDeliveries.createdAt, since)))
+    .groupBy(schema.alertDeliveries.alertRuleId);
+
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    if (row.alertRuleId) counts[row.alertRuleId] = row.count;
+  }
+  return counts;
 }

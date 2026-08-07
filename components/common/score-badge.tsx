@@ -7,9 +7,20 @@ function tone(score: number): string {
   return "bg-[var(--score-low-bg)] text-[var(--score-low-fg)]";
 }
 
+function tier(score: number): "High" | "Mid" | "Low" {
+  if (score >= 70) return "High";
+  if (score >= 40) return "Mid";
+  return "Low";
+}
+
 /**
  * Score plus its reasoning. A naked number gets ignored; "82 because it says
  * 'looking to buy' and states a budget" gets acted on.
+ *
+ * The tier word (High/Mid/Low) is always visible text, never just the tint —
+ * colour alone never encodes score, per the rule in globals.css. `label`
+ * names *what's* being scored ("buyer", "lead score") for the title only;
+ * it's the caller's job to put that name in visible text nearby.
  */
 export function ScoreBadge({
   score,
@@ -23,13 +34,13 @@ export function ScoreBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums",
+        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold",
         tone(score),
         className,
       )}
       title={`${label} score ${score}/100`}
     >
-      {score}
+      {tier(score)} <span className="tabular-nums">{score}</span>
     </span>
   );
 }

@@ -1,9 +1,10 @@
 "use client";
 
-import { Download, Filter, LayoutGrid, RotateCcw, Search, Sparkles, Star, Table2 } from "lucide-react";
+import { Download, EyeOff, Filter, LayoutGrid, Menu, RotateCcw, Search, Sparkles, Star, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useUrlFilters } from "@/hooks/use-url-filters";
 import { triageFilters } from "@/application/leads/filters.schema";
@@ -42,6 +43,167 @@ export function LeadFilterBar({
 
   const enumFacets = facets.filter((f) => f.kind === "enum");
 
+  // Shared between the desktop inline row and the mobile sheet below — only
+  // one of the two is ever visible at a given viewport width, so duplicating
+  // the JSX (not the state) is simplest and each copy stays a plain
+  // uncontrolled input keyed off the same URL params.
+  const scoreAndDateControls = (
+    <>
+      <div className="flex items-center gap-1">
+        <span className="text-muted-foreground text-xs font-medium">Min lead score</span>
+        <Input
+          type="number"
+          min={0}
+          max={100}
+          defaultValue={params.get("minLeadScore") ?? ""}
+          placeholder="0"
+          className="w-16"
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            const value = event.currentTarget.value.trim();
+            update((next) => (value ? next.set("minLeadScore", value) : next.delete("minLeadScore")));
+          }}
+        />
+      </div>
+
+      <div className="flex items-center gap-1">
+        <span className="text-muted-foreground text-xs font-medium">Collected</span>
+        <Input
+          type="date"
+          defaultValue={params.get("collectedAfter") ?? ""}
+          className="w-36"
+          aria-label="Collected after"
+          onChange={(event) =>
+            update((next) =>
+              event.currentTarget.value
+                ? next.set("collectedAfter", event.currentTarget.value)
+                : next.delete("collectedAfter"),
+            )
+          }
+        />
+        <span className="text-muted-foreground text-xs">to</span>
+        <Input
+          type="date"
+          defaultValue={params.get("collectedBefore") ?? ""}
+          className="w-36"
+          aria-label="Collected before"
+          onChange={(event) =>
+            update((next) =>
+              event.currentTarget.value
+                ? next.set("collectedBefore", event.currentTarget.value)
+                : next.delete("collectedBefore"),
+            )
+          }
+        />
+      </div>
+    </>
+  );
+
+  const actionButtons = (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() =>
+          update((next) => {
+            // `triageFilters()` is the single definition of what "triage mode"
+            // means (application/leads/filters.schema.ts) — looping over it
+            // here instead of hardcoding the fields keeps this button correct
+            // if that definition ever changes.
+            for (const [key, value] of Object.entries(triageFilters())) {
+              next.set(key, Array.isArray(value) ? value.join(",") : String(value));
+            }
+          })
+        }
+      >
+        <Sparkles className="size-3.5" aria-hidden />
+        Triage view
+      </Button>
+
+      <Button
+        variant={params.get("bookmarked") === "true" ? "secondary" : "outline"}
+        size="sm"
+        aria-pressed={params.get("bookmarked") === "true"}
+        onClick={() =>
+          update((next) =>
+            next.get("bookmarked") === "true" ? next.delete("bookmarked") : next.set("bookmarked", "true"),
+          )
+        }
+      >
+        <Star className="size-3.5" aria-hidden />
+        Favorites
+      </Button>
+
+      <Button
+        variant={params.get("showHidden") === "true" ? "secondary" : "outline"}
+        size="sm"
+        aria-pressed={params.get("showHidden") === "true"}
+        title="Leads an automation rule hid from the default inbox"
+        onClick={() =>
+          update((next) =>
+            next.get("showHidden") === "true" ? next.delete("showHidden") : next.set("showHidden", "true"),
+          )
+        }
+      >
+        <EyeOff className="size-3.5" aria-hidden />
+        Hidden
+      </Button>
+
+      {activeCount > 0 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            update((next) => {
+              const datasetId = next.get("datasetId");
+              for (const key of [...next.keys()]) next.delete(key);
+              if (datasetId) next.set("datasetId", datasetId);
+            })
+          }
+        >
+          <RotateCcw className="size-3.5" aria-hidden />
+          Reset
+          <Badge variant="secondary">{activeCount}</Badge>
+        </Button>
+      )}
+
+      <Button variant="outline" size="sm" render={<a href={`/api/leads/export?${params.toString()}`} download />}>
+        <Download className="size-3.5" aria-hidden />
+        Export CSV
+      </Button>
+    </>
+  );
+
+  const facetChips = (
+    <div className={cn("flex flex-col gap-2", isFetching && "opacity-60")}>
+      {enumFacets.map((facet) => (
+        <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
+          <span className="text-muted-foreground inline-flex w-28 shrink-0 items-center gap-1 text-xs font-medium">
+            <Filter className="size-3" aria-hidden />
+            {facet.label}
+          </span>
+          {facet.options.slice(0, 12).map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={isActive(facet.key, option.value)}
+              onClick={() => toggleMulti(facet.key, option.value)}
+              className={cn(
+                "border-border rounded-full border px-2.5 py-1 text-xs transition-colors",
+                isActive(facet.key, option.value)
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "hover:bg-accent",
+              )}
+            >
+              {option.label}
+              <span className="ml-1 font-mono opacity-60 tabular-nums">{option.count}</span>
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -62,119 +224,41 @@ export function LeadFilterBar({
           />
         </div>
 
-        <div className="flex items-center gap-1">
-          <span className="text-muted-foreground text-xs font-medium">Min lead score</span>
-          <Input
-            type="number"
-            min={0}
-            max={100}
-            defaultValue={params.get("minLeadScore") ?? ""}
-            placeholder="0"
-            className="w-16"
-            onKeyDown={(event) => {
-              if (event.key !== "Enter") return;
-              const value = event.currentTarget.value.trim();
-              update((next) => (value ? next.set("minLeadScore", value) : next.delete("minLeadScore")));
-            }}
-          />
+        {/* md and up: every control inline. Below md there isn't room, so it
+            collapses behind the ≡ sheet trigger instead. */}
+        <div className="hidden flex-wrap items-center gap-2 md:flex">
+          {scoreAndDateControls}
+          {actionButtons}
         </div>
-
-        <div className="flex items-center gap-1">
-          <span className="text-muted-foreground text-xs font-medium">Collected</span>
-          <Input
-            type="date"
-            defaultValue={params.get("collectedAfter") ?? ""}
-            className="w-36"
-            aria-label="Collected after"
-            onChange={(event) =>
-              update((next) =>
-                event.currentTarget.value
-                  ? next.set("collectedAfter", event.currentTarget.value)
-                  : next.delete("collectedAfter"),
-              )
-            }
-          />
-          <span className="text-muted-foreground text-xs">to</span>
-          <Input
-            type="date"
-            defaultValue={params.get("collectedBefore") ?? ""}
-            className="w-36"
-            aria-label="Collected before"
-            onChange={(event) =>
-              update((next) =>
-                event.currentTarget.value
-                  ? next.set("collectedBefore", event.currentTarget.value)
-                  : next.delete("collectedBefore"),
-              )
-            }
-          />
-        </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            update((next) => {
-              // `triageFilters()` is the single definition of what "triage mode"
-              // means (application/leads/filters.schema.ts) — looping over it
-              // here instead of hardcoding the fields keeps this button correct
-              // if that definition ever changes.
-              for (const [key, value] of Object.entries(triageFilters())) {
-                next.set(key, Array.isArray(value) ? value.join(",") : String(value));
-              }
-            })
-          }
-        >
-          <Sparkles className="size-3.5" aria-hidden />
-          Triage view
-        </Button>
-
-        <Button
-          variant={params.get("bookmarked") === "true" ? "secondary" : "outline"}
-          size="sm"
-          aria-pressed={params.get("bookmarked") === "true"}
-          onClick={() =>
-            update((next) =>
-              next.get("bookmarked") === "true" ? next.delete("bookmarked") : next.set("bookmarked", "true"),
-            )
-          }
-        >
-          <Star className="size-3.5" aria-hidden />
-          Favorites
-        </Button>
-
-        {activeCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              update((next) => {
-                const datasetId = next.get("datasetId");
-                for (const key of [...next.keys()]) next.delete(key);
-                if (datasetId) next.set("datasetId", datasetId);
-              })
-            }
-          >
-            <RotateCcw className="size-3.5" aria-hidden />
-            Reset
-            <Badge variant="secondary">{activeCount}</Badge>
-          </Button>
-        )}
-
-        <Button
-          variant="outline"
-          size="sm"
-          render={<a href={`/api/leads/export?${params.toString()}`} download />}
-        >
-          <Download className="size-3.5" aria-hidden />
-          Export CSV
-        </Button>
 
         {isFetching && (
           <span className="text-muted-foreground text-xs" role="status" aria-live="polite">
             Updating…
           </span>
         )}
+
+        <Sheet>
+          <SheetTrigger
+            render={
+              <Button variant="outline" size="icon-sm" className="relative shrink-0 md:hidden" aria-label="Filters">
+                <Menu className="size-4" aria-hidden />
+                {activeCount > 0 && (
+                  <span className="bg-brand absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full text-[10px] font-semibold text-white">
+                    {activeCount}
+                  </span>
+                )}
+              </Button>
+            }
+          />
+          <SheetContent side="left" className="flex flex-col gap-4 overflow-y-auto p-4">
+            <SheetHeader className="p-0">
+              <SheetTitle>Filters</SheetTitle>
+            </SheetHeader>
+            <div className="flex flex-col items-start gap-2">{scoreAndDateControls}</div>
+            <div className="flex flex-wrap items-center gap-2">{actionButtons}</div>
+            {facetChips}
+          </SheetContent>
+        </Sheet>
 
         {/* Below md the layout is always cards (a fixed-column table can't fit),
             so the choice is meaningless there — desktop only. */}
@@ -200,33 +284,8 @@ export function LeadFilterBar({
         </div>
       </div>
 
-      <div className={cn("flex flex-col gap-2", isFetching && "opacity-60")}>
-        {enumFacets.map((facet) => (
-          <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
-            <span className="text-muted-foreground inline-flex w-28 shrink-0 items-center gap-1 text-xs font-medium">
-              <Filter className="size-3" aria-hidden />
-              {facet.label}
-            </span>
-            {facet.options.slice(0, 12).map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={isActive(facet.key, option.value)}
-                onClick={() => toggleMulti(facet.key, option.value)}
-                className={cn(
-                  "border-border rounded-full border px-2.5 py-1 text-xs transition-colors",
-                  isActive(facet.key, option.value)
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "hover:bg-accent",
-                )}
-              >
-                {option.label}
-                <span className="ml-1 font-mono opacity-60 tabular-nums">{option.count}</span>
-              </button>
-            ))}
-          </div>
-        ))}
-      </div>
+      {/* Desktop-only — the mobile copy of the same facet chips lives inside the sheet above. */}
+      <div className="hidden md:block">{facetChips}</div>
     </div>
   );
 }

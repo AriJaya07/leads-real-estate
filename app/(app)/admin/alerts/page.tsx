@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { requireAdmin } from "@/application/auth/current-user";
-import { listAlertRules } from "@/application/alerting/alert-rules.queries";
+import { getAlertRuleFireCounts, listAlertRules } from "@/application/alerting/alert-rules.queries";
 import { getLeadFacets } from "@/application/leads/facets";
 import { PageHeader } from "@/components/common/page-header";
 import { TableSkeleton } from "@/components/common/table-skeleton";
@@ -10,7 +10,11 @@ import { AlertRuleManager } from "@/features/alerting/components/alert-rule-mana
 export const metadata: Metadata = { title: "Alerts" };
 
 async function AlertRules({ companyId }: { companyId: string }) {
-  const [rules, facets] = await Promise.all([listAlertRules(companyId), getLeadFacets(companyId)]);
+  const [rules, facets, fireCounts] = await Promise.all([
+    listAlertRules(companyId),
+    getLeadFacets(companyId),
+    getAlertRuleFireCounts(companyId),
+  ]);
 
   const optionsFor = (key: string) => {
     const facet = facets.find((f) => f.key === key);
@@ -22,6 +26,7 @@ async function AlertRules({ companyId }: { companyId: string }) {
       rules={rules}
       propertyTypeOptions={optionsFor("propertyTypes")}
       locationOptions={optionsFor("locations")}
+      fireCounts={fireCounts}
     />
   );
 }

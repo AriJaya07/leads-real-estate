@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { requireUser } from "@/application/auth/current-user";
+import { listAssignableTeamMembers } from "@/application/auth/team.actions";
 import { type Role, roleAtLeast } from "@/domain/auth/permissions";
 import { parseLeadFilters } from "@/application/leads/filters.schema";
 import { queryLeads, getLeadStats } from "@/application/leads/lead-queries";
@@ -126,7 +127,7 @@ async function Inbox({
   const filters = parseLeadFilters(toURLSearchParams(await searchParams));
   const queryClient = getQueryClient();
 
-  const [, , , plan] = await Promise.all([
+  const [, , , plan, teamMembers] = await Promise.all([
     queryClient.prefetchQuery({
       queryKey: leadsQueryKey(filters),
       queryFn: () => queryLeads(companyId, filters),
@@ -146,6 +147,7 @@ async function Inbox({
       queryFn: () => listSavedViews(companyId, userId),
     }),
     getCompanyPlan(companyId),
+    listAssignableTeamMembers(companyId),
   ]);
 
   return (
@@ -155,6 +157,7 @@ async function Inbox({
         currentUserId={userId}
         canManageSharedSearches={roleAtLeast(viewerRole, "manager")}
         hasAiAssist={hasFeature(plan?.features, "aiAssistant")}
+        teamMembers={teamMembers}
       />
     </HydrationBoundary>
   );

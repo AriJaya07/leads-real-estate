@@ -321,6 +321,8 @@ export const leadStates = pgTable(
     notes: text("notes").notNull().default(""),
     tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
     bookmarked: boolean("bookmarked").notNull().default(false),
+    /** Set by an automation rule's "hide from inbox" action — see `application/automation/apply-automation-rules.ts`. Excluded from `queryLeads` by default (`filters.showHidden`), never deleted. */
+    hidden: boolean("hidden").notNull().default(false),
     /** Stamped by the contact action — this is how time-to-first-touch is measured. */
     firstContactedAt: timestamp("first_contacted_at", { withTimezone: true }),
     /**
