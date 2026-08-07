@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { IntentBadge } from "@/components/common/intent-badge";
 import { ScoreBadge, ScoreReasons } from "@/components/common/score-badge";
 import { PotentialPill } from "@/components/common/potential-pill";
@@ -870,7 +871,14 @@ function SimilarLeadsSection({
   );
 }
 
-const EVENT_META: Record<string, { label: string; describe: (payload: Record<string, unknown> | null) => string | null }> = {
+type EventMeta = {
+  label: string;
+  describe: (payload: Record<string, unknown> | null) => string | null;
+  /** Only automation/system-driven event types carry a category pill — a human action needs no badge to explain itself. */
+  category?: (payload: Record<string, unknown> | null) => string | null;
+};
+
+const EVENT_META: Record<string, EventMeta> = {
   created: { label: "Lead created", describe: () => null },
   status_changed: {
     label: "Status changed",
@@ -878,7 +886,14 @@ const EVENT_META: Record<string, { label: string; describe: (payload: Record<str
   },
   assigned: {
     label: "Assignment changed",
-    describe: (payload) => (payload?.assignedTo ? "Assigned to a teammate" : "Unassigned"),
+    describe: (payload) => {
+      if (!payload?.assignedTo) return "Unassigned";
+      const ruleName = typeof payload.ruleName === "string" ? payload.ruleName : null;
+      if (ruleName) return `Assigned to a teammate — rule "${ruleName}" matched`;
+      if (payload.auto) return "Auto-assigned to a teammate";
+      return "Assigned to a teammate";
+    },
+    category: (payload) => (payload?.auto ? "AUTOMATION" : null),
   },
   note_added: { label: "Note saved", describe: () => null },
   contacted: {
@@ -889,12 +904,14 @@ const EVENT_META: Record<string, { label: string; describe: (payload: Record<str
     label: "Alert sent",
     describe: (payload) =>
       typeof payload?.rule === "string" ? `"${payload.rule}"${typeof payload.channel === "string" ? ` · ${payload.channel}` : ""}` : null,
+    category: () => "AUTOMATION",
   },
-  reclassified: { label: "Re-scored", describe: () => null },
+  reclassified: { label: "Re-scored", describe: () => null, category: () => "SCORING" },
   merged: {
     label: "Matched to this person",
     describe: (payload) =>
       typeof payload?.matchedField === "string" ? `by ${payload.matchedField}` : "identity match",
+    category: () => "IDENTITY",
   },
 };
 
@@ -919,12 +936,18 @@ function ActivityTimeline({ leadId }: { leadId: string }) {
           {events.map((event) => {
             const meta = EVENT_META[event.type] ?? { label: leadStatusLabel(event.type), describe: () => null };
             const detail = meta.describe(event.payload);
+            const category = meta.category?.(event.payload);
             return (
               <li key={event.id} className="flex items-start justify-between gap-2 text-sm">
-                <div className="min-w-0">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                  {category && (
+                    <Badge variant="secondary" className="h-4 shrink-0 px-1.5 text-[9px] font-semibold tracking-wide">
+                      {category}
+                    </Badge>
+                  )}
                   <span className="font-medium">{meta.label}</span>
-                  {detail && <span className="text-muted-foreground"> {detail}</span>}
-                  {event.actorName && <span className="text-muted-foreground"> · {event.actorName}</span>}
+                  {detail && <span className="text-muted-foreground">{detail}</span>}
+                  {event.actorName && <span className="text-muted-foreground">· {event.actorName}</span>}
                 </div>
                 <span className="text-muted-foreground shrink-0 text-xs">
                   {format(new Date(event.at), "d MMM, HH:mm")}

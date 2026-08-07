@@ -89,6 +89,44 @@ export async function listDatasets(companyId: string): Promise<DatasetSummary[]>
   }));
 }
 
+export interface OnboardingCandidate {
+  id: string;
+  label: string;
+  sourceName: string;
+  itemCount: number;
+}
+
+/**
+ * Datasets discovered but never actually synced — the onboarding wizard's
+ * step-1 picker. `lastSyncedAt IS NULL` is the signal, not `status`: every
+ * discovered dataset defaults to `status: "active"` (`enums.ts`), there's no
+ * separate "pending" state to key off of. Deliberately uncached — the
+ * wizard wants the exact-this-moment list, not up to a minute stale.
+ */
+export async function listOnboardingCandidates(companyId: string): Promise<OnboardingCandidate[]> {
+  const rows = await db()
+    .select({
+      id: schema.datasets.id,
+      name: schema.datasets.name,
+      title: schema.datasets.title,
+      externalId: schema.datasets.externalId,
+      itemCount: schema.datasets.itemCount,
+      sourceName: schema.sources.name,
+    })
+    .from(schema.datasets)
+    .innerJoin(schema.sources, eq(schema.sources.id, schema.datasets.sourceId))
+    .where(and(eq(schema.datasets.companyId, companyId), sql`${schema.datasets.lastSyncedAt} IS NULL`))
+    .orderBy(desc(schema.datasets.discoveredAt))
+    .limit(20);
+
+  return rows.map((row) => ({
+    id: row.id,
+    label: label(row.name, row.title, row.externalId),
+    sourceName: row.sourceName,
+    itemCount: row.itemCount,
+  }));
+}
+
 export async function getDatasetDetail(companyId: string, datasetId: string) {
   const [dataset] = await db()
     .select()

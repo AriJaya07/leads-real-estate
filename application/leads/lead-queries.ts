@@ -497,6 +497,23 @@ export async function getSimilarLeads(companyId: string, leadId: string, limit =
   );
 }
 
+/**
+ * "Top leads you haven't touched" for the weekly digest — same uncontacted
+ * definition as `getLeadStats`'s `uncontactedOver2h` tile (no
+ * `firstContactedAt` yet, created more than 2 hours ago), ranked by the same
+ * `priorityScore` formula every other lead view uses, not a bespoke sort.
+ */
+export async function getTopUncontactedLeads(companyId: string, limit = 5): Promise<LeadListItem[]> {
+  const where = and(
+    eq(schema.leads.companyId, companyId),
+    isNull(schema.leadStates.firstContactedAt),
+    sql`${schema.leads.createdAt} <= now() - interval '2 hours'`,
+    sql`(${schema.leadStates.status} IS NULL OR ${schema.leadStates.status}::text != ALL(${textArray([...TERMINAL_STATUSES])}))`,
+  );
+
+  return selectLeadRows(companyId, where, [desc(prioritySortExpression()), desc(schema.leads.latestAppearanceAt)], limit, 0);
+}
+
 export interface AlertableLead {
   id: string;
   name: string | null;

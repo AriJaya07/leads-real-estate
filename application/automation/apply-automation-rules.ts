@@ -52,6 +52,7 @@ export async function applyAutomationRules(companyId: string, leadIds: string[])
 
     const toHide: string[] = [];
     const toAssign = new Map<string, string>();
+    const assignRuleByLead = new Map<string, AutomationRuleRow>();
 
     for (const lead of leads) {
       const subject = toSubject(lead);
@@ -68,6 +69,7 @@ export async function applyAutomationRules(companyId: string, leadIds: string[])
       if (hideMatch) toHide.push(lead.id);
       if (assignMatch?.assigneeId && !assignedToByLead.get(lead.id)) {
         toAssign.set(lead.id, assignMatch.assigneeId);
+        assignRuleByLead.set(lead.id, assignMatch);
       }
     }
 
@@ -84,6 +86,16 @@ export async function applyAutomationRules(companyId: string, leadIds: string[])
         .update(schema.leadStates)
         .set({ assignedTo: userId, updatedAt: new Date() })
         .where(and(eq(schema.leadStates.leadId, leadId), isNull(schema.leadStates.assignedTo)));
+
+      const rule = assignRuleByLead.get(leadId);
+      await db()
+        .insert(schema.leadEvents)
+        .values({
+          companyId,
+          leadId,
+          type: "assigned",
+          payload: { assignedTo: userId, auto: true, ruleId: rule?.id, ruleName: rule?.name },
+        });
     }
     result.assigned = toAssign.size;
   } catch (error) {

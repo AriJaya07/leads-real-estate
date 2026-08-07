@@ -5,6 +5,7 @@ import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { setLocalStorageValue, useLocalStorageValue } from "@/hooks/use-local-storage-value";
+import { SourceOnboardingWizard } from "./source-onboarding-wizard";
 
 const DISMISSED_KEY = "dreamrue:onboarding-checklist:dismissed";
 
@@ -17,9 +18,12 @@ interface Step {
 
 /**
  * Dismissible first-login card pulling *live* completion state (source
- * connected? teammate invited?) rather than a static graphic — the two steps
- * deep-link to the already-built `/admin/collection` and `/admin/team`
- * pages instead of a new setup wizard.
+ * connected? teammate invited?) rather than a static graphic. "Source
+ * connected" opens the preview wizard in place — see
+ * `source-onboarding-wizard.tsx` for why it's a dataset picker, not a page
+ * navigation — and the wizard's own empty state still deep-links to
+ * `/admin/collection` for actually configuring a brand-new source. "Invite
+ * your team" stays a direct link; no preview step makes sense for it.
  */
 export function OnboardingChecklist({
   hasSource,
@@ -61,6 +65,8 @@ export function OnboardingChecklist({
               </span>
               {step.done ? (
                 <span className="text-muted-foreground line-through">{step.label}</span>
+              ) : step.label === "Source connected" ? (
+                <SourceOnboardingWizard />
               ) : (
                 <Button size="sm" variant="outline" render={<Link href={step.href} />}>
                   {step.cta}

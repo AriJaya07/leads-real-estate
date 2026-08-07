@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { updateTag } from "next/cache";
 import { after } from "next/server";
@@ -37,6 +37,28 @@ function invalidate(leadId: string) {
   updateTag(leadTag(leadId));
   updateTag(leadsTag());
 }
+
+/** Bulk-action counterpart to `ensureState` — one ownership check, one batched insert. */
+async function ensureStates(companyId: string, leadIds: string[]) {
+  const found = await db()
+    .select({ id: schema.leads.id })
+    .from(schema.leads)
+    .where(and(inArray(schema.leads.id, leadIds), eq(schema.leads.companyId, companyId)));
+  if (found.length !== leadIds.length) throw new ActionError("One or more leads were not found.");
+
+  await db()
+    .insert(schema.leadStates)
+    .values(leadIds.map((leadId) => ({ leadId, companyId })))
+    .onConflictDoNothing();
+}
+
+function invalidateMany(leadIds: string[]) {
+  for (const leadId of leadIds) updateTag(leadTag(leadId));
+  updateTag(leadsTag());
+}
+
+/** Caps how many rows one bulk action can touch — same safety-cap posture as auto-assign.ts's MAX_PER_SWEEP. */
+const bulkLeadIdsSchema = z.array(z.string().uuid()).min(1).max(200);
 
 export const setLeadStatus = authActionClient
   .inputSchema(z.object({ leadId: z.string().uuid(), status: z.enum(LEAD_STATUSES) }))
@@ -231,4 +253,142 @@ export const toggleBookmark = authActionClient
 
     invalidate(parsedInput.leadId);
     return { ok: true };
+  });
+
+/**
+ * Bulk counterparts to the single-lead actions above, for the inbox's
+ * multi-select toolbar. Each mirrors its singular sibling's semantics
+ * exactly (same status/dealClosedAt/contacted-clock rules) rather than
+ * reimplementing them, just applied to `leadIds` via `inArray` instead of a
+ * single `eq`. `LeadDetailSheet` keeps calling the singular actions — these
+ * are additive, not a replacement.
+ */
+export const bulkAssignLeads = authActionClient
+  .inputSchema(z.object({ leadIds: bulkLeadIdsSchema, userId: z.string().uuid().nullable() }))
+  .action(async ({ parsedInput, ctx }) => {
+    await ensureStates(ctx.user.companyId, parsedInput.leadIds);
+
+    if (parsedInput.userId) {
+      const [assignee] = await db()
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(and(eq(schema.users.id, parsedInput.userId), eq(schema.users.companyId, ctx.user.companyId)))
+        .limit(1);
+      if (!assignee) throw new ActionError("That teammate was not found.");
+    }
+
+    await db()
+      .update(schema.leadStates)
+      .set({ assignedTo: parsedInput.userId, updatedBy: ctx.user.userId, updatedAt: new Date() })
+      .where(inArray(schema.leadStates.leadId, parsedInput.leadIds));
+
+    await db()
+      .insert(schema.leadEvents)
+      .values(
+        parsedInput.leadIds.map((leadId) => ({
+          companyId: ctx.user.companyId,
+          leadId,
+          type: "assigned" as const,
+          actorId: ctx.user.userId,
+          payload: { assignedTo: parsedInput.userId },
+        })),
+      );
+
+    invalidateMany(parsedInput.leadIds);
+    return { ok: true, count: parsedInput.leadIds.length };
+  });
+
+export const bulkSetStatus = authActionClient
+  .inputSchema(z.object({ leadIds: bulkLeadIdsSchema, status: z.enum(LEAD_STATUSES) }))
+  .action(async ({ parsedInput, ctx }) => {
+    await ensureStates(ctx.user.companyId, parsedInput.leadIds);
+
+    await db()
+      .update(schema.leadStates)
+      .set({
+        status: parsedInput.status,
+        dealClosedAt: parsedInput.status === "closed" ? new Date() : sql`${schema.leadStates.dealClosedAt}`,
+        updatedBy: ctx.user.userId,
+        updatedAt: new Date(),
+      })
+      .where(inArray(schema.leadStates.leadId, parsedInput.leadIds));
+
+    await db()
+      .insert(schema.leadEvents)
+      .values(
+        parsedInput.leadIds.map((leadId) => ({
+          companyId: ctx.user.companyId,
+          leadId,
+          type: "status_changed" as const,
+          actorId: ctx.user.userId,
+          payload: { status: parsedInput.status },
+        })),
+      );
+
+    after(() => dispatchWebhooksForLeads(ctx.user.companyId, parsedInput.leadIds, "lead.status_changed"));
+
+    invalidateMany(parsedInput.leadIds);
+    return { ok: true, count: parsedInput.leadIds.length };
+  });
+
+export const bulkMarkContacted = authActionClient
+  .inputSchema(
+    z.object({
+      leadIds: bulkLeadIdsSchema,
+      channel: z.enum(["whatsapp", "phone", "email", "post"]).default("whatsapp"),
+    }),
+  )
+  .action(async ({ parsedInput, ctx }) => {
+    await ensureStates(ctx.user.companyId, parsedInput.leadIds);
+
+    await db()
+      .update(schema.leadStates)
+      .set({
+        firstContactedAt: sql`coalesce(${schema.leadStates.firstContactedAt}, now())`,
+        status: sql`CASE WHEN ${schema.leadStates.status} = 'new' THEN 'contacted'::lead_status ELSE ${schema.leadStates.status} END`,
+        assignedTo: sql`coalesce(${schema.leadStates.assignedTo}, ${ctx.user.userId}::uuid)`,
+        updatedBy: ctx.user.userId,
+        updatedAt: new Date(),
+      })
+      .where(inArray(schema.leadStates.leadId, parsedInput.leadIds));
+
+    await db()
+      .insert(schema.leadEvents)
+      .values(
+        parsedInput.leadIds.map((leadId) => ({
+          companyId: ctx.user.companyId,
+          leadId,
+          type: "contacted" as const,
+          actorId: ctx.user.userId,
+          payload: { channel: parsedInput.channel },
+        })),
+      );
+
+    invalidateMany(parsedInput.leadIds);
+    return { ok: true, count: parsedInput.leadIds.length };
+  });
+
+/**
+ * Adds one tag to every selected lead's existing set — append, not replace
+ * (unlike `setLeadTags`'s "send the final state" shape, which only makes
+ * sense for a single lead's own full tag list). `array_append` + a
+ * `SELECT DISTINCT` dedupe keeps this idempotent per lead.
+ */
+export const bulkAddTag = authActionClient
+  .inputSchema(z.object({ leadIds: bulkLeadIdsSchema, tag: z.string().trim().min(1).max(40) }))
+  .action(async ({ parsedInput, ctx }) => {
+    await ensureStates(ctx.user.companyId, parsedInput.leadIds);
+    const tag = parsedInput.tag.toLowerCase();
+
+    await db()
+      .update(schema.leadStates)
+      .set({
+        tags: sql`(SELECT array_agg(DISTINCT t) FROM unnest(array_append(${schema.leadStates.tags}, ${tag})) AS t)`,
+        updatedBy: ctx.user.userId,
+        updatedAt: new Date(),
+      })
+      .where(inArray(schema.leadStates.leadId, parsedInput.leadIds));
+
+    invalidateMany(parsedInput.leadIds);
+    return { ok: true, count: parsedInput.leadIds.length };
   });

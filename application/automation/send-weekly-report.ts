@@ -1,9 +1,10 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
-import { getLeadStats, getLeadTrend, type LeadStats } from "@/application/leads/lead-queries";
+import { getLeadStats, getLeadTrend, getTopUncontactedLeads, type LeadStats, type LeadListItem } from "@/application/leads/lead-queries";
 import { getRevenueSummary, type RevenueSummary } from "@/application/analytics/revenue";
 import { getConversionFunnel, type ConversionFunnel } from "@/application/analytics/conversion";
+import { primaryLeadScore } from "@/domain/lead/ranking";
 import { getNotifier } from "@/infrastructure/notifiers/registry";
 import type { NotificationMessage } from "@/domain/sync/ports";
 import { formatCount, formatMinutes, formatUsd } from "@/shared/format";
@@ -19,6 +20,7 @@ function renderWeeklyReport(
   newThisWeek: number,
   revenue: RevenueSummary,
   funnel: ConversionFunnel,
+  topUncontacted: LeadListItem[],
   recipient: string,
 ): NotificationMessage {
   const rows: [string, string][] = [
@@ -28,6 +30,8 @@ function renderWeeklyReport(
     ["Unassigned", formatCount(stats.unassigned)],
     ["Contactable", formatCount(stats.contactable)],
     ["High potential", formatCount(stats.highPotential)],
+    ["High score (80+)", formatCount(stats.highScore)],
+    ["Uncontacted 2h+", formatCount(stats.uncontactedOver2h)],
     [
       "Median time to first touch",
       stats.medianTimeToFirstTouchMinutes === null ? "no data yet" : formatMinutes(stats.medianTimeToFirstTouchMinutes),
@@ -36,10 +40,21 @@ function renderWeeklyReport(
     ["Overall conversion to closed", `${funnel.overallConversionPct.toFixed(1)}%`],
   ];
 
+  const uncontactedLines = topUncontacted.map((lead) => {
+    const name = lead.name || lead.username || "Unnamed lead";
+    const where = lead.locations[0] ?? lead.location ?? "";
+    return { name, where, score: primaryLeadScore(lead) };
+  });
+
   const subject = `Weekly lead report — ${formatCount(newThisWeek)} new this week`;
-  const text = [`${companyName} — weekly lead report`, "", ...rows.map(([label, value]) => `${label}: ${value}`)].join(
-    "\n",
-  );
+  const text = [
+    `${companyName} — weekly lead report`,
+    "",
+    ...rows.map(([label, value]) => `${label}: ${value}`),
+    ...(uncontactedLines.length > 0
+      ? ["", "Top leads you haven't touched:", ...uncontactedLines.map((l) => `- ${l.name} — ${l.where} (${l.score})`)]
+      : []),
+  ].join("\n");
   const html = `
     <div style="max-width:480px;margin:0 auto;font-family:system-ui,sans-serif;">
       <h2 style="font:600 18px/1.3 system-ui,sans-serif;margin:0 0 12px;">${companyName} — weekly lead report</h2>
@@ -54,6 +69,23 @@ function renderWeeklyReport(
           )
           .join("")}
       </table>
+      ${
+        uncontactedLines.length > 0
+          ? `
+      <h3 style="font:600 13px/1.3 system-ui,sans-serif;margin:20px 0 8px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">Top leads you haven't touched</h3>
+      <table style="width:100%;border-collapse:collapse;font:400 14px/1.6 system-ui,sans-serif;">
+        ${uncontactedLines
+          .map(
+            (l) => `
+          <tr>
+            <td style="padding:6px 0;border-bottom:1px solid #e6e6e6;">${l.name}${l.where ? ` — ${l.where}` : ""}</td>
+            <td style="padding:6px 0;border-bottom:1px solid #e6e6e6;text-align:right;font-weight:600;">${l.score}</td>
+          </tr>`,
+          )
+          .join("")}
+      </table>`
+          : ""
+      }
     </div>`;
 
   return { to: recipient, subject, text, html };
@@ -71,12 +103,25 @@ export interface WeeklyReportResult {
  */
 export async function sendWeeklyReport(companyId: string, now: Date = new Date()): Promise<WeeklyReportResult> {
   const settings = await getAutomationSettings(companyId);
-  if (!settings.weeklyReportEnabled || settings.weeklyReportRecipients.length === 0) {
+  if (!settings.weeklyReportEnabled) {
     return { sent: false };
   }
   if (settings.weeklyReportLastSentAt && now.getTime() - settings.weeklyReportLastSentAt.getTime() < WEEK_MS) {
     return { sent: false };
   }
+
+  // No admin-typed list yet — fall back to every owner/admin on the company,
+  // so enabling the digest actually reaches someone instead of silently
+  // sending nothing until an admin fills in `weeklyReportRecipients` by hand.
+  let recipients = settings.weeklyReportRecipients;
+  if (recipients.length === 0) {
+    const owners = await db()
+      .select({ email: schema.users.email })
+      .from(schema.users)
+      .where(and(eq(schema.users.companyId, companyId), inArray(schema.users.role, ["owner", "admin"])));
+    recipients = owners.map((u) => u.email);
+  }
+  if (recipients.length === 0) return { sent: false };
 
   const [company] = await db()
     .select({ name: schema.companies.name })
@@ -84,7 +129,7 @@ export async function sendWeeklyReport(companyId: string, now: Date = new Date()
     .where(eq(schema.companies.id, companyId))
     .limit(1);
 
-  const [stats, trend, revenue, funnel] = await Promise.all([
+  const [stats, trend, revenue, funnel, topUncontacted] = await Promise.all([
     getLeadStats(companyId),
     getLeadTrend(companyId, undefined, 7),
     // `days: 7` here, despite the field names reading "...Last30Days" — the
@@ -93,13 +138,14 @@ export async function sendWeeklyReport(companyId: string, now: Date = new Date()
     // window, and the value itself is always exactly the requested `days`.
     getRevenueSummary(companyId, 7),
     getConversionFunnel(companyId),
+    getTopUncontactedLeads(companyId, 5),
   ]);
   const newThisWeek = trend.reduce((sum, point) => sum + point.total, 0);
 
   const notifier = getNotifier("email");
   let anySent = false;
-  for (const recipient of settings.weeklyReportRecipients) {
-    const message = renderWeeklyReport(company?.name ?? "DreamRue", stats, newThisWeek, revenue, funnel, recipient);
+  for (const recipient of recipients) {
+    const message = renderWeeklyReport(company?.name ?? "DreamRue", stats, newThisWeek, revenue, funnel, topUncontacted, recipient);
     const result = await notifier.send(message);
     if (result.ok) anySent = true;
     else log.warn("weekly report send failed", { companyId, recipient, error: result.error });
