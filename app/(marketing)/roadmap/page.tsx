@@ -40,7 +40,7 @@ const NEXT_UP = [
 
 export default function RoadmapPage() {
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-14 px-4 py-16 sm:px-6">
+    <div className="mx-auto flex max-w-6xl flex-col gap-14 px-4 py-16 sm:px-6">
       <div className="mx-auto max-w-2xl text-center">
         <Eyebrow>Roadmap</Eyebrow>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">What&rsquo;s shipped, what&rsquo;s next</h1>

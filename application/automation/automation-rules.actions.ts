@@ -42,9 +42,28 @@ function toPredicate(input: z.infer<typeof automationRuleInput>) {
   return buildAllOfPredicate(conditions);
 }
 
+/**
+ * Same tenant check `assignLead` (`application/leads/lead.actions.ts`) does
+ * before writing `assignedTo` — this is a second, independent writer of that
+ * same column via `applyAutomationRules`, and without this check a UUID for
+ * a user in a different company would silently become a valid assignee.
+ */
+async function assertAssigneeInCompany(assigneeId: string, companyId: string): Promise<void> {
+  const [assignee] = await db()
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(and(eq(schema.users.id, assigneeId), eq(schema.users.companyId, companyId)))
+    .limit(1);
+  if (!assignee) throw new ActionError("That teammate was not found.");
+}
+
 export const createAutomationRule = adminActionClient
   .inputSchema(automationRuleInput)
   .action(async ({ parsedInput, ctx }) => {
+    if (parsedInput.action === "assign" && parsedInput.assigneeId) {
+      await assertAssigneeInCompany(parsedInput.assigneeId, ctx.user.companyId);
+    }
+
     const [created] = await db()
       .insert(schema.automationRules)
       .values({
@@ -65,6 +84,10 @@ export const createAutomationRule = adminActionClient
 export const updateAutomationRule = adminActionClient
   .inputSchema(automationRuleInput.extend({ id: z.string().uuid() }))
   .action(async ({ parsedInput, ctx }) => {
+    if (parsedInput.action === "assign" && parsedInput.assigneeId) {
+      await assertAssigneeInCompany(parsedInput.assigneeId, ctx.user.companyId);
+    }
+
     const [updated] = await db()
       .update(schema.automationRules)
       .set({

@@ -10,6 +10,7 @@ import {
   DropdownMenuLinkItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { MarketingMobileNav } from "@/components/marketing/marketing-mobile-nav";
 
 const PRODUCT_LINKS = [
   { href: "/features", label: "Features" },
@@ -70,13 +71,14 @@ export function MarketingHeader() {
           </Link>
         </nav>
 
-        <div className="flex items-center gap-4 text-sm">
-          <Link href="/login" className="text-muted-foreground hover:text-foreground">
+        <div className="flex items-center gap-2 text-sm sm:gap-4">
+          <Link href="/login" className="text-muted-foreground hover:text-foreground hidden md:inline-block">
             Sign in
           </Link>
           <Button render={<Link href="/signup" />} size="sm">
             Get started
           </Button>
+          <MarketingMobileNav productLinks={PRODUCT_LINKS} resourceLinks={RESOURCE_LINKS} />
         </div>
       </div>
     </header>

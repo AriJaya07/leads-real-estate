@@ -6,6 +6,7 @@ import { updateTag } from "next/cache";
 import { db, schema } from "@/infrastructure/db/client";
 import { adminActionClient } from "@/application/safe-action";
 import { automationSettingsTag } from "@/application/cache-tags";
+import { isPrivateOrLoopbackWebhookUrl } from "@/domain/http/webhook-url";
 
 const settingsInput = z
   .object({
@@ -28,6 +29,10 @@ const settingsInput = z
   })
   .refine((v) => !v.webhookEnabled || Boolean(v.webhookUrl && /^https?:\/\//.test(v.webhookUrl)), {
     message: "Enter a valid http(s) webhook URL to enable webhooks.",
+    path: ["webhookUrl"],
+  })
+  .refine((v) => !v.webhookEnabled || !v.webhookUrl || !isPrivateOrLoopbackWebhookUrl(v.webhookUrl), {
+    message: "Webhook URL can't point at a private, loopback, or link-local address.",
     path: ["webhookUrl"],
   });
 

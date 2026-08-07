@@ -41,15 +41,18 @@ export function toSubject(lead: AlertableLead): Record<string, unknown> {
 }
 
 /**
- * Stable per (rule, lead, channel). The unique index on this column is what
- * stops a mapping-profile backfill from re-alerting the entire history —
- * without it, reprocessing would page the whole sales team about months-old posts.
- * Also what makes it safe to pass the same person id through this function
- * repeatedly across many appearances: the second and subsequent calls for an
- * already-alerted person just get suppressed here.
+ * Stable per (rule, lead, channel, recipient). The unique index on this
+ * column is what stops a mapping-profile backfill from re-alerting the
+ * entire history — without it, reprocessing would page the whole sales team
+ * about months-old posts. Also what makes it safe to pass the same person id
+ * through this function repeatedly across many appearances: the second and
+ * subsequent calls for an already-alerted person just get suppressed here.
+ * `recipient` must be part of the key — a rule with multiple recipients on
+ * the same channel would otherwise collide on the first recipient's row and
+ * silently drop every other recipient for that lead, forever.
  */
-function dedupeKey(ruleId: string, leadId: string, channel: string): string {
-  return createHash("sha256").update(`${ruleId}:${leadId}:${channel}`).digest("hex").slice(0, 40);
+function dedupeKey(ruleId: string, leadId: string, channel: string, recipient: string): string {
+  return createHash("sha256").update(`${ruleId}:${leadId}:${channel}:${recipient}`).digest("hex").slice(0, 40);
 }
 
 async function claimDelivery(
@@ -67,7 +70,7 @@ async function claimDelivery(
       leadId,
       channel: channel as "email" | "whatsapp" | "slack" | "inapp",
       status: "pending",
-      dedupeKey: dedupeKey(rule.id, leadId, channel),
+      dedupeKey: dedupeKey(rule.id, leadId, channel, recipient),
       recipient,
     })
     .onConflictDoNothing({ target: schema.alertDeliveries.dedupeKey })

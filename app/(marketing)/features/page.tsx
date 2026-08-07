@@ -61,7 +61,7 @@ const INTENT_BADGES = [
 
 export default function FeaturesPage() {
   return (
-    <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
       <div className="mb-12 max-w-2xl">
         <Eyebrow>Features</Eyebrow>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">

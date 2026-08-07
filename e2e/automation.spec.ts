@@ -7,9 +7,13 @@ test.describe("automation settings", () => {
     await page.goto("/admin/automation");
     await expect(page.getByRole("heading", { name: "Automation" })).toBeVisible();
 
-    await page.getByLabel("Automatic lead assignment").check();
-
-    await page.getByLabel("Stale lead reminders").check();
+    // Base UI's Switch syncs a visually-hidden native checkbox for form
+    // semantics — `.getByLabel(...).check()` targets that hidden input
+    // directly, which never satisfies Playwright's viewport-actionability
+    // check. Clicking the accessible switch role is the same action a real
+    // user takes.
+    await page.getByRole("switch", { name: "Automatic lead assignment" }).click();
+    await page.getByRole("switch", { name: "Stale lead reminders" }).click();
     await page.getByLabel("Remind after (days inactive)").fill("5");
     await page.getByLabel("Recipients (comma-separated)").first().fill("manager@example.com");
 
@@ -27,7 +31,7 @@ test.describe("automation settings", () => {
     await loginAsAdmin(page);
     await page.goto("/admin/automation");
 
-    await page.getByLabel("Outbound webhook").check();
+    await page.getByRole("switch", { name: "Outbound webhook" }).click();
     await page.getByLabel("Endpoint URL").fill("https://hooks.example.com/dreamrue");
     await page.getByRole("button", { name: "Generate" }).click();
 

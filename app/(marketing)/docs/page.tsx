@@ -183,7 +183,7 @@ function ConceptSection({ concept }: { concept: Concept }) {
 
 export default function DocsPage() {
   return (
-    <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
       <div className="mb-12">
         <Eyebrow>Documentation</Eyebrow>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">How DreamRue works</h1>

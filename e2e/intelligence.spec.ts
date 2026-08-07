@@ -22,10 +22,12 @@ test.describe("intelligence dashboard", () => {
     const buyerTile = page.getByText("Buyer leads", { exact: true }).locator("..");
     await expect(buyerTile.getByText("1", { exact: true })).toBeVisible();
 
-    await expect(page.getByRole("heading", { name: "New leads, last 30 days" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "New leads, per day" })).toBeVisible();
 
     await expect(page.getByRole("heading", { name: "Lead type" })).toBeVisible();
-    await expect(page.getByText("Buyer", { exact: true })).toBeVisible();
+    // Scoped to this card — "Buyer" also appears as an intent badge elsewhere on the page.
+    const leadTypeCard = page.getByRole("heading", { name: "Lead type" }).locator("..");
+    await expect(leadTypeCard.getByText("Buyer", { exact: true })).toBeVisible();
 
     expect(errors).toEqual([]);
   });

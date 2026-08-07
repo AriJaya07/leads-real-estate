@@ -368,7 +368,17 @@ async function selectLeadRows(
     })
     .from(schema.leads)
     .leftJoin(schema.leadStates, eq(schema.leadStates.leadId, schema.leads.id))
-    .leftJoin(schema.users, eq(schema.users.id, schema.leadStates.assignedTo))
+    // The `companyId` condition here is defense-in-depth, not a correctness
+    // fix for known-good data — `assignedTo` can only ever point to a
+    // same-company user (`assignLead`'s and `automation-rules.actions.ts`'s
+    // own tenant checks enforce that). Making it explicit means this join
+    // still can't leak a foreign user's name across tenants even if that
+    // invariant were ever broken elsewhere — same reasoning as
+    // `application/analytics/agent-performance.ts`'s identical join.
+    .leftJoin(
+      schema.users,
+      and(eq(schema.users.id, schema.leadStates.assignedTo), eq(schema.users.companyId, companyId)),
+    )
     .leftJoin(primary, eq(primary.leadId, schema.leads.id))
     .where(where)
     .orderBy(...orderByExprs)

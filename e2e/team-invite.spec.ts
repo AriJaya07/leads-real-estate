@@ -18,9 +18,10 @@ test.describe("team invites", () => {
     await page.goto("/admin/team");
 
     const email = `invitee-${Date.now()}@example.com`;
+    await page.getByRole("button", { name: "Invite", exact: true }).click();
     await page.getByLabel("Email", { exact: true }).fill(email);
     await page.getByRole("combobox", { name: "Role", exact: true }).selectOption("manager");
-    await page.getByRole("button", { name: "Invite", exact: true }).click();
+    await page.getByRole("button", { name: "Send invite" }).click();
 
     // No RESEND_API_KEY in .env.e2e — the link is shown on screen instead of emailed.
     const linkCode = page.locator("code");
@@ -50,9 +51,11 @@ test.describe("team invites", () => {
     // The invite is now gone from the pending list on the owner's side —
     // the email still appears once, as a real roster member, so check the
     // pending-invite-specific action rather than the email text itself.
+    // Member rows are plain divs, not a real <table> — ".divide-y > div" is
+    // the roster's own direct-child structure (team-table.tsx), not a role.
     await page.reload();
     await expect(page.getByRole("button", { name: `Cancel invite for ${email}` })).toHaveCount(0);
-    await expect(page.getByRole("row", { name: new RegExp(email) })).toBeVisible();
+    await expect(page.locator(".divide-y > div").filter({ hasText: email })).toBeVisible();
   });
 
   test("owner can revoke a pending invite before it's accepted", async ({ page }) => {
@@ -61,8 +64,9 @@ test.describe("team invites", () => {
     await page.goto("/admin/team");
 
     const email = `revoke-me-${Date.now()}@example.com`;
-    await page.getByLabel("Email", { exact: true }).fill(email);
     await page.getByRole("button", { name: "Invite", exact: true }).click();
+    await page.getByLabel("Email", { exact: true }).fill(email);
+    await page.getByRole("button", { name: "Send invite" }).click();
     // Wait for the create to actually finish (link notice appears) before reloading.
     await expect(page.locator("code")).toBeVisible();
     await page.reload();
@@ -85,8 +89,9 @@ test.describe("role management", () => {
     await page.goto("/admin/team");
 
     const email = `promote-${Date.now()}@example.com`;
-    await page.getByLabel("Email", { exact: true }).fill(email);
     await page.getByRole("button", { name: "Invite", exact: true }).click();
+    await page.getByLabel("Email", { exact: true }).fill(email);
+    await page.getByRole("button", { name: "Send invite" }).click();
     const inviteUrl = await page.locator("code").textContent();
 
     // A separate browser context — the member is a different user and must
@@ -100,7 +105,7 @@ test.describe("role management", () => {
     await expect(memberPage.getByRole("link", { name: "Datasets" })).toHaveCount(0);
 
     await page.reload();
-    const row = page.getByRole("row", { name: new RegExp(email) });
+    const row = page.locator(".divide-y > div").filter({ hasText: email });
     await row.getByRole("combobox").selectOption("manager");
     await expect(row.getByRole("combobox")).toHaveValue("manager");
 

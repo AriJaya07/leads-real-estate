@@ -14,10 +14,10 @@ test.describe("signup", () => {
     const uniqueSuffix = Date.now();
     await page.goto("/signup");
 
-    await page.getByLabel("Company name").fill(`Signup Test Co ${uniqueSuffix}`);
-    await page.getByLabel("Your email").fill(`signup-test-${uniqueSuffix}@example.com`);
+    await page.getByLabel("Agency name").fill(`Signup Test Co ${uniqueSuffix}`);
+    await page.getByLabel("Work email").fill(`signup-test-${uniqueSuffix}@example.com`);
     await page.getByLabel("Password").fill("signup-test-password-123");
-    await page.getByRole("button", { name: "Create company" }).click();
+    await page.getByRole("button", { name: "Create workspace" }).click();
 
     await expect(page).toHaveURL(/\/leads$/);
     await expect(page.getByRole("heading", { name: "Lead inbox" })).toBeVisible();
@@ -31,18 +31,18 @@ test.describe("signup", () => {
     const email = `signup-dupe-${uniqueSuffix}@example.com`;
 
     await page.goto("/signup");
-    await page.getByLabel("Company name").fill(`Dupe Test Co ${uniqueSuffix}`);
-    await page.getByLabel("Your email").fill(email);
+    await page.getByLabel("Agency name").fill(`Dupe Test Co ${uniqueSuffix}`);
+    await page.getByLabel("Work email").fill(email);
     await page.getByLabel("Password").fill("signup-test-password-123");
-    await page.getByRole("button", { name: "Create company" }).click();
+    await page.getByRole("button", { name: "Create workspace" }).click();
     await expect(page).toHaveURL(/\/leads$/);
 
     await page.context().clearCookies();
     await page.goto("/signup");
-    await page.getByLabel("Company name").fill(`Dupe Test Co Two ${uniqueSuffix}`);
-    await page.getByLabel("Your email").fill(email);
+    await page.getByLabel("Agency name").fill(`Dupe Test Co Two ${uniqueSuffix}`);
+    await page.getByLabel("Work email").fill(email);
     await page.getByLabel("Password").fill("another-password-456");
-    await page.getByRole("button", { name: "Create company" }).click();
+    await page.getByRole("button", { name: "Create workspace" }).click();
 
     await expect(page.getByText("That email already has an account.")).toBeVisible();
     await expect(page).toHaveURL(/\/signup$/);

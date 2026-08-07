@@ -90,6 +90,34 @@ describe("dispatchAlertsForLeads", () => {
     expect(deliveries).toHaveLength(1);
   });
 
+  it("delivers to every recipient of a multi-recipient rule, not just the first", async () => {
+    const companyId = await seedCompany();
+    const leadId = await seedMatchingLead(companyId);
+    const [rule] = await db()
+      .insert(schema.alertRules)
+      .values({
+        companyId,
+        name: `dispatch-test-multi-recipient-${crypto.randomUUID()}`,
+        enabled: true,
+        predicate: { all: [{ field: "leadType", op: "eq", value: "buyer" }] },
+        channels: ["email"],
+        recipients: ["agent-a@example.com", "agent-b@example.com"],
+      })
+      .returning();
+
+    const result = await dispatchAlertsForLeads(companyId, [leadId]);
+
+    // Regression: the dedupeKey used to omit `recipient`, so the second
+    // recipient on the same rule/lead/channel collided with the first and was
+    // silently suppressed forever.
+    expect(result.suppressed).toBe(0);
+    const deliveries = await db()
+      .select({ recipient: schema.alertDeliveries.recipient })
+      .from(schema.alertDeliveries)
+      .where(eq(schema.alertDeliveries.alertRuleId, rule.id));
+    expect(deliveries.map((d) => d.recipient).sort()).toEqual(["agent-a@example.com", "agent-b@example.com"]);
+  });
+
   it("does not match a disabled rule", async () => {
     const companyId = await seedCompany();
     const leadId = await seedMatchingLead(companyId);

@@ -14,7 +14,6 @@ test.describe("billing", () => {
     await expect(page).toHaveURL(/\/leads$/);
 
     await page.goto("/admin/billing");
-    await expect(page.getByText("Current plan: E2E Company Plan")).toBeVisible();
     await expect(page.getByText("Seats", { exact: true })).toBeVisible();
     await expect(page.getByText("Storage", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Current plan: E2E Company Plan" })).toBeDisabled();
@@ -31,7 +30,7 @@ test.describe("billing", () => {
 
     await expect(page.getByText(/reduce usage first/i)).toBeVisible();
     // Still on the original plan — the switch must not have gone through.
-    await expect(page.getByText("Current plan: E2E Company Plan")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Current plan: E2E Company Plan" })).toBeVisible();
   });
 
   test("owner switches to a compatible plan and the change takes effect immediately", async ({ page }) => {
@@ -43,7 +42,7 @@ test.describe("billing", () => {
     await expect(page.getByText(/Switched to the E2E Roomy Plan plan/i)).toBeVisible();
 
     await page.reload();
-    await expect(page.getByText("Current plan: E2E Roomy Plan")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Current plan: E2E Roomy Plan" })).toBeVisible();
   });
 
   test("a non-owner (admin/manager/member) cannot reach /admin/billing", async ({ page }) => {

@@ -126,6 +126,7 @@ test.describe("session revocation", () => {
 
     // Change the password on device A only.
     await pageA.goto("/account");
+    await pageA.getByRole("tab", { name: "Security" }).click();
     await pageA.getByLabel("Current password").fill(E2E_REVOCATION_PASSWORD);
     await pageA.getByLabel("New password").fill(E2E_REVOCATION_NEW_PASSWORD);
     await pageA.getByRole("button", { name: "Change password" }).click();

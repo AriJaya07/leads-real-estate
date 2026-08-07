@@ -22,28 +22,30 @@ const POSTS = [
  */
 export default function BlogPage() {
   return (
-    <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6">
-      <Eyebrow>Blog</Eyebrow>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">From the field</h1>
+    <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+      <div className="mx-auto max-w-4xl">
+        <Eyebrow>Blog</Eyebrow>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">From the field</h1>
 
-      <div className="border-border bg-card mt-10 overflow-hidden rounded-2xl border">
-        <div className="bg-surface-alt flex h-48 items-center justify-center">
-          <span className="text-muted-foreground text-xs">Lead article image · 1200×630</span>
-        </div>
-        <div className="p-6">
-          <p className="text-brand font-mono text-xs tracking-wide">{LEAD_POST.tag}</p>
-          <h2 className="mt-2 text-xl font-semibold tracking-tight">{LEAD_POST.title}</h2>
-          <p className="text-muted-foreground mt-2 max-w-xl text-sm">{LEAD_POST.description}</p>
-        </div>
-      </div>
-
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
-        {POSTS.map((post) => (
-          <div key={post.title} className="border-border rounded-xl border p-5">
-            <p className="text-muted-foreground font-mono text-xs tracking-wide">{post.tag}</p>
-            <h3 className="mt-2 text-base font-medium">{post.title}</h3>
+        <div className="border-border bg-card mt-10 overflow-hidden rounded-2xl border">
+          <div className="bg-surface-alt flex h-48 items-center justify-center">
+            <span className="text-muted-foreground text-xs">Lead article image · 1200×630</span>
           </div>
-        ))}
+          <div className="p-6">
+            <p className="text-brand font-mono text-xs tracking-wide">{LEAD_POST.tag}</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight">{LEAD_POST.title}</h2>
+            <p className="text-muted-foreground mt-2 max-w-xl text-sm">{LEAD_POST.description}</p>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {POSTS.map((post) => (
+            <div key={post.title} className="border-border rounded-xl border p-5">
+              <p className="text-muted-foreground font-mono text-xs tracking-wide">{post.tag}</p>
+              <h3 className="mt-2 text-base font-medium">{post.title}</h3>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

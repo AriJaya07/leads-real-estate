@@ -9,8 +9,8 @@ test.describe("not-found", () => {
     await page.goto("/this-route-does-not-exist");
 
     await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Go to inbox" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Go to inbox" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
     expect(errors).toEqual([]);
   });
 });
