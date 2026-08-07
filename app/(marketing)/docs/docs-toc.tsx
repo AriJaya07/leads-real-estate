@@ -36,7 +36,7 @@ const DOCS_NAV = [
 
 export function DocsNav({ active }: { active: string }) {
   return (
-    <nav aria-label="Docs" className="hidden shrink-0 lg:block lg:w-[200px]">
+    <nav aria-label="Docs" className="sticky top-24 hidden shrink-0 self-start lg:block lg:w-[200px]">
       {DOCS_NAV.map((group) => (
         <div key={group.heading} className="mb-6">
           <div className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-wider uppercase">
@@ -89,7 +89,7 @@ export function DocsToc({ entries }: { entries: readonly TocEntry[] }) {
   }, [entries]);
 
   return (
-    <nav className="sticky top-24 hidden shrink-0 lg:block lg:w-48" aria-label="On this page">
+    <nav className="sticky top-24 hidden shrink-0 self-start lg:block lg:w-48" aria-label="On this page">
       <p className="text-muted-foreground mb-3 text-xs font-semibold tracking-wide uppercase">On this page</p>
       <ul className="border-border flex flex-col gap-1 border-l">
         {entries.map((entry) => (
