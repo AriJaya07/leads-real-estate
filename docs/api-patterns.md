@@ -170,9 +170,34 @@ export async function GET(request: Request) {
 
 Deliberately **not** gated on `mustChangePassword` — these are read-only, and blocking
 reads while a temporary password is pending has no security rationale (contrast with
-server actions, where `authActionClient` blocks writes for exactly that flag). Deliberately
-**not** a generic `/api/v1/*` REST surface either: if a real second consumer shows up
-(mobile app, partner integration), design that surface then — don't retrofit these.
+server actions, where `authActionClient` blocks writes for exactly that flag). These
+stay session-cookie-only, distinct from the bearer-token public API below — a browser
+tab and an external API consumer are different callers even when they end up running
+the same query.
+
+### Public API (`/api/v1/*`)
+
+| Route | Method | Auth | Backs |
+| --- | --- | --- | --- |
+| `/api/v1/leads` | GET | `Authorization: Bearer drk_live_…` (`authenticateApiKey`) | `/docs/api`'s documented Leads endpoint |
+
+The one real second consumer this codebase's "don't retrofit a generic REST surface
+ahead of demand" rule was waiting for — see `/docs/api` for the documented contract.
+Auth is `application/api-keys/authenticate.ts::authenticateApiKey`, a hash-equality
+lookup against `api_keys.keyHash` (sha256, not `secretsMatch()` — that helper compares
+a provided value against *one* known secret, e.g. the Apify webhook; this looks a
+provided key up among many via an indexed query instead). Rate limiting is
+`application/api-keys/rate-limiter.ts::checkApiRateLimit`, enforced per plan
+(`plans.apiRateLimitPerMinute`/`apiRateLimitBurst`, `null` = unlimited) via fixed
+60s/10s window counters (`api_key_rate_counters`) — same atomic-upsert idiom as
+`application/billing/usage.ts`'s monthly counters, just second-granularity. Returns
+the identical `LeadListItem` shape the in-app inbox gets — no separate, trimmed public
+representation of a lead. Key issuance/revocation is `/admin/api-keys`
+(`application/api-keys/api-key.actions.ts`).
+
+Two webhook events — `lead.matched`, `alert.fired` — extend the *existing*
+`application/automation/webhook-dispatch.ts` one-URL-per-company system rather than
+introducing a separate per-key subscription mechanism; see that file for the event list.
 
 ## Error handling conventions
 

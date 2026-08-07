@@ -63,6 +63,9 @@ export const plans = pgTable("plans", {
   maxAlertRules: integer("max_alert_rules"),
   /** Apify HTTP requests per month — separate from the data-fetch limit above (API-call volume, not record volume). */
   maxApifyRequestsPerMonth: integer("max_apify_requests_per_month").notNull(),
+  /** `null` = unlimited/custom (Enterprise) — same convention as `maxSeats`/`maxAlertRules`. Enforced by `application/api-keys/rate-limiter.ts`, displayed on `/docs/api`. */
+  apiRateLimitPerMinute: integer("api_rate_limit_per_minute"),
+  apiRateLimitBurst: integer("api_rate_limit_burst"),
   maxStorageKb: integer("max_storage_kb").notNull(),
   dataRetentionDays: integer("data_retention_days").notNull(),
   features: jsonb("features").$type<PlanFeatures>().notNull().default(NO_PLAN_FEATURES),

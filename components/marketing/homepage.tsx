@@ -50,7 +50,7 @@ export const FAQS = [
   },
   {
     q: "Is there an API?",
-    a: "Planned, not shipped. We'd rather tell you that than sell you a page of endpoints that don't exist yet.",
+    a: "Yes — a read-only leads API and outbound webhooks, both bearer-token authenticated. See the API reference for the full contract.",
   },
 ] as const;
 

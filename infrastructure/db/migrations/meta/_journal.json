@@ -127,6 +127,13 @@
       "when": 1786002763984,
       "tag": "0017_outgoing_domino",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786069223726,
+      "tag": "0018_dapper_sprite",
+      "breakpoints": true
     }
   ]
 }

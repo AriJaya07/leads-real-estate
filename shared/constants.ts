@@ -88,3 +88,8 @@ export const SCRAPE_PLATFORMS = ["instagram", "facebook", "linkedin", "other"] a
  * should ever hit it. See application/leads/ai-assist.actions.ts.
  */
 export const MAX_AI_REQUESTS_PER_MONTH = 300;
+
+/** The "burst" half of a plan's two-window API rate limit — see application/api-keys/rate-limiter.ts. */
+export const API_KEY_RATE_LIMIT_BURST_WINDOW_SECONDS = 10;
+/** How long a rate-limit counter window is kept once past — see application/maintenance/prune-old-rows.ts. */
+export const API_KEY_RATE_COUNTER_RETENTION_HOURS = 1;

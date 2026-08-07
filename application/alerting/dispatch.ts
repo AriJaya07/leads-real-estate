@@ -5,6 +5,7 @@ import { db, schema } from "@/infrastructure/db/client";
 import { evaluatePredicate } from "@/domain/alerting/predicate";
 import { getNotifier } from "@/infrastructure/notifiers/registry";
 import { getLeadsForDigest, type AlertableLead } from "@/application/leads/lead-queries";
+import { projectLeadForWebhook, sendCompanyWebhook } from "@/application/automation/webhook-dispatch";
 import type { AlertRuleRow } from "@/infrastructure/db/schema/alerts";
 import { renderLeadDigest } from "./digest-template";
 
@@ -112,6 +113,15 @@ export async function dispatchAlertsForLeads(companyId: string, leadIds: string[
     result.matched += matched.length;
     result.ruleNames.push(rule.name);
 
+    // No dedup here (unlike `alertDeliveries` below, keyed per rule+lead+channel) —
+    // a lead re-matching across repeated sync batches refires this every time,
+    // same best-effort, no-delivery-guarantee posture `sendWebhook` already has.
+    await sendCompanyWebhook(companyId, "lead.matched", {
+      ruleId: rule.id,
+      ruleName: rule.name,
+      leads: matched.map(projectLeadForWebhook),
+    });
+
     for (const channel of rule.channels) {
       for (const recipient of rule.recipients) {
         const claimed: { deliveryId: string; lead: AlertableLead }[] = [];
@@ -158,6 +168,14 @@ export async function dispatchAlertsForLeads(companyId: string, leadIds: string[
                 payload: { rule: rule.name, channel, recipient },
               })),
             );
+
+          await sendCompanyWebhook(companyId, "alert.fired", {
+            ruleId: rule.id,
+            ruleName: rule.name,
+            channel,
+            recipient,
+            leads: claimed.map((c) => projectLeadForWebhook(c.lead)),
+          });
         }
       }
     }

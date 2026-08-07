@@ -23,6 +23,9 @@ export interface CompanyPlan {
   maxStorageKb: number;
   dataRetentionDays: number;
   features: PlanFeatures;
+  /** `null` = unlimited/custom — see `application/api-keys/rate-limiter.ts`. */
+  apiRateLimitPerMinute: number | null;
+  apiRateLimitBurst: number | null;
 }
 
 /**
@@ -44,6 +47,8 @@ export async function getCompanyPlan(companyId: string): Promise<CompanyPlan | n
       maxStorageKb: schema.plans.maxStorageKb,
       dataRetentionDays: schema.plans.dataRetentionDays,
       features: schema.plans.features,
+      apiRateLimitPerMinute: schema.plans.apiRateLimitPerMinute,
+      apiRateLimitBurst: schema.plans.apiRateLimitBurst,
     })
     .from(schema.subscriptions)
     .innerJoin(schema.plans, eq(schema.plans.id, schema.subscriptions.planId))

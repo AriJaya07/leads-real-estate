@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { requireAdmin } from "@/application/auth/current-user";
 import { getAutomationSettings } from "@/application/automation/automation-settings.queries";
 import { listRecentWebhookDeliveries } from "@/application/automation/webhook-deliveries.queries";
+import { listApiKeys } from "@/application/api-keys/api-key-queries";
 import { PageHeader } from "@/components/common/page-header";
 import { ApiKeysManager } from "@/features/api-keys/components/api-keys-manager";
 import { WebhookDeliveriesCard } from "@/features/automation/components/webhook-deliveries-card";
@@ -18,6 +19,11 @@ async function Webhooks({ companyId }: { companyId: string }) {
   return <WebhookDeliveriesCard webhookUrl={settings.webhookEnabled ? settings.webhookUrl : null} deliveries={deliveries} />;
 }
 
+async function Keys({ companyId }: { companyId: string }) {
+  const keys = await listApiKeys(companyId);
+  return <ApiKeysManager keys={keys} />;
+}
+
 export default async function ApiKeysPage() {
   const user = await requireAdmin();
 
@@ -25,9 +31,12 @@ export default async function ApiKeysPage() {
     <div className="flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="API keys"
-        description="Bearer tokens for the leads API and webhooks. Planned — not yet available; keys created here won't authenticate real requests until the API ships."
+        description="Bearer tokens for the leads API — see /docs/api for the full contract."
       />
-      <ApiKeysManager />
+
+      <Suspense fallback={null}>
+        <Keys companyId={user.companyId} />
+      </Suspense>
 
       <Suspense fallback={null}>
         <Webhooks companyId={user.companyId} />

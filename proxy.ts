@@ -31,7 +31,7 @@ export const config = {
     "/leads/:path*",
     "/pipeline/:path*",
     "/intelligence/:path*",
-    "/reports/:path*",
+    "/analytics/:path*",
     "/admin/:path*",
     "/account/:path*",
   ],

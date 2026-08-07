@@ -133,6 +133,8 @@ try {
       maxApifyRequestsPerMonth: 5_000,
       maxStorageKb: 500 * 1024,
       dataRetentionDays: 90,
+      apiRateLimitPerMinute: 20,
+      apiRateLimitBurst: 40,
       features: {
         whatsappAlerts: false,
         llmShadowClassify: false,
@@ -154,6 +156,8 @@ try {
       maxApifyRequestsPerMonth: 25_000,
       maxStorageKb: 5 * 1024 * 1024,
       dataRetentionDays: 180,
+      apiRateLimitPerMinute: 60,
+      apiRateLimitBurst: 120,
       features: {
         whatsappAlerts: true,
         llmShadowClassify: false,
@@ -175,6 +179,8 @@ try {
       maxApifyRequestsPerMonth: 100_000,
       maxStorageKb: 25 * 1024 * 1024,
       dataRetentionDays: 365,
+      apiRateLimitPerMinute: 180,
+      apiRateLimitBurst: 360,
       features: {
         whatsappAlerts: true,
         llmShadowClassify: true,
@@ -198,6 +204,8 @@ try {
       maxApifyRequestsPerMonth: 500_000,
       maxStorageKb: 100 * 1024 * 1024,
       dataRetentionDays: 730,
+      apiRateLimitPerMinute: null,
+      apiRateLimitBurst: null,
       features: {
         whatsappAlerts: true,
         llmShadowClassify: true,
@@ -216,13 +224,14 @@ try {
       INSERT INTO plans (
         name, monthly_price_usd, annual_price_usd, max_seats, max_datasets,
         max_raw_records_per_month, max_leads_per_month, max_alert_rules,
-        max_apify_requests_per_month, max_storage_kb, data_retention_days, features
+        max_apify_requests_per_month, max_storage_kb, data_retention_days, features,
+        api_rate_limit_per_minute, api_rate_limit_burst
       )
       VALUES (
         ${p.name}, ${p.monthlyPriceUsd}, ${p.annualPriceUsd}, ${p.maxSeats}, ${p.maxDatasets},
         ${p.maxRawRecordsPerMonth}, ${p.maxLeadsPerMonth}, ${p.maxAlertRules},
         ${p.maxApifyRequestsPerMonth}, ${p.maxStorageKb}, ${p.dataRetentionDays},
-        ${sql.json(p.features)}
+        ${sql.json(p.features)}, ${p.apiRateLimitPerMinute}, ${p.apiRateLimitBurst}
       )
     `;
   }

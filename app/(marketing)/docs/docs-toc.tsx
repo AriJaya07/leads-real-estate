@@ -7,10 +7,11 @@ import { cn } from "@/lib/utils";
 /**
  * Left nav for the docs shell, shared by `/docs`, `/docs/guide` and
  * `/docs/api` so the three pages read as one section instead of three
- * one-off layouts. Only items with a real route become links — the rest
- * (Quickstart, Rate limits, Leads endpoint, Webhooks, Security practices)
- * are honest placeholders for pages that don't exist yet, same pattern as
- * the "planned" tags on `/pricing` and `/docs/api`.
+ * one-off layouts. The four API items below anchor-link into `/docs/api`'s
+ * own sections (same single-page scroll-spy pattern as that page's
+ * `DocsToc`) rather than being separate routes — there's one API doc, not
+ * five. `Quickstart` has no route yet — still an honest placeholder, same
+ * pattern as the "planned" tags on `/pricing`.
  */
 const DOCS_NAV = [
   {
@@ -25,10 +26,10 @@ const DOCS_NAV = [
     heading: "API",
     items: [
       { label: "Authentication", href: "/docs/api" },
-      { label: "Rate limits" },
-      { label: "Leads endpoint" },
-      { label: "Webhooks" },
-      { label: "Security practices" },
+      { label: "Rate limits", href: "/docs/api#rate-limits" },
+      { label: "Leads endpoint", href: "/docs/api#leads-endpoint" },
+      { label: "Webhooks", href: "/docs/api#webhooks" },
+      { label: "Security practices", href: "/docs/api#security-practices" },
     ],
   },
 ] as const;

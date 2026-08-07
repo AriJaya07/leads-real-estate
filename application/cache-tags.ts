@@ -49,3 +49,7 @@ export function automationSettingsTag(companyId: string): string {
 export function automationRulesTag(): string {
   return "automation-rules";
 }
+
+export function apiKeysTag(companyId: string): string {
+  return `api-keys:${companyId}`;
+}
