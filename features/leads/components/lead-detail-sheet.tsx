@@ -751,7 +751,7 @@ function AffiliatedCompanies({ leadId }: { leadId: string }) {
     <section>
       <h3 className="mb-1.5 text-sm font-semibold">Affiliated companies</h3>
       {affiliations.length > 0 && (
-        <ul className="mb-2 flex flex-wrap gap-1.5">
+        <ul className="mb-2 flex flex-wrap gap-1.5" data-testid="affiliated-companies-list">
           {affiliations.map((affiliation) => (
             <li
               key={affiliation.id}

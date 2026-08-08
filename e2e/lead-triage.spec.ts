@@ -88,10 +88,13 @@ test.describe("lead triage", () => {
     const companyName = `Smoke Test Villas ${Date.now()}`;
     await page.getByPlaceholder("Search or add a company…").fill(companyName);
     await page.getByRole("button", { name: "Link" }).click();
-    // Scoped to the affiliation badge (a <li>), not just any text match — the
-    // success toast's own "Linked to {companyName}" wording also contains the
-    // company name, so a bare `getByText(companyName)` is ambiguous whenever
-    // the toast hasn't faded yet by assertion time.
-    await expect(page.getByRole("listitem").filter({ hasText: companyName })).toBeVisible();
+    // Scoped to the affiliated-companies list container, not just any text
+    // match or ARIA role — the success toast's own "Linked to {companyName}"
+    // wording also contains the company name (and Sonner's toast markup also
+    // satisfies getByRole("listitem"), which is what made that scoping not
+    // actually unambiguous), so both a bare `getByText` and a bare
+    // `getByRole("listitem")` are flaky here depending on whether the toast
+    // has faded by assertion time.
+    await expect(page.getByTestId("affiliated-companies-list").getByText(companyName)).toBeVisible();
   });
 });
