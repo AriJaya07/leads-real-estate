@@ -1,0 +1,169 @@
+{
+  "name": "11 - Leads Export Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "d670b1c2-e859-4364-8576-91a2b3c4d5e6",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.DREAMRUE_APP_URL }}/api/v1/leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "status", "value": "new" },
+            { "name": "sort", "value": "priority" },
+            { "name": "page", "value": "1" },
+            { "name": "pageSize", "value": "50" }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e781c2d3-f960-4475-9687-a2b3c4d5e6f7",
+      "name": "GET /api/v1/leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "DreamRue API Key (Leads Export)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json[\"page\"][\"items\"].length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "f892d3e4-0a71-4586-a798-b3c4d5e6f708",
+      "name": "Has new leads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "page.items",
+        "options": {}
+      },
+      "id": "09a3e4f5-1b82-4697-b809-c4d5e6f70819",
+      "name": "Split Out Leads",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "1ab4f506-2c93-47a8-c910-d5e6f708192a",
+      "name": "Export Destination (extend me)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "2bc50617-3da4-48b9-da21-e6f708192a3b",
+      "name": "Nothing New",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          { "node": "GET /api/v1/leads", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "GET /api/v1/leads": {
+      "main": [
+        [
+          { "node": "Has new leads?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Has new leads?": {
+      "main": [
+        [
+          { "node": "Split Out Leads", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Nothing New", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Split Out Leads": {
+      "main": [
+        [
+          { "node": "Export Destination (extend me)", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "_Shared Error Handler",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Read-side counterpart to workflow 10 — pulls processed leads back out via the app's ALREADY-BUILT public API (app/api/v1/leads/route.ts) instead of waiting on a push event, for a CRM/spreadsheet/dialer that only knows how to poll. No app-side code changes needed. Requires an API key issued at /admin/api-keys (drk_live_... prefix, shown once) pasted into a Header Auth credential named 'DreamRue API Key (Leads Export)' — header name Authorization, value 'Bearer drk_live_...'. Query params are the same LeadFilters shape the in-app inbox uses (application/leads/filters.schema.ts) — adjust status/leadType/locations/etc. to taste. Rate-limited per the company's plan (plans.apiRateLimitPerMinute/apiRateLimitBurst); a 429 is not handled specially here beyond the node's own retry — for strict Retry-After honoring, replace the built-in retry with an IF(statusCode===429) -> Wait(Retry-After) -> loop pattern. Dedupe downstream on each item's 'id' (a stable person UUID) — re-pulling the same page is always safe to upsert-by-id."
+  },
+  "id": "3cd61728-4eb5-49ca-eb32-f708192a3b4c",
+  "tags": [
+    { "name": "dreamrue" },
+    { "name": "n8n-integration-plan" }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "page": {
+    "items": [
+      {
+        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "name": "Marta Kowalska",
+        "leadType": "buyer",
+        "status": "new",
+        "buyerScore": 92,
+        "confidenceScore": 88,
+        "propertyTypes": ["villa"],
+        "locations": ["Canggu"],
+        "budgetMin": 200000,
+        "budgetMax": 250000,
+        "budgetCurrency": "USD",
+        "contact": { "phone": null, "whatsapp": "+6281234567890", "email": null },
+        "assignedTo": null,
+        "assignedToName": null,
+        "createdAt": "2026-08-07T22:03:11.000Z",
+        "latestAppearanceAt": "2026-08-08T01:40:02.000Z"
+      }
+    ],
+    "total": 184,
+    "totalPages": 4,
+    "page": 1,
+    "pageSize": 50
+  }
+}
