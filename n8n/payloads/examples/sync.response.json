@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "processed": 2,
+  "outcomes": [
+    { "datasetId": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "status": "succeeded", "itemsSeen": 240, "itemsNew": 18, "leadsCreated": 11, "syncRunId": "b3f1c2a0-1234-4abc-9def-0123456789ab" },
+    { "datasetId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "status": "skipped", "reason": "no change since last poll", "itemsSeen": 0, "itemsNew": 0, "leadsCreated": 0 }
+  ]
+}

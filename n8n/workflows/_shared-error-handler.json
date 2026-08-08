@@ -1,0 +1,114 @@
+{
+  "name": "_Shared Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "8bbb57ce-7fb3-4f1b-a77b-df3cca8f2150",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "workflowName",
+              "value": "={{ $json[\"workflow\"][\"name\"] }}"
+            },
+            {
+              "name": "executionId",
+              "value": "={{ $json[\"execution\"][\"id\"] }}"
+            },
+            {
+              "name": "errorMessage",
+              "value": "={{ $json[\"execution\"][\"error\"][\"message\"] }}"
+            },
+            {
+              "name": "lastNode",
+              "value": "={{ $json[\"execution\"][\"lastNodeExecuted\"] }}"
+            },
+            {
+              "name": "occurredAt",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "id": "75789ed5-fc76-4723-87b4-ca382a33b378",
+      "name": "Extract Error Info",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_ALERT_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"text\": \"DreamRue n8n workflow failed: *\" + $json.workflowName + \"*\\nNode: \" + $json.lastNode + \"\\nError: \" + $json.errorMessage + \"\\nExecution: \" + $json.executionId } }}",
+        "options": {}
+      },
+      "id": "b72d6849-1442-453a-b619-0275019067cd",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Error Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Error Info": {
+      "main": [
+        [
+          {
+            "node": "Post to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Set as the 'Error Workflow' in every other workflow's Settings tab. Not triggered manually."
+  },
+  "id": "51e8b52e-667f-4fc8-b45d-043c6b063f46",
+  "tags": [
+    {
+      "name": "dreamrue"
+    },
+    {
+      "name": "n8n-integration-plan"
+    }
+  ]
+}

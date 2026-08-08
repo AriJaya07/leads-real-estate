@@ -1,0 +1,13 @@
+{
+  "companyName": "Bukit Villa Partners",
+  "recipient": "owner@bukitvilla.co",
+  "newThisWeek": 184,
+  "stats": {
+    "total": 612,
+    "buyers": 240,
+    "hotBuyers": 31,
+    "highScore": 31,
+    "uncontactedOver2h": 6,
+    "medianTimeToFirstTouchMinutes": 14.3
+  }
+}

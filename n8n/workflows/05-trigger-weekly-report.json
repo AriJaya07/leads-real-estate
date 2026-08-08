@@ -1,0 +1,167 @@
+{
+  "name": "Trigger - Weekly Report Sweep",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "d6e07cc1-15b5-4cb2-9f2c-95a5d0ea45cd",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DREAMRUE_APP_URL }}/api/trigger/weekly-report",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "03ccb42a-c03c-4cb0-bbbd-93958e32beeb",
+      "name": "POST /api/trigger/weekly-report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "DreamRue Trigger Secret"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json[\"ok\"] }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "12940813-6268-40ca-9e61-d269df6ddca5",
+      "name": "ok === true?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "6289e4c6-9896-4a4b-8fea-ab47adabcb71",
+      "name": "Success",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "e950a804-7a34-433a-a380-c52c6ee5ce87",
+      "name": "Business Failure (ok:false / partial failures)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "POST /api/trigger/weekly-report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /api/trigger/weekly-report": {
+      "main": [
+        [
+          {
+            "node": "ok === true?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ok === true?": {
+      "main": [
+        [
+          {
+            "node": "Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Business Failure (ok:false / partial failures)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "_Shared Error Handler",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Calls sendWeeklyReport() per enabled company via POST /api/trigger/weekly-report. Server-side self-throttled to 7d/company \u2014 daily cron here is intentional, not a bug."
+  },
+  "id": "10f3a15d-fcb4-4dba-b051-210abca72485",
+  "tags": [
+    {
+      "name": "dreamrue"
+    },
+    {
+      "name": "n8n-integration-plan"
+    }
+  ]
+}

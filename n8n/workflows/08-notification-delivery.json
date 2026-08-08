@@ -1,0 +1,288 @@
+{
+  "name": "08 - Notification Delivery",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dreamrue-notify",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "8f60fbad-90fe-46a6-b6b2-ed7185a7c7f2",
+      "name": "Webhook - Notify",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        400
+      ],
+      "webhookId": "84edaacd-9433-406a-a3b3-97648cfa99b9"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst secret = $env.DREAMRUE_NOTIFY_SHARED_SECRET;\nconst provided = $input.first().json.headers['x-dreamrue-notify-secret'];\nif (!provided || provided !== secret) {\n  throw new Error('Invalid or missing x-dreamrue-notify-secret header');\n}\nreturn $input.all();"
+      },
+      "id": "0cac872f-0b4d-4693-b31e-e2c20870de02",
+      "name": "Verify Shared Secret",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json[\"body\"][\"channel\"] }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "email"
+            },
+            {
+              "value2": "whatsapp"
+            },
+            {
+              "value2": "slack"
+            }
+          ]
+        },
+        "fallbackOutput": 3
+      },
+      "id": "752cef90-c7db-43e6-b204-e9c9a304adfd",
+      "name": "Route by Channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"from\": $env.DREAMRUE_NOTIFY_FROM_EMAIL, \"to\": [$json.body.to], \"subject\": $json.body.subject, \"html\": $json.body.html, \"text\": $json.body.text } }}",
+        "options": {}
+      },
+      "id": "0c69cad7-e976-4477-9a39-f878f79c87ef",
+      "name": "Send Email (Resend)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Resend API Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://graph.facebook.com/v20.0/' + $env.WHATSAPP_PHONE_NUMBER_ID + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"messaging_product\": \"whatsapp\", \"to\": $json.body.to, \"type\": \"text\", \"text\": { \"body\": $json.body.text } } }}",
+        "options": {}
+      },
+      "id": "4b35c9c7-9058-4bf8-8362-18cbf293abff",
+      "name": "Send WhatsApp (Cloud API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        400
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "WhatsApp Cloud API Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.body.slackWebhookUrl || $env.SLACK_ALERT_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"text\": $json.body.text } }}",
+        "options": {}
+      },
+      "id": "05c0e881-b2fa-4830-af78-e05a3a2328ea",
+      "name": "Send Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        580
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {},
+      "id": "37f426de-8891-4a07-a4d4-e1a26ef1ce6a",
+      "name": "Unknown Channel (fallback)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"received\": true, \"channel\": $json.body.channel } }}"
+      },
+      "id": "8aeb326a-04d3-46e2-8774-5da025887bf8",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Notify": {
+      "main": [
+        [
+          {
+            "node": "Verify Shared Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Shared Secret": {
+      "main": [
+        [
+          {
+            "node": "Route by Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Channel": {
+      "main": [
+        [
+          {
+            "node": "Send Email (Resend)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send WhatsApp (Cloud API)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown Channel (fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email (Resend)": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp (Cloud API)": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unknown Channel (fallback)": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "_Shared Error Handler",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Webhook-triggered. Replaces infrastructure/notifiers/{email,whatsapp,slack}.notifier.ts's actual send mechanics \u2014 the app still decides WHO/WHEN (dedup, throttle, alert rules), this workflow only does the physical delivery for whichever channel is requested. Requires: a new infrastructure/notifiers/n8n.notifier.ts adapter in the app (see plan doc)."
+  },
+  "id": "500bebcc-8e81-4848-ba73-6ebfcd8e6ff0",
+  "tags": [
+    {
+      "name": "dreamrue"
+    },
+    {
+      "name": "n8n-integration-plan"
+    }
+  ]
+}

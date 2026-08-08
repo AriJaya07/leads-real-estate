@@ -1,0 +1,167 @@
+{
+  "name": "Trigger - FX Refresh",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "2d0d8916-a7af-48e8-8c4d-21fc952fc527",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DREAMRUE_APP_URL }}/api/trigger/fx",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "99a70c60-2c6e-49da-a299-cdf008342de8",
+      "name": "POST /api/trigger/fx",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "DreamRue Trigger Secret"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json[\"ok\"] }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "db1852f3-d2e3-4f59-a2fa-00aae135d9b6",
+      "name": "ok === true?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "d7b40886-ee51-4486-b1b0-cdf9b1436edc",
+      "name": "Success",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0fcbdd3a-b0ee-4fa2-bf08-1af113b9b3cd",
+      "name": "Business Failure (ok:false / partial failures)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "POST /api/trigger/fx",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /api/trigger/fx": {
+      "main": [
+        [
+          {
+            "node": "ok === true?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ok === true?": {
+      "main": [
+        [
+          {
+            "node": "Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Business Failure (ok:false / partial failures)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "_Shared Error Handler",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Calls refreshFxRates() via POST /api/trigger/fx. Degrades gracefully server-side on failure."
+  },
+  "id": "2f78e21f-85c3-4bb2-8221-460cd0c8db6c",
+  "tags": [
+    {
+      "name": "dreamrue"
+    },
+    {
+      "name": "n8n-integration-plan"
+    }
+  ]
+}

@@ -1,0 +1,167 @@
+{
+  "name": "Trigger - Retention Prune",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "4f5eaa57-c0bc-4b16-b9df-16ab69b82d3c",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DREAMRUE_APP_URL }}/api/trigger/retention",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "b0efa965-437e-43f5-9547-cecc04fc4dd9",
+      "name": "POST /api/trigger/retention",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "DreamRue Trigger Secret"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json[\"ok\"] }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "8018a1ea-1ab7-435f-a0b1-2f555b42e299",
+      "name": "ok === true?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "4b38efff-341f-4c06-a1fc-542b39e77da5",
+      "name": "Success",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "fca6a25b-93ea-4421-a9fa-3fd1d096e32a",
+      "name": "Business Failure (ok:false / partial failures)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "POST /api/trigger/retention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /api/trigger/retention": {
+      "main": [
+        [
+          {
+            "node": "ok === true?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ok === true?": {
+      "main": [
+        [
+          {
+            "node": "Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Business Failure (ok:false / partial failures)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "_Shared Error Handler",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Calls pruneOldRows() via POST /api/trigger/retention. Weekly, Sunday 03:00."
+  },
+  "id": "a018a461-ae5f-4db8-90c2-f94bab4caa20",
+  "tags": [
+    {
+      "name": "dreamrue"
+    },
+    {
+      "name": "n8n-integration-plan"
+    }
+  ]
+}
