@@ -1,4 +1,4 @@
-# DreamRue Lead Intelligence Platform
+# AveronAi Lead Intelligence Platform
 
 Finds people who intend to buy property in Bali, ranks them by how real that intent is,
 and gets a salesperson in front of them fast enough to be the first responder.
@@ -16,7 +16,7 @@ The architecture is in [docs/architecture.md](docs/architecture.md), business te
 
 ```bash
 # 1. Postgres (any Postgres 14+; Neon and Supabase both work)
-createdb dreamrue_dev
+createdb averonai_dev
 
 # 2. Configure
 nano .env                 # fill in DATABASE_URL, APIFY_API_TOKEN, and the secrets — see docs/environment.md

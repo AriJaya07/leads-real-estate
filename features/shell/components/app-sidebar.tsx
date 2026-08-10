@@ -12,7 +12,7 @@ export function AppSidebar({ role, navExtras }: { role: Role; navExtras: NavExtr
     >
       <div className="flex h-14 items-center gap-2 px-4">
         <BrandMark className="size-6" />
-        <span className="text-sm font-semibold tracking-tight">DreamRue</span>
+        <span className="text-sm font-semibold tracking-tight">AveronAi</span>
       </div>
 
       <NavContent role={role} navExtras={navExtras} />

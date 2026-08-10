@@ -70,7 +70,7 @@ export const requestPasswordReset = actionClient.inputSchema(requestSchema).acti
       const url = `${serverEnv().APP_URL}/reset-password/${token}`;
       await getNotifier("email").send({
         to: user.email,
-        subject: "Reset your DreamRue password",
+        subject: "Reset your AveronAi password",
         text: `Reset your password: ${url}\n\nThis link expires in ${RESET_TTL_MINUTES} minutes. If you didn't request this, ignore this email.`,
         html: `<p><a href="${url}">Reset your password</a></p><p>This link expires in ${RESET_TTL_MINUTES} minutes. If you didn't request this, ignore this email.</p>`,
       });

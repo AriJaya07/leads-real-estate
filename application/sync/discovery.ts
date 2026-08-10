@@ -15,6 +15,8 @@ export interface DiscoveryResult {
   added: number;
   updated: number;
   missing: number;
+  /** A dataset another company already owns — see the cross-company collision guard below. Always 0 in the common case. */
+  collisions: number;
   errors: string[];
 }
 
@@ -47,7 +49,7 @@ function matchesFilters(dataset: RemoteDataset, config: SourceConfig): boolean {
  * deploy.
  */
 async function discoverDatasets(sourceId: string): Promise<DiscoveryResult> {
-  const result: DiscoveryResult = { sourceId, seen: 0, added: 0, updated: 0, missing: 0, errors: [] };
+  const result: DiscoveryResult = { sourceId, seen: 0, added: 0, updated: 0, missing: 0, collisions: 0, errors: [] };
 
   const [source] = await db()
     .select()
@@ -90,6 +92,28 @@ async function discoverDatasets(sourceId: string): Promise<DiscoveryResult> {
   const byExternalId = new Map(existing.map((d) => [d.externalId, d]));
   const now = new Date();
 
+  // Cross-company collision guard — see docs/multi-tenant-apify-isolation-plan.md
+  // §2. `namePatterns`/`producerIds` (matchesFilters, above) is an allowlist an
+  // admin can misconfigure (or leave empty); this is the hard backstop, checked
+  // once per discovery pass rather than trusting the filter alone. One shared
+  // Apify account serves every company, so nothing *structurally* stops two
+  // companies' filters from both matching the same upstream dataset — if that
+  // ever happens, the dataset must be claimed by whichever company already has
+  // it, never silently duplicated into a second company's `datasets` row (which
+  // would mean the same scraped leads syncing into two different tenants'
+  // inboxes). Read-only, comparison-only: this never reads or returns anything
+  // about the other company's data beyond the fact that it already claimed this
+  // one externalId — the one deliberate cross-tenant read in this codebase.
+  const candidateExternalIds = tracked.map((d) => d.externalId).filter((id) => !byExternalId.has(id));
+  const claimedElsewhere = new Map<string, string>();
+  if (candidateExternalIds.length > 0) {
+    const rows = await db()
+      .select({ externalId: schema.datasets.externalId, companyId: schema.datasets.companyId })
+      .from(schema.datasets)
+      .where(and(inArray(schema.datasets.externalId, candidateExternalIds), sql`${schema.datasets.companyId} != ${companyId}`));
+    for (const row of rows) claimedElsewhere.set(row.externalId, row.companyId);
+  }
+
   // Checked once up front, tracked as a running count through the loop —
   // discovery can add several new datasets in one pass, and this runs
   // unattended (system trigger or admin click), so a limit hit degrades to
@@ -108,6 +132,22 @@ async function discoverDatasets(sourceId: string): Promise<DiscoveryResult> {
     const current = byExternalId.get(dataset.externalId);
 
     if (!current) {
+      const claimedBy = claimedElsewhere.get(dataset.externalId);
+      if (claimedBy) {
+        result.collisions += 1;
+        log.warn("cross-tenant dataset collision — skipped, not registered", {
+          scope: "discovery:cross-tenant-collision",
+          externalId: dataset.externalId,
+          thisCompanyId: companyId,
+          alreadyClaimedByCompanyId: claimedBy,
+          namePatterns: config.namePatterns,
+        });
+        result.errors.push(
+          `Dataset "${dataset.externalId}" already belongs to another company — skipped. Check this source's namePatterns for overlap.`,
+        );
+        continue;
+      }
+
       if (plan && activeDatasetCount >= plan.maxDatasets) {
         log.warn("dataset limit reached, skipping new dataset", {
           companyId,

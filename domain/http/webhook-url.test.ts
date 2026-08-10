@@ -3,7 +3,7 @@ import { isPrivateOrLoopbackWebhookUrl } from "./webhook-url";
 
 describe("isPrivateOrLoopbackWebhookUrl", () => {
   it("allows an ordinary public https URL", () => {
-    expect(isPrivateOrLoopbackWebhookUrl("https://hooks.example.com/dreamrue")).toBe(false);
+    expect(isPrivateOrLoopbackWebhookUrl("https://hooks.example.com/averonai")).toBe(false);
   });
 
   it("rejects localhost and its subdomains", () => {

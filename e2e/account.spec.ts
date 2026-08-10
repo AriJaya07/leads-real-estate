@@ -10,7 +10,7 @@ import {
   E2E_TEMP_PASSWORD_TEMP,
 } from "./global-setup";
 
-const SESSION_COOKIE_NAME = "dreamrue_session";
+const SESSION_COOKIE_NAME = "averonai_session";
 
 async function login(page: import("@playwright/test").Page, email: string, password: string) {
   await page.goto("/login");

@@ -115,7 +115,7 @@ export function Homepage() {
               wins the deal.
             </h1>
             <p className="text-muted-foreground mt-4 max-w-xl text-lg text-balance">
-              DreamRue finds people announcing they&apos;re looking for property in Bali — and puts them in front of
+              AveronAi finds people announcing they&apos;re looking for property in Bali — and puts them in front of
               your agents before your competitors have finished scrolling.
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-3">

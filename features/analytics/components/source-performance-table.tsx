@@ -21,7 +21,7 @@ export function SourcePerformanceTable({ rows }: { rows: SourcePerformance[] }) 
       { header: "Revenue (USD)", value: (row) => row.closedRevenueUsd },
       { header: "Conversion %", value: (row) => row.conversionPct.toFixed(1) },
     ]);
-    downloadCsv(`dreamrue-source-performance-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+    downloadCsv(`averonai-source-performance-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
 
   if (rows.length === 0) {

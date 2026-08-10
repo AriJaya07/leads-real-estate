@@ -10,7 +10,7 @@ export default function AboutPage() {
         <Eyebrow>About</Eyebrow>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Built inside an agency, not a lab</h1>
         <p className="text-muted-foreground mt-4 text-balance">
-          DreamRue started as the internal tool one Bali agency used to stop losing leads to whoever refreshed
+          AveronAi started as the internal tool one Bali agency used to stop losing leads to whoever refreshed
           Facebook first. It&rsquo;s now sold to the agencies it used to compete with.
         </p>
 

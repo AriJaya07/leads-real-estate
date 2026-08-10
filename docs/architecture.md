@@ -1,6 +1,6 @@
 # Architecture
 
-DreamRue finds people who intend to buy property in Bali, ranks them by how real that
+AveronAi finds people who intend to buy property in Bali, ranks them by how real that
 intent is, and gets a salesperson in front of them fast. n8n and Apify produce raw
 datasets; the platform discovers, ingests, normalizes, scores and serves them without
 ever hardcoding a dataset ID or requiring a deploy to add a source. A "lead" is a

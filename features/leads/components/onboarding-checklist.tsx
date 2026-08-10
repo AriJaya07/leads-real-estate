@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { setLocalStorageValue, useLocalStorageValue } from "@/hooks/use-local-storage-value";
 import { SourceOnboardingWizard } from "./source-onboarding-wizard";
 
-const DISMISSED_KEY = "dreamrue:onboarding-checklist:dismissed";
+const DISMISSED_KEY = "averonai:onboarding-checklist:dismissed";
 
 interface Step {
   label: string;

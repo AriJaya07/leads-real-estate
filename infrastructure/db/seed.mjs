@@ -2,7 +2,7 @@
  * Seeds the baseline configuration that used to live in environment variables:
  * the Apify source, a known-good mapping profile for the Facebook Groups actor,
  * the CEO's priority alert rule, and location aliases — for one company,
- * given by name (default "DreamRue", matching the pre-multi-tenant instance).
+ * given by name (default "AveronAi", matching the pre-multi-tenant instance).
  * `mapping_profiles`/`location_aliases`/`fx_rates` stay global — see
  * docs/saas-platform-architecture.md.
  *
@@ -18,7 +18,7 @@ if (!url) {
   process.exit(1);
 }
 
-const companyName = process.argv[2] ?? process.env.SEED_COMPANY_NAME ?? "DreamRue";
+const companyName = process.argv[2] ?? process.env.SEED_COMPANY_NAME ?? "AveronAi";
 const companySlug = companyName
   .toLowerCase()
   .replace(/[^a-z0-9]+/g, "-")
@@ -258,13 +258,19 @@ try {
     ON CONFLICT (company_id) DO NOTHING
   `;
 
+  // One shared Apify account serves every company in this platform — the
+  // namePatterns prefix is what stops two companies' sources both claiming
+  // the same upstream dataset. See domain/dataset/tenant-naming.ts (this is
+  // a plain .mjs script with no build step, so the prefix format is
+  // duplicated here rather than imported — keep the two in sync by hand if
+  // the convention ever changes) and docs/multi-tenant-apify-isolation-plan.md.
+  const tenantDatasetPrefix = `averonai-${companySlug}-`;
+
   const [source] = await sql`
     INSERT INTO sources (company_id, kind, name, config, enabled)
     VALUES (${company.id}, 'apify', 'Apify — Facebook & Instagram scrapers', ${sql.json({
-      // Empty filters = track everything the token can see. Narrow this from the
-      // admin UI once the useful producers are known.
       producerIds: [],
-      namePatterns: [],
+      namePatterns: [tenantDatasetPrefix],
       minItemCount: 1,
     })}, true)
     ON CONFLICT (company_id, kind, name) DO UPDATE SET updated_at = now()

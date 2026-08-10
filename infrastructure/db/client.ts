@@ -9,18 +9,18 @@ import * as schema from "./schema";
  * open a new pool on every reload and exhaust Postgres connections.
  */
 const globalForDb = globalThis as unknown as {
-  __dreamrueSql?: ReturnType<typeof postgres>;
+  __averonaiSql?: ReturnType<typeof postgres>;
 };
 
 function getSql() {
-  if (!globalForDb.__dreamrueSql) {
-    globalForDb.__dreamrueSql = postgres(serverEnv().DATABASE_URL, {
+  if (!globalForDb.__averonaiSql) {
+    globalForDb.__averonaiSql = postgres(serverEnv().DATABASE_URL, {
       max: 10,
       idle_timeout: 20,
       prepare: false,
     });
   }
-  return globalForDb.__dreamrueSql;
+  return globalForDb.__averonaiSql;
 }
 
 export type Database = ReturnType<typeof drizzle<typeof schema>>;

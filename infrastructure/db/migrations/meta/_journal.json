@@ -134,6 +134,13 @@
       "when": 1786069223726,
       "tag": "0018_dapper_sprite",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786346434322,
+      "tag": "0019_lush_iron_monger",
+      "breakpoints": true
     }
   ]
 }

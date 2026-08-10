@@ -1,12 +1,12 @@
 # Deployment Guide
 
-How to take DreamRue from a clean checkout to a running production instance. This is
+How to take AveronAi from a clean checkout to a running production instance. This is
 the step-by-step runbook; see [environment.md](environment.md) for the full reference
 on every environment variable and third-party service, and
 [production-checklist.md](production-checklist.md) for what to verify before calling
 a deploy launch-ready.
 
-DreamRue is a standard Next.js 16 App Router app with Cache Components enabled, a
+AveronAi is a standard Next.js 16 App Router app with Cache Components enabled, a
 single Postgres database, and no other required infrastructure (no Redis, no queue,
 no separate worker process). It runs on any Node 22-compatible host that supports
 Next.js — deployed here with Vercel in mind (the codebase's own comments reference
@@ -94,7 +94,7 @@ Vercel; if deploying elsewhere, confirm your host's Next.js adapter supports it.
 
 ## 5. Configure the Apify webhook
 
-Data collected by Apify actor runs is delivered back to DreamRue via a webhook.
+Data collected by Apify actor runs is delivered back to AveronAi via a webhook.
 
 1. In your Apify account, no manual webhook setup is required for *triggered* scrape
    requests — `application/collection/start-scrape-request.ts` registers the webhook

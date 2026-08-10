@@ -27,7 +27,7 @@ export const updateCompanyName = adminActionClient
   });
 
 /**
- * The one place in DreamRue where data is actually destroyed — every other
+ * The one place in AveronAi where data is actually destroyed — every other
  * downgrade/cancel path degrades access without deleting anything (see
  * `docs/saas-platform-architecture.md`). Owner-only, and the cascading FKs on
  * `companies.id` (see `infrastructure/db/schema`) take every child row —

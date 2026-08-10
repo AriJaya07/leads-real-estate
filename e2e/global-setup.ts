@@ -16,7 +16,7 @@ import * as schema from "../infrastructure/db/schema";
  * company B's lead. Every other existing spec only needs company A.
  */
 
-export const E2E_ADMIN_EMAIL = "e2e@dreamrue.test";
+export const E2E_ADMIN_EMAIL = "e2e@averonai.test";
 export const E2E_ADMIN_PASSWORD = "e2e-admin-password-123";
 export const E2E_LEAD_AUTHOR = "E2E Test Buyer";
 
@@ -26,21 +26,21 @@ export const E2E_LEAD_AUTHOR = "E2E Test Buyer";
  * login.spec.ts can't leave a failed attempt on the shared counter and throw
  * off the exact-5-attempts assertion in the throttling test.
  */
-export const E2E_THROTTLE_EMAIL = "e2e-throttle@dreamrue.test";
+export const E2E_THROTTLE_EMAIL = "e2e-throttle@averonai.test";
 export const E2E_THROTTLE_PASSWORD = "e2e-throttle-password-123";
 
 /** Seeded with mustChangePassword=true, mirroring an admin-issued temporary password. */
-export const E2E_TEMP_PASSWORD_EMAIL = "e2e-temp-password@dreamrue.test";
+export const E2E_TEMP_PASSWORD_EMAIL = "e2e-temp-password@averonai.test";
 export const E2E_TEMP_PASSWORD_TEMP = "e2e-temporary-password-123";
 export const E2E_TEMP_PASSWORD_NEW = "e2e-brand-new-password-456";
 
 /** Dedicated account for the session-revocation spec, unshared for the same reason as E2E_THROTTLE_EMAIL. */
-export const E2E_REVOCATION_EMAIL = "e2e-revocation@dreamrue.test";
+export const E2E_REVOCATION_EMAIL = "e2e-revocation@averonai.test";
 export const E2E_REVOCATION_PASSWORD = "e2e-revocation-password-123";
 export const E2E_REVOCATION_NEW_PASSWORD = "e2e-revocation-new-password-456";
 
 /** A second, unrelated company — its admin and lead must be invisible to company A. */
-export const E2E_OTHER_COMPANY_ADMIN_EMAIL = "e2e-other-company@dreamrue.test";
+export const E2E_OTHER_COMPANY_ADMIN_EMAIL = "e2e-other-company@averonai.test";
 export const E2E_OTHER_COMPANY_ADMIN_PASSWORD = "e2e-other-company-password-123";
 export const E2E_OTHER_COMPANY_LEAD_AUTHOR = "E2E Other Company Buyer";
 

@@ -58,7 +58,7 @@ describe("signWebhookBody", () => {
 });
 
 describe("sendWebhook", () => {
-  it("delivers the exact payload with a valid X-DreamRue-Signature header", async () => {
+  it("delivers the exact payload with a valid X-AveronAi-Signature header", async () => {
     await withTestServer(
       () => ({ status: 200 }),
       async (url, captured) => {
@@ -70,7 +70,7 @@ describe("sendWebhook", () => {
         const request = captured();
         expect(request).not.toBeNull();
         expect(JSON.parse(request!.body)).toEqual(samplePayload);
-        expect(request!.headers["x-dreamrue-signature"]).toBe(signWebhookBody("test-secret", request!.body));
+        expect(request!.headers["x-averonai-signature"]).toBe(signWebhookBody("test-secret", request!.body));
       },
     );
   });
@@ -80,7 +80,7 @@ describe("sendWebhook", () => {
       () => ({ status: 200 }),
       async (url, captured) => {
         await sendWebhook(url, null, samplePayload);
-        expect(captured()!.headers["x-dreamrue-signature"]).toBeUndefined();
+        expect(captured()!.headers["x-averonai-signature"]).toBeUndefined();
       },
     );
   });

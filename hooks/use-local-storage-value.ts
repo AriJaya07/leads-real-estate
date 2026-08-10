@@ -11,7 +11,7 @@ import { useCallback, useSyncExternalStore } from "react";
  * `window`, and `setLocalStorageValue` below fires a same-tab event because
  * the native `storage` event only fires in *other* tabs.
  */
-const LOCAL_EVENT = "dreamrue:local-storage-set";
+const LOCAL_EVENT = "averonai:local-storage-set";
 
 export function useLocalStorageValue(key: string): string | null {
   const subscribe = useCallback(

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { useNotificationsQuery } from "@/features/shell/queries";
 import { setLocalStorageValue, useLocalStorageValue } from "@/hooks/use-local-storage-value";
 
-const DISMISSED_KEY = "dreamrue:notifications:dismissed-before";
+const DISMISSED_KEY = "averonai:notifications:dismissed-before";
 
 const CHANNEL_LABEL: Record<string, string> = {
   email: "Email",
@@ -25,7 +25,7 @@ const STATUS_LABEL: Record<string, string> = {
 /**
  * A popover, not a page — a 10-item list is enough for "what happened
  * recently"; a `/notifications` history route is deliberately not built
- * until this proves too few (see `docs/dreamrue-uiux-plan.md` §5).
+ * until this proves too few (see `docs/averonai-uiux-plan.md` §5).
  *
  * "Unread" has no backing column on `alert_deliveries` — it's a client-side
  * high-water mark (localStorage timestamp) rather than a synced-across-devices

@@ -88,7 +88,7 @@ function countActiveFilters(filters: LeadFilters): number {
 
 type ContactChannel = "whatsapp" | "phone" | "post";
 
-const FIRST_LEAD_TOOLTIP_DISMISSED_KEY = "dreamrue:first-lead-tooltip:dismissed";
+const FIRST_LEAD_TOOLTIP_DISMISSED_KEY = "averonai:first-lead-tooltip:dismissed";
 /** Same "high" cutoff `components/common/score-badge.tsx`'s internal `tone()` uses — a middling top lead gets no tooltip. */
 const FIRST_LEAD_TOOLTIP_SCORE_THRESHOLD = 70;
 
@@ -984,7 +984,7 @@ export function LeadInbox({
               title="No leads yet"
               description={
                 canCollectData
-                  ? "Connect a data source and DreamRue starts finding buyer leads automatically — no filters to widen, there's just nothing collected yet."
+                  ? "Connect a data source and AveronAi starts finding buyer leads automatically — no filters to widen, there's just nothing collected yet."
                   : "Nothing collected yet — ask an admin or manager to connect a data source under Collect data."
               }
               action={

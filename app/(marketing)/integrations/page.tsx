@@ -69,7 +69,7 @@ export default function IntegrationsPage() {
       <div className="mx-auto flex max-w-4xl flex-col gap-10">
         <div className="text-center">
           <Eyebrow>Integrations</Eyebrow>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">What connects to DreamRue</h1>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">What connects to AveronAi</h1>
           <p className="text-muted-foreground mt-3 text-balance">
             What&rsquo;s live today, what&rsquo;s gated to a plan, and what&rsquo;s still on the roadmap — no
             surprises after you sign up.

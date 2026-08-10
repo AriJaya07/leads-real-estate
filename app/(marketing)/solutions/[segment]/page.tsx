@@ -22,7 +22,7 @@ const SEGMENTS: Segment[] = [
     eyebrow: "For villa & property agencies",
     heading: "Your four agents can't read every group. This can.",
     description:
-      "Rental and sales enquiries land in the same twenty Bali groups every day. DreamRue reads them all, types each poster, and routes the ones worth your time to the agent who covers that area.",
+      "Rental and sales enquiries land in the same twenty Bali groups every day. AveronAi reads them all, types each poster, and routes the ones worth your time to the agent who covers that area.",
     cards: [
       { title: "Route by area", body: "Canggu leads to the Canggu agent, automatically." },
       { title: "Filter out the trade", body: "Agents and brokers are typed and hidden by default." },
@@ -43,7 +43,7 @@ const SEGMENTS: Segment[] = [
     eyebrow: "For property developers",
     heading: "Know who's asking about your project before the sales office does.",
     description:
-      "Buyer chatter about a launch happens in public groups long before anyone fills out a contact form. DreamRue surfaces posts naming your project, area or price point, scored the same way as every other lead.",
+      "Buyer chatter about a launch happens in public groups long before anyone fills out a contact form. AveronAi surfaces posts naming your project, area or price point, scored the same way as every other lead.",
     cards: [
       { title: "Project-level filtering", body: "Filter by the property type and location your launch actually covers." },
       { title: "Budget already parsed", body: "See stated budget ranges without opening a single post." },
@@ -64,7 +64,7 @@ const SEGMENTS: Segment[] = [
     eyebrow: "For independent brokers",
     heading: "One person can't watch fifteen groups all day. A schedule can.",
     description:
-      "Working solo means every minute spent scrolling is a minute not spent closing. DreamRue runs on a schedule you set and hands you a ranked list instead of a raw feed.",
+      "Working solo means every minute spent scrolling is a minute not spent closing. AveronAi runs on a schedule you set and hands you a ranked list instead of a raw feed.",
     cards: [
       { title: "Set it and check twice a day", body: "Sync cadence is yours — no need to watch groups live." },
       { title: "Score, not scroll", body: "Every post is scored on stated intent, budget clarity and recency." },
@@ -85,7 +85,7 @@ const SEGMENTS: Segment[] = [
     eyebrow: "For investment consultants",
     heading: "Separate the investor conversation from the villa-hunting one.",
     description:
-      "Yield and lease-term questions get buried in groups dominated by rental enquiries. DreamRue types investor-intent posts apart from buyer/renter chatter, so the conversations you actually want don't get lost.",
+      "Yield and lease-term questions get buried in groups dominated by rental enquiries. AveronAi types investor-intent posts apart from buyer/renter chatter, so the conversations you actually want don't get lost.",
     cards: [
       { title: "Investor intent, typed", body: "Yield, lease-term and ROI questions are classified separately from buyer posts." },
       { title: "Location trends over 30 days", body: "See where investor interest is clustering, not just today's posts." },

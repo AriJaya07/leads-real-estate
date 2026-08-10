@@ -45,7 +45,7 @@ export function MarketingFooter() {
         <div className="flex flex-col gap-3">
           <Link href="/" className="flex items-center gap-2">
             <BrandMark className="size-7" />
-            <span className="text-sm font-semibold tracking-tight">DreamRue</span>
+            <span className="text-sm font-semibold tracking-tight">AveronAi</span>
           </Link>
           <p className="text-muted-foreground max-w-xs text-sm">
             Buyer-intent lead intelligence for Bali property teams.
@@ -72,7 +72,7 @@ export function MarketingFooter() {
 
       <div className="border-border border-t">
         <p className="text-muted-foreground mx-auto max-w-6xl px-4 py-6 text-xs sm:px-6">
-          © DreamRue. All rights reserved.
+          © AveronAi. All rights reserved.
         </p>
       </div>
     </footer>

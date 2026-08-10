@@ -14,7 +14,7 @@ interface Step {
 const STEPS: readonly Step[] = [
   {
     title: "Connect your first dataset",
-    body: "Point DreamRue at your existing Apify actors, with n8n driving the schedule. Once a source is registered, every dataset it produces is auto-discovered — you don't configure feeds one by one.",
+    body: "Point AveronAi at your existing Apify actors, with n8n driving the schedule. Once a source is registered, every dataset it produces is auto-discovered — you don't configure feeds one by one.",
     detail: [
       "From Admin → Collect data, register the actor and let the first run complete before touching anything else.",
       "Check Admin → Sync afterward — a healthy first run shows records landing, not zero.",
@@ -22,7 +22,7 @@ const STEPS: readonly Step[] = [
   },
   {
     title: "Review the mapping profile",
-    body: "New datasets get an auto-generated mapping profile that projects the raw payload onto DreamRue's lead fields, held for admin review unless confidence is high. Our team helps tune mapping for unusual feed shapes — there's no self-serve visual editor yet, so reach out on the contact page if a dataset needs adjustment.",
+    body: "New datasets get an auto-generated mapping profile that projects the raw payload onto AveronAi's lead fields, held for admin review unless confidence is high. Our team helps tune mapping for unusual feed shapes — there's no self-serve visual editor yet, so reach out on the contact page if a dataset needs adjustment.",
     detail: [
       "A profile held for review isn't broken — it's just not auto-approved yet. Leads still land, they're just not guaranteed-accurate until someone confirms the mapping.",
       "If a dataset later gets flagged for schema drift, this is the same review step, re-triggered.",

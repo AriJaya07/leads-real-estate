@@ -43,8 +43,8 @@ would otherwise need real network access (Apify, the FX API).
 
 **Setup** (once):
 ```bash
-createdb dreamrue_test
-nano .env.test              # point DATABASE_URL at dreamrue_test, never dreamrue_dev
+createdb averonai_test
+nano .env.test              # point DATABASE_URL at averonai_test, never averonai_dev
 npm run db:migrate:test
 ```
 
@@ -85,8 +85,8 @@ correctly as a toast.
 
 **Setup** (once):
 ```bash
-createdb dreamrue_e2e
-nano .env.e2e                # point DATABASE_URL at dreamrue_e2e, never dreamrue_dev
+createdb averonai_e2e
+nano .env.e2e                # point DATABASE_URL at averonai_e2e, never averonai_dev
 node --env-file=.env.e2e infrastructure/db/migrate.mjs
 npx playwright install chromium   # if not already cached
 ```

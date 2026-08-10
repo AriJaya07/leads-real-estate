@@ -54,7 +54,7 @@
         "url": "={{ $env.SLACK_ALERT_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { \"text\": \"DreamRue n8n workflow failed: *\" + $json.workflowName + \"*\\nNode: \" + $json.lastNode + \"\\nError: \" + $json.errorMessage + \"\\nExecution: \" + $json.executionId } }}",
+        "jsonBody": "={{ { \"text\": \"AveronAi n8n workflow failed: *\" + $json.workflowName + \"*\\nNode: \" + $json.lastNode + \"\\nError: \" + $json.errorMessage + \"\\nExecution: \" + $json.executionId } }}",
         "options": {}
       },
       "id": "b72d6849-1442-453a-b619-0275019067cd",
@@ -105,7 +105,7 @@
   "id": "51e8b52e-667f-4fc8-b45d-043c6b063f46",
   "tags": [
     {
-      "name": "dreamrue"
+      "name": "averonai"
     },
     {
       "name": "n8n-integration-plan"

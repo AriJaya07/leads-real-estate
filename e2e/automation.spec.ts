@@ -32,7 +32,7 @@ test.describe("automation settings", () => {
     await page.goto("/admin/automation");
 
     await page.getByRole("switch", { name: "Outbound webhook" }).click();
-    await page.getByLabel("Endpoint URL").fill("https://hooks.example.com/dreamrue");
+    await page.getByLabel("Endpoint URL").fill("https://hooks.example.com/averonai");
     await page.getByRole("button", { name: "Generate" }).click();
 
     const secret = page.getByTestId("webhook-secret");
@@ -45,7 +45,7 @@ test.describe("automation settings", () => {
 
     await page.reload();
     await expect(page.getByLabel("Outbound webhook")).toBeChecked();
-    await expect(page.getByLabel("Endpoint URL")).toHaveValue("https://hooks.example.com/dreamrue");
+    await expect(page.getByLabel("Endpoint URL")).toHaveValue("https://hooks.example.com/averonai");
     await expect(page.getByTestId("webhook-secret")).toHaveText(generated ?? "");
   });
 });

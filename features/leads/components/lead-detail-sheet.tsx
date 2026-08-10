@@ -549,7 +549,7 @@ function MessageAssistant({ lead }: { lead: LeadListItem }) {
           <Textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={3} />
           <p className="text-muted-foreground text-xs">
             Built from this lead&apos;s parsed signals. Always your words before it&apos;s sent — nothing is sent
-            from DreamRue automatically.
+            from AveronAi automatically.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" onClick={() => void copy()}>

@@ -19,7 +19,7 @@ if (!url) {
   process.exit(1);
 }
 
-const companyName = process.argv[2] ?? process.env.BACKFILL_COMPANY_NAME ?? "DreamRue";
+const companyName = process.argv[2] ?? process.env.BACKFILL_COMPANY_NAME ?? "AveronAi";
 const slug = companyName
   .toLowerCase()
   .replace(/[^a-z0-9]+/g, "-")

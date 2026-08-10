@@ -19,7 +19,7 @@ const serverEnvSchema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
 
   RESEND_API_KEY: z.string().optional(),
-  RESEND_FROM_EMAIL: z.string().default("DreamRue Lead Radar <onboarding@resend.dev>"),
+  RESEND_FROM_EMAIL: z.string().default("AveronAi Lead Radar <onboarding@resend.dev>"),
 
   /**
    * Shared secret for the n8n-triggered scheduler endpoints (`/api/trigger/*`).

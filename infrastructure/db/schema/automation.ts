@@ -38,7 +38,7 @@ export const automationSettings = pgTable("automation_settings", {
   /** Outbound lead events for CRM/Zapier-style sync — see infrastructure/webhooks/outbound-webhook.ts. */
   webhookEnabled: boolean("webhook_enabled").notNull().default(false),
   webhookUrl: text("webhook_url"),
-  /** HMAC-SHA256 signing secret for the `X-DreamRue-Signature` header — generated, not user-typed. */
+  /** HMAC-SHA256 signing secret for the `X-AveronAi-Signature` header — generated, not user-typed. */
   webhookSecret: text("webhook_secret"),
 
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

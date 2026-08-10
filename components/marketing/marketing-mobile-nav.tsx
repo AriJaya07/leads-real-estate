@@ -67,7 +67,7 @@ export function MarketingMobileNav({
         <SheetTitle className="sr-only">Main navigation</SheetTitle>
         <div className="border-border flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <BrandMark className="size-7" />
-          <span className="text-sm font-semibold tracking-tight">DreamRue</span>
+          <span className="text-sm font-semibold tracking-tight">AveronAi</span>
         </div>
 
         <nav aria-label="Main" className="flex flex-1 flex-col overflow-y-auto px-2 py-2">

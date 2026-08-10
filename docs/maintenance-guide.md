@@ -1,6 +1,6 @@
 # Maintenance Guide
 
-Ongoing operational care and feeding for a running DreamRue instance. Deployment
+Ongoing operational care and feeding for a running AveronAi instance. Deployment
 itself is covered in [deployment-guide.md](deployment-guide.md); this is what happens
 after launch.
 

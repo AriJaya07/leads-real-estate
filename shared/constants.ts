@@ -2,7 +2,7 @@
 
 export const APIFY_API_BASE_URL = "https://api.apify.com/v2";
 
-export const SESSION_COOKIE_NAME = "dreamrue_session";
+export const SESSION_COOKIE_NAME = "averonai_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
 
 /** Every new company starts on a free trial of the Starter plan. See docs/pricing-strategy.md. */

@@ -1,6 +1,6 @@
 # Production Readiness Checklist
 
-Go/no-go list for launching DreamRue as a real, paying-customer SaaS product. Grouped
+Go/no-go list for launching AveronAi as a real, paying-customer SaaS product. Grouped
 by area; each item states current status as of this checklist's writing, not an
 aspiration. See [deployment-guide.md](deployment-guide.md) for how to execute the
 deploy-time items and [final-recommendations.md](final-recommendations.md) for the
@@ -141,7 +141,7 @@ prioritized list of what's genuinely not done yet.
   a real gap where a root-layout failure had no boundary at all) — none leak stack
   traces or internal messages to the user.
 - ⚠️ **No customer-facing help/documentation link inside the product itself.** A full
-  customer user guide was produced separately (DreamRue User Guide, DOCX) but isn't
+  customer user guide was produced separately (AveronAi User Guide, DOCX) but isn't
   linked from anywhere in the app UI yet — consider adding a help link in the topbar
   before launch.
 
@@ -188,7 +188,7 @@ prioritized list of what's genuinely not done yet.
 - ✅ **No monitoring/alerting on the app's own health** beyond hosting-platform
   defaults (uptime, deploy status). No dashboard for "is sync healthy across all
   customers," "is the webhook queue backing up," etc. — `/admin/sync` gives this
-  per-company, but there's nothing platform-wide for the DreamRue team itself.
+  per-company, but there's nothing platform-wide for the AveronAi team itself.
 
 ---
 

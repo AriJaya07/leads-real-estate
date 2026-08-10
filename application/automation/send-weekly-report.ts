@@ -145,7 +145,7 @@ export async function sendWeeklyReport(companyId: string, now: Date = new Date()
   const notifier = getNotifier("email");
   let anySent = false;
   for (const recipient of recipients) {
-    const message = renderWeeklyReport(company?.name ?? "DreamRue", stats, newThisWeek, revenue, funnel, topUncontacted, recipient);
+    const message = renderWeeklyReport(company?.name ?? "AveronAi", stats, newThisWeek, revenue, funnel, topUncontacted, recipient);
     const result = await notifier.send(message);
     if (result.ok) anySent = true;
     else log.warn("weekly report send failed", { companyId, recipient, error: result.error });

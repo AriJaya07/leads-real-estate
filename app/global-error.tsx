@@ -43,7 +43,7 @@ export default function GlobalError({
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.25rem" }}>
             <h1 style={{ fontSize: "1.25rem", fontWeight: 600, margin: 0 }}>Something went wrong</h1>
             <p style={{ color: "#666", margin: 0, maxWidth: "28rem" }}>
-              DreamRue hit an unexpected error and couldn&apos;t load. Reloading usually fixes it.
+              AveronAi hit an unexpected error and couldn&apos;t load. Reloading usually fixes it.
               {error.digest && (
                 <>
                   <br />

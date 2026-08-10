@@ -32,7 +32,7 @@ interface TeamMember {
 const ALL_STATUSES = [...PIPELINE_STATUSES, ...TERMINAL_STATUSES] satisfies readonly LeadStatusValue[];
 
 /** MIME type used for the dragged lead id — arbitrary but namespaced against accidental drops from elsewhere. */
-const DRAG_MIME = "application/x-dreamrue-lead-id";
+const DRAG_MIME = "application/x-averonai-lead-id";
 
 /**
  * A "new" lead ages toward being missed the longer it sits untouched — everywhere

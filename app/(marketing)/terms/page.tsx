@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Terms of service" };
 const SECTIONS = [
   {
     heading: "The service",
-    body: "DreamRue is a lead-intelligence tool for real-estate teams operating in Bali. It is not a CRM, and it does not contact anyone on a customer's behalf — outreach is always sent by the customer's own team.",
+    body: "AveronAi is a lead-intelligence tool for real-estate teams operating in Bali. It is not a CRM, and it does not contact anyone on a customer's behalf — outreach is always sent by the customer's own team.",
   },
   {
     heading: "Your data, your control",
@@ -14,7 +14,7 @@ const SECTIONS = [
   },
   {
     heading: "Acceptable use",
-    body: "Sources must be ones the customer has a legitimate business reason to monitor. DreamRue reserves the right to suspend an account collecting content outside that scope.",
+    body: "Sources must be ones the customer has a legitimate business reason to monitor. AveronAi reserves the right to suspend an account collecting content outside that scope.",
   },
 ] as const;
 

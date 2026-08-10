@@ -74,7 +74,7 @@ export default function DocsApiPage() {
           </p>
 
           <pre className="bg-foreground text-background mt-6 overflow-x-auto rounded-xl p-5 font-mono text-[13px] leading-relaxed">
-            <code>{`curl "https://api.dreamrue.com/api/v1/leads?leadType=buyer&minBuyerScore=70&pageSize=10" \\
+            <code>{`curl "https://api.averonai.com/api/v1/leads?leadType=buyer&minBuyerScore=70&pageSize=10" \\
   -H "Authorization: Bearer drk_live_…"`}</code>
           </pre>
 
@@ -158,7 +158,7 @@ export default function DocsApiPage() {
             ))}
           </div>
           <p className="text-muted-foreground mt-2 max-w-2xl text-sm">
-            Every request carries an <code className="font-mono text-xs">X-DreamRue-Signature</code> header — hex
+            Every request carries an <code className="font-mono text-xs">X-AveronAi-Signature</code> header — hex
             HMAC-SHA256 of the raw JSON body, signed with your webhook secret. Verify it before trusting the payload.
             Body shape: <code className="font-mono text-xs">{`{ event, companyId, timestamp, data }`}</code>.
             Delivery is single-attempt and best-effort — a slow or failing endpoint never blocks lead processing —

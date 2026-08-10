@@ -4,7 +4,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "dreamrue-notify",
+        "path": "averonai-notify",
         "responseMode": "responseNode",
         "options": {}
       },
@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\nconst secret = $env.DREAMRUE_NOTIFY_SHARED_SECRET;\nconst provided = $input.first().json.headers['x-dreamrue-notify-secret'];\nif (!provided || provided !== secret) {\n  throw new Error('Invalid or missing x-dreamrue-notify-secret header');\n}\nreturn $input.all();"
+        "jsCode": "const crypto = require('crypto');\nconst secret = $env.AVERONAI_NOTIFY_SHARED_SECRET;\nconst provided = $input.first().json.headers['x-averonai-notify-secret'];\nif (!provided || provided !== secret) {\n  throw new Error('Invalid or missing x-averonai-notify-secret header');\n}\nreturn $input.all();"
       },
       "id": "0cac872f-0b4d-4693-b31e-e2c20870de02",
       "name": "Verify Shared Secret",
@@ -67,7 +67,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { \"from\": $env.DREAMRUE_NOTIFY_FROM_EMAIL, \"to\": [$json.body.to], \"subject\": $json.body.subject, \"html\": $json.body.html, \"text\": $json.body.text } }}",
+        "jsonBody": "={{ { \"from\": $env.AVERONAI_NOTIFY_FROM_EMAIL, \"to\": [$json.body.to], \"subject\": $json.body.subject, \"html\": $json.body.html, \"text\": $json.body.text } }}",
         "options": {}
       },
       "id": "0c69cad7-e976-4477-9a39-f878f79c87ef",
@@ -279,7 +279,7 @@
   "id": "500bebcc-8e81-4848-ba73-6ebfcd8e6ff0",
   "tags": [
     {
-      "name": "dreamrue"
+      "name": "averonai"
     },
     {
       "name": "n8n-integration-plan"

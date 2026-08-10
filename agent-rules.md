@@ -91,7 +91,7 @@ shapes from training data — see [docs/coding-standards.md](docs/coding-standar
   executing it against Postgres. Run `npm run test:integration` too. See
   [docs/tech-debt.md](docs/tech-debt.md) for the exact bug this caught once already.
 - If you touched `infrastructure/db/schema/*`, run `npm run db:generate` to produce the
-  migration — do not hand-write migration SQL. Apply it to `dreamrue_test`/`dreamrue_e2e`
+  migration — do not hand-write migration SQL. Apply it to `averonai_test`/`averonai_e2e`
   too (`npm run db:migrate:test` / `node --env-file=.env.e2e infrastructure/db/migrate.mjs`)
   before running those suites, or they'll fail against a stale schema.
 - If you touched UI, run the dev server and check the change in a browser (see the

@@ -10,7 +10,7 @@ export function BrandMark({ className }: { className?: string }) {
       viewBox="0 0 32 32"
       fill="none"
       role="img"
-      aria-label="DreamRue"
+      aria-label="AveronAi"
       className={cn("text-primary", className)}
     >
       <circle cx="16" cy="16" r="14.5" stroke="currentColor" strokeOpacity="0.25" />

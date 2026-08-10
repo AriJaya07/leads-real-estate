@@ -1,6 +1,6 @@
 # API Patterns
 
-DreamRue has no public REST API. There are three kinds of server entry points: **server
+AveronAi has no public REST API. There are three kinds of server entry points: **server
 actions** (all user-facing mutations, called directly from client components), a small
 set of **system route handlers** (`app/api/**`) — currently just the Apify webhook —
 and a small set of **internal read route handlers** that exist only to back the leads

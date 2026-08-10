@@ -30,7 +30,7 @@ const CONCEPTS: readonly Concept[] = [
     id: "leads-are-people",
     title: "Leads are people, not posts",
     kicker: "Identity resolution",
-    how: "The same Facebook or Instagram account posting in multiple groups — or showing up as both a post author and someone who liked a listing — is merged into one lead, with every source it was found in listed underneath. Matching is deterministic: it only merges on an exact Facebook ID, Instagram ID, or profile URL, never on similar-looking names or photos. A wrong merge is worse than a duplicate, so DreamRue never guesses.",
+    how: "The same Facebook or Instagram account posting in multiple groups — or showing up as both a post author and someone who liked a listing — is merged into one lead, with every source it was found in listed underneath. Matching is deterministic: it only merges on an exact Facebook ID, Instagram ID, or profile URL, never on similar-looking names or photos. A wrong merge is worse than a duplicate, so AveronAi never guesses.",
     use: [
       "Open a lead's detail sheet and check \"Sources\" — every appearance that fed the merge is listed, so you can verify the merge yourself.",
       "If someone looks like a duplicate but wasn't merged, that's deliberate: the matching signal wasn't strong enough. Nothing merges on a hunch.",
@@ -143,7 +143,7 @@ const CONCEPTS: readonly Concept[] = [
       "Reach for webhooks when you want the CRM to react the moment a lead matches an alert rule, instead of a periodic sync pulling on a schedule.",
       "Check the integrations page for what's live, what's plan-gated, and what's still roadmap — the honest version of a comparison table.",
     ],
-    why: "\"Is this a CRM?\" is a question worth answering directly: no, and it's not trying to become one. The API and webhooks exist so a lead never gets lost between DreamRue and whatever system your team already lives in for deal management, invoicing, or deeper contact history.",
+    why: "\"Is this a CRM?\" is a question worth answering directly: no, and it's not trying to become one. The API and webhooks exist so a lead never gets lost between AveronAi and whatever system your team already lives in for deal management, invoicing, or deeper contact history.",
   },
 ] as const;
 
@@ -186,9 +186,9 @@ export default function DocsPage() {
     <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
       <div className="mb-12">
         <Eyebrow>Documentation</Eyebrow>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">How DreamRue works</h1>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">How AveronAi works</h1>
         <p className="text-muted-foreground mt-3 max-w-2xl text-balance text-[15px] leading-relaxed">
-          How DreamRue turns raw social posts into a ranked, workable lead inbox — what each part of the system
+          How AveronAi turns raw social posts into a ranked, workable lead inbox — what each part of the system
           does, how to use it day to day, and why it&rsquo;s built this way. For the onboarding walkthrough, see the{" "}
           <Link href="/docs/guide" className="text-foreground underline underline-offset-4">
             step-by-step guide

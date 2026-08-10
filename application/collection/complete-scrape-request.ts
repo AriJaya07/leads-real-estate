@@ -4,6 +4,7 @@ import { db, schema } from "@/infrastructure/db/client";
 import { getConnector } from "@/infrastructure/connectors/registry";
 import { syncDataset } from "@/application/sync/sync-dataset";
 import { toScrapeRequestStatus } from "@/domain/collection/actor-request";
+import { tenantDatasetPrefix } from "@/domain/dataset/tenant-naming";
 import type { ActorRunStatus } from "@/domain/sync/ports";
 import type { ScrapeRequestRow } from "@/infrastructure/db/schema/collection";
 import { DEFAULT_SYNC_INTERVAL_SECONDS } from "@/shared/constants";
@@ -50,9 +51,20 @@ async function ensureDatasetForScrapeRequest(
     .limit(1);
 
   if (!source) {
+    // Empty `namePatterns` would match every dataset visible under the one
+    // Apify account this whole platform shares across companies — see
+    // docs/multi-tenant-apify-isolation-plan.md §1. Auto-derived from the
+    // company's own slug so this can never be left blank by a human.
+    const [company] = await db()
+      .select({ slug: schema.companies.slug })
+      .from(schema.companies)
+      .where(eq(schema.companies.id, request.companyId))
+      .limit(1);
+    const config = company ? { namePatterns: [tenantDatasetPrefix(company.slug)], producerIds: [], minItemCount: 1 } : {};
+
     await db()
       .insert(schema.sources)
-      .values({ companyId: request.companyId, kind: "apify", name: sourceName, config: {} })
+      .values({ companyId: request.companyId, kind: "apify", name: sourceName, config })
       .onConflictDoNothing();
     [source] = await db()
       .select()

@@ -15,6 +15,8 @@ export interface CurrentUser {
   mustChangePassword: boolean;
   /** The tenant this user belongs to — every application/ query scopes by this. */
   companyId: string;
+  /** Cross-company usage visibility — deliberately separate from `role`, which is scoped to one company. See requirePlatformAdmin(). */
+  isPlatformAdmin: boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ export const currentUser = cache(async (): Promise<CurrentUser | null> => {
       mustChangePassword: schema.users.mustChangePassword,
       sessionVersion: schema.users.sessionVersion,
       companyId: schema.users.companyId,
+      isPlatformAdmin: schema.users.isPlatformAdmin,
     })
     .from(schema.users)
     .where(eq(schema.users.id, session.userId))
@@ -55,6 +58,7 @@ export const currentUser = cache(async (): Promise<CurrentUser | null> => {
     role: row.role,
     mustChangePassword: row.mustChangePassword,
     companyId: row.companyId,
+    isPlatformAdmin: row.isPlatformAdmin,
   };
 });
 
@@ -93,5 +97,18 @@ export async function requireManager(): Promise<CurrentUser> {
 export async function requireOwner(): Promise<CurrentUser> {
   const user = await requireUser();
   if (user.role !== "owner") redirect("/leads");
+  return user;
+}
+
+/**
+ * Platform operator only — cross-company usage visibility, unrelated to the
+ * per-company `role` hierarchy above (a company `owner` does not pass this).
+ * Not grantable from any in-app UI by design — see the `isPlatformAdmin`
+ * column comment (`infrastructure/db/schema/auth.ts`) and
+ * docs/multi-tenant-apify-isolation-plan.md §3.
+ */
+export async function requirePlatformAdmin(): Promise<CurrentUser> {
+  const user = await requireUser();
+  if (!user.isPlatformAdmin) redirect("/leads");
   return user;
 }

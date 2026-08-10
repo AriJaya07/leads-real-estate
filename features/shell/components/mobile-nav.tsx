@@ -33,7 +33,7 @@ export function MobileNav({ role, navExtras }: { role: Role; navExtras: NavExtra
         <SheetTitle className="sr-only">Main navigation</SheetTitle>
         <div className="flex h-14 items-center gap-2 px-4">
           <BrandMark className="size-6" />
-          <span className="text-sm font-semibold tracking-tight">DreamRue</span>
+          <span className="text-sm font-semibold tracking-tight">AveronAi</span>
         </div>
         <NavContent role={role} navExtras={navExtras} onNavigate={() => setOpen(false)} />
       </SheetContent>

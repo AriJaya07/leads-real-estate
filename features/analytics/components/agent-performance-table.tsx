@@ -33,7 +33,7 @@ export function AgentPerformanceTable({ rows }: { rows: AgentPerformance[] }) {
       { header: "Median time to first touch (min)", value: (row) => row.medianTimeToFirstTouchMinutes },
       { header: "Conversion %", value: (row) => row.conversionPct.toFixed(1) },
     ]);
-    downloadCsv(`dreamrue-agent-performance-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+    downloadCsv(`averonai-agent-performance-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
 
   if (rows.length === 0) {

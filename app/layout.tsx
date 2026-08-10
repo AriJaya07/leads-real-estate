@@ -24,8 +24,8 @@ const fraunces = Fraunces({ variable: "--font-fraunces", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: {
-    default: "DreamRue Lead Intelligence",
-    template: "%s · DreamRue",
+    default: "AveronAi Lead Intelligence",
+    template: "%s · AveronAi",
   },
   description:
     "Real estate lead intelligence for Bali: automatically syncs every Apify and n8n dataset, scores buyer intent, and gets the sales team to high-intent buyers first.",

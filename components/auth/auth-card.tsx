@@ -11,7 +11,7 @@ export function AuthCard({ children }: { children?: React.ReactNode }) {
     <div className="border-border bg-card rounded-2xl border p-8 shadow-sm">
       <div className="mb-7 flex items-center gap-2">
         <BrandMark className="size-5" />
-        <span className="text-[15px] font-semibold">DreamRue</span>
+        <span className="text-[15px] font-semibold">AveronAi</span>
       </div>
       {children}
     </div>

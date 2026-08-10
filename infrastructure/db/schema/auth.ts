@@ -32,6 +32,14 @@ export const users = pgTable(
     sessionVersion: integer("session_version").notNull().default(1),
     /** Agents opted out of the round-robin get no new assignments. */
     acceptsAssignments: boolean("accepts_assignments").notNull().default(true),
+    /**
+     * Cross-company visibility (usage numbers only, never another company's
+     * leads) for the platform operator — deliberately separate from the
+     * per-company `role` hierarchy above, which is intentionally scoped to
+     * one company. Not settable from any in-app UI; the operator flips this
+     * directly in the database. See docs/multi-tenant-apify-isolation-plan.md §3.
+     */
+    isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

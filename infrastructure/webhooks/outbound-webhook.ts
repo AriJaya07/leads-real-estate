@@ -19,7 +19,7 @@ export interface WebhookSendResult {
 }
 
 /**
- * `X-DreamRue-Signature` = hex HMAC-SHA256 of the raw JSON body — how the
+ * `X-AveronAi-Signature` = hex HMAC-SHA256 of the raw JSON body — how the
  * receiver verifies a request actually came from us and wasn't altered in
  * transit, same pattern Stripe/GitHub webhooks use. Exported on its own so
  * the admin UI's "test webhook" affordance and tests can compute the same
@@ -42,7 +42,7 @@ export async function sendWebhook(
 ): Promise<WebhookSendResult> {
   const body = JSON.stringify(payload);
   const headers: Record<string, string> = { "content-type": "application/json" };
-  if (secret) headers["x-dreamrue-signature"] = signWebhookBody(secret, body);
+  if (secret) headers["x-averonai-signature"] = signWebhookBody(secret, body);
 
   try {
     const response = await fetch(url, {

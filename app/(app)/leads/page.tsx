@@ -28,7 +28,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { getQueryClient } from "@/shared/query-client";
 import { formatCount } from "@/shared/format";
 
-export const metadata: Metadata = { title: "Inbox — DreamRue" };
+export const metadata: Metadata = { title: "Inbox — AveronAi" };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 

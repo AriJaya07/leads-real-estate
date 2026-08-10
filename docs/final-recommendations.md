@@ -1,6 +1,6 @@
 # Final Improvement Recommendations
 
-Prioritized punch list for taking DreamRue from "solid product with real customers on
+Prioritized punch list for taking AveronAi from "solid product with real customers on
 a handshake" to "real, scalable SaaS business." Ordered by priority within each tier —
 not everything here needs to happen before launch (see
 [production-checklist.md](production-checklist.md) for the actual go/no-go line).
@@ -35,7 +35,7 @@ not everything here needs to happen before launch (see
    Requires `infrastructure/db/client.ts`'s `db()` singleton to support per-request
    `SET LOCAL app.current_company_id` — a structural change, scope it as its own
    project, don't bolt it on quickly.
-6. **A platform-wide operations view** for the DreamRue team itself — today
+6. **A platform-wide operations view** for the AveronAi team itself — today
    `/admin/sync` and the dashboard's stats are all per-company; there's no single
    place to see "which customers have unhealthy syncs right now" across the whole
    platform. Useful the moment there are more than a handful of customers.

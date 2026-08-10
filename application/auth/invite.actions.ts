@@ -85,9 +85,9 @@ export const inviteTeamMember = adminActionClient
     const url = inviteUrl(token);
     const { ok: emailSent } = await getNotifier("email").send({
       to: parsedInput.email,
-      subject: "You're invited to join a team on DreamRue",
-      text: `You've been invited to join a team on DreamRue Lead Radar.\n\nAccept your invite: ${url}\n\nThis link expires in ${INVITE_TTL_HOURS} hours.`,
-      html: `<p>You've been invited to join a team on DreamRue Lead Radar.</p><p><a href="${url}">Accept your invite</a></p><p>This link expires in ${INVITE_TTL_HOURS} hours.</p>`,
+      subject: "You're invited to join a team on AveronAi",
+      text: `You've been invited to join a team on AveronAi Lead Radar.\n\nAccept your invite: ${url}\n\nThis link expires in ${INVITE_TTL_HOURS} hours.`,
+      html: `<p>You've been invited to join a team on AveronAi Lead Radar.</p><p><a href="${url}">Accept your invite</a></p><p>This link expires in ${INVITE_TTL_HOURS} hours.</p>`,
     });
 
     return { email: parsedInput.email, inviteUrl: url, emailSent };

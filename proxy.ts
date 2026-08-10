@@ -34,5 +34,6 @@ export const config = {
     "/analytics/:path*",
     "/admin/:path*",
     "/account/:path*",
+    "/platform/:path*",
   ],
 };

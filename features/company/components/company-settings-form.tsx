@@ -80,7 +80,7 @@ export function CompanySettingsForm({
           <h2 className="text-destructive text-sm font-medium">Danger zone</h2>
           <p className="text-muted-foreground text-sm">
             Deleting the workspace removes every lead, dataset and run permanently. This is the one place in
-            DreamRue where data is actually destroyed — it cannot be undone, and only the owner can do it.
+            AveronAi where data is actually destroyed — it cannot be undone, and only the owner can do it.
           </p>
           <AlertDialog>
             <AlertDialogTrigger render={<Button variant="destructive" className="w-fit" />}>

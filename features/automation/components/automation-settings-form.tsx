@@ -168,7 +168,7 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
                 type="url"
                 value={webhookUrl}
                 onChange={(event) => setWebhookUrl(event.target.value)}
-                placeholder="https://hooks.example.com/dreamrue"
+                placeholder="https://hooks.example.com/averonai"
                 className="max-w-md"
               />
             </div>
@@ -203,8 +203,8 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
                 </Button>
               </div>
               <p className="text-muted-foreground text-xs">
-                Sent as the <code>X-DreamRue-Signature</code> header — a hex HMAC-SHA256 of the raw request body,
-                so your endpoint can verify a request actually came from DreamRue. Regenerating invalidates the
+                Sent as the <code>X-AveronAi-Signature</code> header — a hex HMAC-SHA256 of the raw request body,
+                so your endpoint can verify a request actually came from AveronAi. Regenerating invalidates the
                 old secret immediately.
               </p>
             </div>

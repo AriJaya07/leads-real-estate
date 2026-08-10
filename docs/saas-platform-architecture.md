@@ -1,4 +1,4 @@
-# SaaS Platform Architecture — Multi-Tenant DreamRue
+# SaaS Platform Architecture — Multi-Tenant AveronAi
 
 **Status: Phases 1–4 and 6 are built** (schema, auth, every application-layer query
 scoped by `companyId`, a real `/signup` flow, proven by `e2e/multi-tenant.spec.ts` and
@@ -8,7 +8,7 @@ flow all exist (see docs/pricing-strategy.md for the full design); only real Str
 payment collection is still missing.** Postgres RLS is not built — see "What's
 actually built" below for the precise boundary.
 Built and proven against fresh sandbox databases (`averon_ai_test`/`averon_ai_e2e`),
-never against `dreamrue_dev` — applying this to real data still needs
+never against `averonai_dev` — applying this to real data still needs
 `infrastructure/db/backfill-company.mjs` run there first, by a human, deliberately.
 
 ## What's actually built
@@ -133,7 +133,7 @@ that boundary via Row-Level Security so an app-layer bug (a forgotten `WHERE`) f
 closed, not open. This is the single most important architectural decision in this
 document — see §5.
 
-**Per-tenant data flow is otherwise the same 10-stage pipeline DreamRue already runs**
+**Per-tenant data flow is otherwise the same 10-stage pipeline AveronAi already runs**
 (`DISCOVER → PROBE → INGEST → NORMALIZE → CLASSIFY → IDENTIFY → DEDUPE → ROLLUP →
 SERVE → ALERT`, [architecture.md](architecture.md)) — nothing about scoring, dedup, or
 ranking logic changes conceptually. What changes is that `discoverAllSources()`,

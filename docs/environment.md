@@ -20,7 +20,7 @@ Create `.env` (single file, gitignored — no template checked into the repo) an
 | `AUTH_SECRET` | yes | Min 32 chars. Signs session JWTs (`jose`, HS256). Rotating it invalidates every session. |
 | `AUTH_ALLOWED_EMAILS` | no | Comma-separated. Bootstrap guard only — restricts which address may claim the instance as first admin. Empty = anyone claims it. Not consulted after bootstrap; team members are added from `/admin/team` instead. |
 | `RESEND_API_KEY` | no | Only used for lead-alert emails. Sign-in never needs it. Without it, alerts log a warning instead of sending and the app runs fine. |
-| `RESEND_FROM_EMAIL` | no | Defaults to `DreamRue Lead Radar <onboarding@resend.dev>`. |
+| `RESEND_FROM_EMAIL` | no | Defaults to `AveronAi Lead Radar <onboarding@resend.dev>`. |
 | `WHATSAPP_API_TOKEN` | no | WhatsApp Cloud API token, only used for lead-alert WhatsApp messages. Without it (or `WHATSAPP_PHONE_NUMBER_ID`), alerts log a warning instead of sending. |
 | `WHATSAPP_PHONE_NUMBER_ID` | no | The WhatsApp Cloud API sender's phone number id. |
 | `N8N_TRIGGER_SECRET` | no | Min 16 chars. Shared secret for `POST /api/trigger/{discover,sync,fx,retention}` — see "Scheduled jobs" below. Unset means every trigger route always returns 401. |
@@ -36,7 +36,7 @@ schema there, not just to `.env`.
 
 ```bash
 # 1. Postgres (any Postgres 14+; Neon and Supabase both work)
-createdb dreamrue_dev
+createdb averonai_dev
 
 # 2. Configure
 nano .env                 # fill in DATABASE_URL, APIFY_API_TOKEN, and the secrets
@@ -123,14 +123,14 @@ full detail; the short version:
 
 ```bash
 # Integration tests (application/domain logic against a real DB, no browser)
-createdb dreamrue_test
-nano .env.test             # set DATABASE_URL to point at dreamrue_test
+createdb averonai_test
+nano .env.test             # set DATABASE_URL to point at averonai_test
 npm run db:migrate:test
 npm run test:integration
 
 # E2E tests (real build, real browser, real DB)
-createdb dreamrue_e2e
-nano .env.e2e               # set DATABASE_URL to point at dreamrue_e2e
+createdb averonai_e2e
+nano .env.e2e               # set DATABASE_URL to point at averonai_e2e
 node --env-file=.env.e2e infrastructure/db/migrate.mjs
 npm run build && npm run test:e2e
 ```
