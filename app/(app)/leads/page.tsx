@@ -4,6 +4,7 @@ import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { requireUser } from "@/application/auth/current-user";
 import { listAssignableTeamMembers } from "@/application/auth/team.actions";
 import { type Role, roleAtLeast } from "@/domain/auth/permissions";
+import type { CompanyCategory } from "@/domain/verticals/catalog";
 import { parseLeadFilters } from "@/application/leads/filters.schema";
 import { queryLeads, getLeadStats } from "@/application/leads/lead-queries";
 import { getDynamicAttributeFacets, getLeadFacets } from "@/application/leads/facets";
@@ -116,11 +117,13 @@ async function DashboardOverview({ searchParams, companyId }: { searchParams: Se
 async function Inbox({
   searchParams,
   companyId,
+  companyCategory,
   userId,
   viewerRole,
 }: {
   searchParams: SearchParams;
   companyId: string;
+  companyCategory: CompanyCategory;
   userId: string;
   viewerRole: Role;
 }) {
@@ -155,6 +158,7 @@ async function Inbox({
       <LeadInbox
         canCollectData={roleAtLeast(viewerRole, "manager")}
         currentUserId={userId}
+        companyCategory={companyCategory}
         canManageSharedSearches={roleAtLeast(viewerRole, "manager")}
         hasAiAssist={hasFeature(plan?.features, "aiAssistant")}
         teamMembers={teamMembers}
@@ -193,6 +197,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
         <Inbox
           searchParams={searchParams}
           companyId={user.companyId}
+          companyCategory={user.companyCategory}
           userId={user.userId}
           viewerRole={user.role}
         />

@@ -16,6 +16,7 @@ import { Spinner } from "@/components/common/spinner";
 import { RelativeTime } from "@/components/common/relative-time";
 import { cn } from "@/lib/utils";
 import { useServerAction } from "@/hooks/use-server-action";
+import { useFieldLabels } from "@/features/leads/vertical-context";
 import {
   assignLead,
   markContacted,
@@ -116,6 +117,7 @@ function LeadDetail({
   teamMembers: TeamMember[];
 }) {
   const { busyId, run } = useServerAction();
+  const fieldLabels = useFieldLabels();
   const saving = busyId !== null;
   const [notes, setNotes] = useState(lead.notes);
   const [dealValue, setDealValueInput] = useState(lead.dealValueUsd !== null ? String(lead.dealValueUsd) : "");
@@ -285,10 +287,10 @@ function LeadDetail({
           <LeadValidationSection leadId={lead.id} />
 
           <section className="grid grid-cols-2 gap-3 text-sm">
-            <Field label="Wants" value={lead.propertyTypes.join(", ") || "—"} />
+            <Field label={fieldLabels.wants} value={lead.propertyTypes.join(", ") || "—"} />
             <Field label="Where" value={lead.locations.join(", ") || "—"} />
             <Field
-              label="Budget"
+              label={fieldLabels.budget}
               value={
                 lead.budgetMin === null && lead.budgetMax === null
                   ? "—"

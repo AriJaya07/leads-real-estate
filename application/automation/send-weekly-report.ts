@@ -1,94 +1,47 @@
 import "server-only";
 import { and, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
-import { getLeadStats, getLeadTrend, getTopUncontactedLeads, type LeadStats, type LeadListItem } from "@/application/leads/lead-queries";
-import { getRevenueSummary, type RevenueSummary } from "@/application/analytics/revenue";
-import { getConversionFunnel, type ConversionFunnel } from "@/application/analytics/conversion";
+import { getLeadStats, getLeadTrend, getTopUncontactedLeads } from "@/application/leads/lead-queries";
+import { getRevenueSummary } from "@/application/analytics/revenue";
+import { getConversionFunnel } from "@/application/analytics/conversion";
 import { primaryLeadScore } from "@/domain/lead/ranking";
-import { getNotifier } from "@/infrastructure/notifiers/registry";
-import type { NotificationMessage } from "@/domain/sync/ports";
-import { formatCount, formatMinutes, formatUsd } from "@/shared/format";
+import { serverEnv } from "@/shared/config/env";
 import { createLogger } from "@/infrastructure/observability/logger";
 import { getAutomationSettings } from "./automation-settings.queries";
 
 const log = createLogger("automation:weekly-report");
 const WEEK_MS = 7 * 86_400_000;
 
-function renderWeeklyReport(
-  companyName: string,
-  stats: LeadStats,
-  newThisWeek: number,
-  revenue: RevenueSummary,
-  funnel: ConversionFunnel,
-  topUncontacted: LeadListItem[],
-  recipient: string,
-): NotificationMessage {
-  const rows: [string, string][] = [
-    ["New leads this week", formatCount(newThisWeek)],
-    ["Total leads", formatCount(stats.total)],
-    ["Buyers", `${formatCount(stats.buyers)} (${formatCount(stats.hotBuyers)} hot)`],
-    ["Unassigned", formatCount(stats.unassigned)],
-    ["Contactable", formatCount(stats.contactable)],
-    ["High potential", formatCount(stats.highPotential)],
-    ["High score (80+)", formatCount(stats.highScore)],
-    ["Uncontacted 2h+", formatCount(stats.uncontactedOver2h)],
-    [
-      "Median time to first touch",
-      stats.medianTimeToFirstTouchMinutes === null ? "no data yet" : formatMinutes(stats.medianTimeToFirstTouchMinutes),
-    ],
-    ["Revenue this week", `${formatUsd(revenue.revenueLast30Days)} (${formatCount(revenue.dealsLast30Days)} deals)`],
-    ["Overall conversion to closed", `${funnel.overallConversionPct.toFixed(1)}%`],
-  ];
-
-  const uncontactedLines = topUncontacted.map((lead) => {
-    const name = lead.name || lead.username || "Unnamed lead";
-    const where = lead.locations[0] ?? lead.location ?? "";
-    return { name, where, score: primaryLeadScore(lead) };
-  });
-
-  const subject = `Weekly lead report — ${formatCount(newThisWeek)} new this week`;
-  const text = [
-    `${companyName} — weekly lead report`,
-    "",
-    ...rows.map(([label, value]) => `${label}: ${value}`),
-    ...(uncontactedLines.length > 0
-      ? ["", "Top leads you haven't touched:", ...uncontactedLines.map((l) => `- ${l.name} — ${l.where} (${l.score})`)]
-      : []),
-  ].join("\n");
-  const html = `
-    <div style="max-width:480px;margin:0 auto;font-family:system-ui,sans-serif;">
-      <h2 style="font:600 18px/1.3 system-ui,sans-serif;margin:0 0 12px;">${companyName} — weekly lead report</h2>
-      <table style="width:100%;border-collapse:collapse;font:400 14px/1.6 system-ui,sans-serif;">
-        ${rows
-          .map(
-            ([label, value]) => `
-          <tr>
-            <td style="padding:6px 0;border-bottom:1px solid #e6e6e6;color:#6b7280;">${label}</td>
-            <td style="padding:6px 0;border-bottom:1px solid #e6e6e6;text-align:right;font-weight:600;">${value}</td>
-          </tr>`,
-          )
-          .join("")}
-      </table>
-      ${
-        uncontactedLines.length > 0
-          ? `
-      <h3 style="font:600 13px/1.3 system-ui,sans-serif;margin:20px 0 8px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">Top leads you haven't touched</h3>
-      <table style="width:100%;border-collapse:collapse;font:400 14px/1.6 system-ui,sans-serif;">
-        ${uncontactedLines
-          .map(
-            (l) => `
-          <tr>
-            <td style="padding:6px 0;border-bottom:1px solid #e6e6e6;">${l.name}${l.where ? ` — ${l.where}` : ""}</td>
-            <td style="padding:6px 0;border-bottom:1px solid #e6e6e6;text-align:right;font-weight:600;">${l.score}</td>
-          </tr>`,
-          )
-          .join("")}
-      </table>`
-          : ""
-      }
-    </div>`;
-
-  return { to: recipient, subject, text, html };
+/**
+ * Rendering (HTML/subject/copy) and sending both live in n8n workflow 09
+ * (`n8n/workflows/notifications/09-weekly-report-render-and-send.json`) —
+ * this app only computes the numbers, same source functions the dashboard
+ * and Analytics page use, and hands them over raw. Unlike the `whatsapp`/
+ * `slack` notifier channels this has no in-app fallback: an unconfigured
+ * `N8N_WEEKLY_REPORT_WEBHOOK_URL` just means the digest doesn't go out,
+ * logged as a warning, same "must never break the pipeline" posture as
+ * every other notifier.
+ */
+async function postWeeklyReport(payload: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
+  const url = serverEnv().N8N_WEEKLY_REPORT_WEBHOOK_URL;
+  const secret = serverEnv().AVERONAI_NOTIFY_SHARED_SECRET;
+  if (!url || !secret) {
+    return { ok: false, error: "N8N_WEEKLY_REPORT_WEBHOOK_URL/AVERONAI_NOTIFY_SHARED_SECRET not configured" };
+  }
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-averonai-notify-secret": secret },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      return { ok: false, error: `n8n weekly report ${response.status}: ${body}` };
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 export interface WeeklyReportResult {
@@ -141,12 +94,34 @@ export async function sendWeeklyReport(companyId: string, now: Date = new Date()
     getTopUncontactedLeads(companyId, 5),
   ]);
   const newThisWeek = trend.reduce((sum, point) => sum + point.total, 0);
+  const companyName = company?.name ?? "AveronAi";
+  const uncontacted = topUncontacted.map((lead) => ({
+    name: lead.name || lead.username || "Unnamed lead",
+    where: lead.locations[0] ?? lead.location ?? "",
+    score: primaryLeadScore(lead),
+  }));
 
-  const notifier = getNotifier("email");
   let anySent = false;
   for (const recipient of recipients) {
-    const message = renderWeeklyReport(company?.name ?? "AveronAi", stats, newThisWeek, revenue, funnel, topUncontacted, recipient);
-    const result = await notifier.send(message);
+    const result = await postWeeklyReport({
+      companyName,
+      recipient,
+      newThisWeek,
+      stats: {
+        total: stats.total,
+        buyers: stats.buyers,
+        hotBuyers: stats.hotBuyers,
+        unassigned: stats.unassigned,
+        contactable: stats.contactable,
+        highPotential: stats.highPotential,
+        highScore: stats.highScore,
+        uncontactedOver2h: stats.uncontactedOver2h,
+        medianTimeToFirstTouchMinutes: stats.medianTimeToFirstTouchMinutes,
+      },
+      revenue: { revenueLast30Days: revenue.revenueLast30Days, dealsLast30Days: revenue.dealsLast30Days },
+      funnel: { overallConversionPct: funnel.overallConversionPct },
+      topUncontacted: uncontacted,
+    });
     if (result.ok) anySent = true;
     else log.warn("weekly report send failed", { companyId, recipient, error: result.error });
   }

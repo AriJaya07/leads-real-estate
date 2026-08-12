@@ -1,0 +1,87 @@
+{
+  "name": "Trigger - Auto-Assign Sweep",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/10 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "ce546531-5300-5fa6-a71e-ddfb508b10c1",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_TRIGGER_CALLER_WORKFLOW_ID",
+          "mode": "list",
+          "cachedResultName": "_Trigger Caller"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "route": "auto-assign",
+            "timeoutMs": 60000
+          },
+          "matchingColumns": [],
+          "schema": []
+        }
+      },
+      "id": "48fa681d-c073-5455-a40f-0f5b04ddc126",
+      "name": "Call _Trigger Caller (auto-assign)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        460,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Call _Trigger Caller (auto-assign)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "_Shared Error Handler",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Calls applyAutomationRules() via POST /api/trigger/auto-assign. After import, open the Execute Workflow node and re-select '_Trigger Caller' from its workflow dropdown (same caveat as the Error Workflow field \u2014 n8n assigns the real id at import time, the JSON placeholder can't resolve it automatically)."
+  },
+  "id": "4552d021-9efd-47f0-bc20-022cf20fbafd",
+  "tags": [
+    {
+      "name": "averonai"
+    },
+    {
+      "name": "n8n-integration-plan"
+    }
+  ]
+}

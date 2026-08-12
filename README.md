@@ -169,9 +169,6 @@ Outstanding:
   no cutover mechanism by design — the rules classifier is still the only thing that
   determines a persisted score. The `LeadIntelligence` (rollup) port has no LLM
   implementation at all yet, only the classifier does.
-- WhatsApp notifier: adapter scaffolded (`infrastructure/notifiers/whatsapp.notifier.ts`),
-  needs a real `WHATSAPP_API_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` to actually send — "the
-  channel that will actually be read on a Saturday."
 - Embeddings / semantic search (needs `pgvector`, unavailable on the local Postgres)
 
 **The highest-impact outstanding item is not code.** The datasets currently being

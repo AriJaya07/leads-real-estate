@@ -3,6 +3,7 @@ import { and, eq, gte, ne, sql } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
 import { applyMapping } from "@/domain/dataset/mapping";
 import { classifyWithRules } from "@/domain/scoring/rules-classifier";
+import { getLexiconForCategory } from "@/domain/scoring/lexicon-registry";
 import { canonicalLocation } from "@/domain/scoring/extractors";
 import type { MappingRules } from "@/domain/dataset/types";
 import { NEAR_DUPLICATE_SIMILARITY, NEAR_DUPLICATE_WINDOW_HOURS } from "@/shared/constants";
@@ -168,6 +169,16 @@ export async function processRawRecords(
   const recordKind = options.recordKind ?? "content_post";
   const platform = options.platform ?? "facebook";
   const isEngagement = recordKind !== "content_post";
+
+  // Fetched once per batch, not per record — a company's category doesn't
+  // change mid-sync, and this keeps the classifier's hot loop free of a
+  // per-record query.
+  const [company] = await db()
+    .select({ category: schema.companies.category })
+    .from(schema.companies)
+    .where(eq(schema.companies.id, options.companyId))
+    .limit(1);
+  const lexicon = getLexiconForCategory(company?.category ?? "other");
   const result: ProcessResult = {
     created: 0,
     updated: 0,
@@ -207,7 +218,7 @@ export async function processRawRecords(
           ? { ...normalized.engagementContext, repeatEngagementCount }
           : undefined,
       };
-      const classification = classifyWithRules(classifierInput);
+      const classification = classifyWithRules(classifierInput, lexicon);
       // Fire-and-forget comparison logging only — no-op unless explicitly
       // enabled, never affects `classification` below. See shadow-classify.ts.
       runShadowClassification(classifierInput, classification);

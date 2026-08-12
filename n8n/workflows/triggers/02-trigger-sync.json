@@ -1,0 +1,87 @@
+{
+  "name": "Trigger - Sync Datasets",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/5 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "cef843dc-3450-5f8e-90c5-7b3c81d85387",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_TRIGGER_CALLER_WORKFLOW_ID",
+          "mode": "list",
+          "cachedResultName": "_Trigger Caller"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "route": "sync",
+            "timeoutMs": 300000
+          },
+          "matchingColumns": [],
+          "schema": []
+        }
+      },
+      "id": "300e8bbb-869a-5e93-a9e3-460e9c7da6fc",
+      "name": "Call _Trigger Caller (sync)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        460,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Call _Trigger Caller (sync)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "_Shared Error Handler",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Calls dueDatasets()+syncDataset() via POST /api/trigger/sync. Core ingestion tick. maxDuration=300s server-side, so timeoutMs is 300000 here (overriding the sub-workflow's default) rather than the usual 60000. After import, open the Execute Workflow node and re-select '_Trigger Caller' from its workflow dropdown (same caveat as the Error Workflow field \u2014 n8n assigns the real id at import time, the JSON placeholder can't resolve it automatically)."
+  },
+  "id": "5156d56e-b6c4-4335-8f83-af10c23ba322",
+  "tags": [
+    {
+      "name": "averonai"
+    },
+    {
+      "name": "n8n-integration-plan"
+    }
+  ]
+}

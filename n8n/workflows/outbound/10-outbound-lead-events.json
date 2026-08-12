@@ -1,0 +1,238 @@
+{
+  "name": "10 - Outbound Lead Events",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "averonai-lead-events",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "2b6f0a1c-3d4e-4f5a-8b6c-7d8e9f0a1b2c",
+      "name": "Webhook - Lead Events",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "3c7f1b2d-4e5f-5a6b-9c7d-8e9f0a1b2c3d"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verifies X-AveronAi-Signature = hex HMAC-SHA256 of the *raw* JSON body, exactly\n// as computed in infrastructure/webhooks/outbound-webhook.ts::signWebhookBody.\n// Requires the Webhook node's Raw Body option (set above) so we sign the literal\n// bytes the app sent, not a re-serialization of the parsed object — those can\n// differ (key order, number formatting) even when they look identical.\nconst crypto = require('crypto');\nconst secret = $env.AVERONAI_WEBHOOK_SHARED_SECRET;\nconst item = $input.first();\nconst rawBody = item.binary && item.binary.data\n  ? Buffer.from(item.binary.data.data, 'base64').toString('utf8')\n  : JSON.stringify(item.json.body); // fallback if Raw Body isn't available on this n8n version — see workflow note\nconst expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');\nconst provided = item.json.headers['x-averonai-signature'];\nif (!provided || provided !== expected) {\n  throw new Error('Invalid or missing x-averonai-signature header');\n}\nreturn [{ json: JSON.parse(rawBody) }];"
+      },
+      "id": "4d8f2b3e-5f60-4a7b-9c8d-0e1f2a3b4c5d",
+      "name": "Verify HMAC Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"received\": true } }}"
+      },
+      "id": "5e9f3c4f-6071-4b8c-8d9e-1f2a3b4c5d6e",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json[\"event\"] }}",
+        "rules": {
+          "rules": [
+            { "value2": "lead.created_or_updated" },
+            { "value2": "lead.status_changed" },
+            { "value2": "lead.matched" },
+            { "value2": "alert.fired" }
+          ]
+        },
+        "fallbackOutput": 4
+      },
+      "id": "6f0a4d50-7182-4c9d-9e0f-2a3b4c5d6e7f",
+      "name": "Route by Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {},
+      "id": "70a15161-8293-4d0e-af10-3b4c5d6e7f80",
+      "name": "New/Updated Lead (stub — see note)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1120, 0]
+    },
+    {
+      "parameters": {},
+      "id": "81b26272-9304-4e1f-b021-4c5d6e7f8091",
+      "name": "Status Changed (stub — see note)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1120, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "// lead.matched fires the moment an /admin-configured alert rule's predicate\n// matches — before any delivery attempt, already filtered server-side\n// (domain/alerting/predicate.ts). No score/threshold filtering needed here;\n// the DB row IS the filter, same 'operational config lives in /admin, not\n// n8n' rule the app repo follows.\nconst d = $json.data;\nconst lines = d.leads.map((l) => {\n  const budget = (l.budgetMin || l.budgetMax)\n    ? `${l.budgetCurrency} ${l.budgetMin ?? '?'}\\u2013${l.budgetMax ?? '?'}`\n    : 'no budget stated';\n  const contact = l.contact?.whatsapp || l.contact?.phone || l.contact?.email || 'no contact info';\n  return `\\u2022 *${l.name}* \\u2014 ${l.leadType}, score ${l.buyerScore}, ${(l.locations || []).join(', ') || 'no location'}, ${budget} \\u2014 ${contact}`;\n}).join('\\n');\nconst text = `\\ud83d\\udd25 *${d.ruleName}* matched ${d.leads.length} lead(s)\\n${lines}`;\nreturn [{ json: { text } }];"
+      },
+      "id": "c1d2e3f4-0002-4a1b-9c1d-000000000001",
+      "name": "Format Slack Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_LEAD_ALERTS_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"text\": $json.text } }}",
+        "options": {}
+      },
+      "id": "c1d2e3f4-0002-4a1b-9c1d-000000000002",
+      "name": "Post to Slack (Lead Alerts)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 320],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// alert.fired is the delivery CONFIRMATION (only sent once dispatch.ts's\n// notifier.send() actually succeeds) — not a second copy of the same alert.\n// The recipient here is the rule's configured recipient for `channel`\n// (e.g. the agent's own WhatsApp for a whatsapp-channel rule); pinging that\n// same person again via Cloud API would double-send them the alert, so this\n// branch notifies WHATSAPP_OPS_PHONE_NUMBER (a supervisor/ops number) as an\n// oversight copy instead, and separately logs the delivery to the audit sheet.\nconst d = $json.data;\nconst names = d.leads.map((l) => l.name).join(', ');\nconst whatsappText = `\\u2705 \"${d.ruleName}\" delivered via ${d.channel} to ${d.recipient}\\nLeads: ${names}`;\nreturn [{\n  json: {\n    whatsappText,\n    ruleName: d.ruleName,\n    channel: d.channel,\n    recipient: d.recipient,\n    leadCount: d.leads.length,\n    leadNames: names,\n    deliveredAt: $json.timestamp,\n  },\n}];"
+      },
+      "id": "c1d2e3f4-0003-4a1b-9c1d-000000000001",
+      "name": "Format Delivery Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 480]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://graph.facebook.com/v20.0/' + $env.WHATSAPP_PHONE_NUMBER_ID + '/messages' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"messaging_product\": \"whatsapp\", \"to\": $env.WHATSAPP_OPS_PHONE_NUMBER, \"type\": \"text\", \"text\": { \"body\": $json.whatsappText } } }}",
+        "options": {}
+      },
+      "id": "c1d2e3f4-0003-4a1b-9c1d-000000000002",
+      "name": "Notify Ops (WhatsApp)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 420],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "WhatsApp Cloud API Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.AVERONAI_SHEETS_SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Alert Deliveries",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "deliveredAt": "={{ $json.deliveredAt }}",
+            "ruleName": "={{ $json.ruleName }}",
+            "channel": "={{ $json.channel }}",
+            "recipient": "={{ $json.recipient }}",
+            "leadCount": "={{ $json.leadCount }}",
+            "leadNames": "={{ $json.leadNames }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "c1d2e3f4-0003-4a1b-9c1d-000000000003",
+      "name": "Log to Sheet (Alert Deliveries)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1340, 560],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "AveronAi Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "b4e5959a-c637-4142-e354-7f8091021324",
+      "name": "Unknown Event (fallback)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1120, 700]
+    }
+  ],
+  "connections": {
+    "Webhook - Lead Events": {
+      "main": [[{ "node": "Verify HMAC Signature", "type": "main", "index": 0 }]]
+    },
+    "Verify HMAC Signature": {
+      "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]]
+    },
+    "Respond 200": {
+      "main": [[{ "node": "Route by Event", "type": "main", "index": 0 }]]
+    },
+    "Route by Event": {
+      "main": [
+        [{ "node": "New/Updated Lead (stub — see note)", "type": "main", "index": 0 }],
+        [{ "node": "Status Changed (stub — see note)", "type": "main", "index": 0 }],
+        [{ "node": "Format Slack Message", "type": "main", "index": 0 }],
+        [{ "node": "Format Delivery Summary", "type": "main", "index": 0 }],
+        [{ "node": "Unknown Event (fallback)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Slack Message": {
+      "main": [[{ "node": "Post to Slack (Lead Alerts)", "type": "main", "index": 0 }]]
+    },
+    "Format Delivery Summary": {
+      "main": [
+        [
+          { "node": "Notify Ops (WhatsApp)", "type": "main", "index": 0 },
+          { "node": "Log to Sheet (Alert Deliveries)", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "_Shared Error Handler",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Webhook-triggered by the app's already-built outbound event system (infrastructure/webhooks/outbound-webhook.ts, application/automation/webhook-dispatch.ts) — no app-side code changes needed. Requires an admin to enable the webhook at /admin/automation, paste this workflow's Production URL in, and copy the app-generated signing secret into AVERONAI_WEBHOOK_SHARED_SECRET here. Four events land on this one URL: lead.created_or_updated and lead.status_changed carry { event, companyId, timestamp, data: Lead[] } (bare array); lead.matched and alert.fired carry { event, companyId, timestamp, data: { ruleId, ruleName, [channel, recipient,] leads: Lead[] } } — the two shapes are NOT the same. lead.matched -> real-time Slack ping (already filtered by the alert rule's DB predicate, no n8n-side threshold needed). alert.fired -> WhatsApp copy to an ops/supervisor number (NOT the original recipient, that would double-send) + an append-only Google Sheets audit row. lead.created_or_updated / lead.status_changed are left as deliberate stubs: wiring every lead touch to an external system would duplicate workflow 11's poll-based export and add noise without a clear MVP use case yet — extend them when a real one shows up."
+  },
+  "id": "c5f60a1b-d748-4253-f465-8091021324a5",
+  "tags": [
+    { "name": "averonai" },
+    { "name": "n8n-integration-plan" }
+  ]
+}

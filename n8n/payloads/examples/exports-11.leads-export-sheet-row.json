@@ -1,0 +1,20 @@
+{
+  "_note": "One row workflow 11's Code node produces per lead, upserted into the 'Leads Export' Google Sheet tab matched on 'id'.",
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "Marta Kowalska",
+  "leadType": "buyer",
+  "status": "new",
+  "buyerScore": 92,
+  "confidenceScore": 88,
+  "propertyTypes": "villa",
+  "locations": "Canggu",
+  "budgetMin": 200000,
+  "budgetMax": 250000,
+  "budgetCurrency": "USD",
+  "whatsapp": "+6281234567890",
+  "phone": "",
+  "email": "",
+  "assignedToName": "",
+  "createdAt": "2026-08-07T22:03:11.000Z",
+  "latestAppearanceAt": "2026-08-08T01:40:02.000Z"
+}

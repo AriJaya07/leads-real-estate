@@ -121,7 +121,11 @@ In rough priority order as understood from the codebase and README:
 2. **Visual mapping editor** — mapping profiles are still edited as JSON rows, not
    through a UI. (The pipeline kanban, intelligence dashboards, and cross-dataset sync
    activity feed that used to be listed here are built — `/pipeline`, `/intelligence`,
-   `/admin/sync`.)
+   `/admin/sync`. WhatsApp and Slack alert delivery are also built now, relaying through
+   n8n — `infrastructure/notifiers/n8n.notifier.ts`, `n8n/workflows/notifications/08-*`
+   — though the alert-rule builder UI still only offers `email`/`whatsapp` as selectable
+   channels; `slack` is wired at the notifier level but deliberately not exposed there
+   yet, see `features/alerting/components/alert-rule-manager.tsx`.)
 3. **LLM classifier** — `infrastructure/ai/llm-classifier.ts` implements the
    `LeadClassifier` port behind `ANTHROPIC_API_KEY` + `LLM_SHADOW_CLASSIFY_ENABLED`
    (both optional, both off by default). `application/leads/shadow-classify.ts` fires
@@ -133,13 +137,7 @@ In rough priority order as understood from the codebase and README:
    appearance-level classifier has a scaffold so far. An engagement-only lead (liked a
    listing, no text anywhere) is the case a phrase lexicon structurally can't help with
    and an LLM given "this profile + these appearances" could.
-4. **WhatsApp notifier** — adapter scaffolded (`infrastructure/notifiers/whatsapp.notifier.ts`,
-   registered in `infrastructure/notifiers/registry.ts` alongside `email`). Needs a real
-   `WHATSAPP_API_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` (WhatsApp Cloud API) to actually send —
-   without them it degrades to a log line, same as email without `RESEND_API_KEY`. This is
-   called out in the README as "the channel that will actually be read on a Saturday" —
-   i.e. the intended primary channel once activated, not a nice-to-have.
-5. **Embeddings / semantic search** — needs `pgvector`, not available on the local
+4. **Embeddings / semantic search** — needs `pgvector`, not available on the local
    Postgres setup used during development.
 
 ## Acceptance criteria pattern

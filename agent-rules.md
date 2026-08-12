@@ -111,5 +111,7 @@ shapes from training data — see [docs/coding-standards.md](docs/coding-standar
 - [docs/tech-debt.md](docs/tech-debt.md) — known sharp edges, don't be surprised by them
 - [docs/testing-strategy.md](docs/testing-strategy.md) — what/how to test
 - [docs/environment.md](docs/environment.md) — env vars, setup, third-party services
+- [docs/n8n-integration-plan.md](docs/n8n-integration-plan.md) — why the n8n workflows in
+  `n8n/workflows/` are shaped the way they are
 - [ai-prompts/](ai-prompts/) — task-shaped prompt templates (feature work, bug fixes,
   reviews, refactoring, tests, docs)

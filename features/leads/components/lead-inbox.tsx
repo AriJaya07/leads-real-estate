@@ -43,6 +43,8 @@ import { useServerAction } from "@/hooks/use-server-action";
 import { useListKeyboardNav } from "@/hooks/use-list-keyboard-nav";
 import { useLeadFacetsQuery, useLeadsQuery, useSavedViewsQuery } from "@/features/leads/queries";
 import { parseLeadFilters, type LeadFilters } from "@/application/leads/filters.schema";
+import { FieldLabelsProvider, useFieldLabels } from "@/features/leads/vertical-context";
+import type { CompanyCategory } from "@/domain/verticals/catalog";
 import { LEAD_STATUSES, leadStatusLabel } from "@/application/leads/lead-status";
 import type { LeadListItem, LeadPage } from "@/application/leads/lead-queries";
 import type { FacetDescriptor } from "@/application/leads/facets";
@@ -219,6 +221,7 @@ const LeadCard = memo(function LeadCard({
   onRowKeyDown?: (event: React.KeyboardEvent) => void;
 }) {
   const appearance = lead.primaryAppearance;
+  const fieldLabels = useFieldLabels();
   return (
     <div
       ref={rowRef}
@@ -286,8 +289,8 @@ const LeadCard = memo(function LeadCard({
       </div>
 
       <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
-        <span>{lead.propertyTypes.length ? lead.propertyTypes.join(", ") : "Any property type"}</span>
-        <span>{lead.locations.length ? lead.locations.join(", ") : "Any location"}</span>
+        <span>{lead.propertyTypes.length ? lead.propertyTypes.join(", ") : `Any ${fieldLabels.categoryField.toLowerCase()}`}</span>
+        <span>{lead.locations.length ? lead.locations.join(", ") : `Any ${fieldLabels.locations.toLowerCase()}`}</span>
         <span className="font-mono tabular-nums">{budgetLabel(lead)}</span>
       </div>
 
@@ -593,6 +596,7 @@ function LeadResultsView({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const fieldLabels = useFieldLabels();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const lastCheckedIdRef = useRef<string | null>(null);
@@ -803,9 +807,9 @@ function LeadResultsView({
               <th className="w-9" />
               <th className="w-20">Score</th>
               <th>Lead</th>
-              <th className="w-32">Wants</th>
+              <th className="w-32">{fieldLabels.wants}</th>
               <th className="w-32">Where</th>
-              <th className="w-28">Budget</th>
+              <th className="w-28">{fieldLabels.budget}</th>
               <th className="w-24">Last seen</th>
               <th className="w-24">Owner</th>
               <th className="w-36">Act</th>
@@ -876,12 +880,15 @@ function LeadResultsView({
 export function LeadInbox({
   canCollectData = false,
   currentUserId,
+  companyCategory,
   canManageSharedSearches = false,
   hasAiAssist = false,
   teamMembers = [],
 }: {
   canCollectData?: boolean;
   currentUserId: string;
+  /** Drives category-aware field labels ("Wants"/"Property types" etc) via `FieldLabelsProvider` — see `features/leads/vertical-context.tsx`. */
+  companyCategory: CompanyCategory;
   canManageSharedSearches?: boolean;
   /** `aiAssistant` plan feature — gates the summary/message-draft buttons in the detail sheet. */
   hasAiAssist?: boolean;
@@ -955,6 +962,7 @@ export function LeadInbox({
   );
 
   return (
+    <FieldLabelsProvider category={companyCategory}>
     <div className="flex flex-col gap-4">
       <SavedSearchesBar
         views={savedViews}
@@ -1042,5 +1050,6 @@ export function LeadInbox({
         teamMembers={teamMembers}
       />
     </div>
+    </FieldLabelsProvider>
   );
 }

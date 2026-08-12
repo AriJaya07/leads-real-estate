@@ -1,0 +1,4 @@
+{
+  "_note": "What workflow 10's 'Format Slack Message' node builds from a lead.matched event, POSTed as-is to SLACK_LEAD_ALERTS_WEBHOOK_URL.",
+  "text": "🔥 *Hot Canggu buyers* matched 1 lead(s)\n• *Marta Kowalska* — buyer, score 92, Canggu, USD 200000–250000 — +6281234567890"
+}

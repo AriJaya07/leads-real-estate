@@ -1,0 +1,87 @@
+{
+  "name": "Trigger - FX Refresh",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "b73fb115-22d9-5072-8e17-4e9cbb74528c",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_TRIGGER_CALLER_WORKFLOW_ID",
+          "mode": "list",
+          "cachedResultName": "_Trigger Caller"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "route": "fx",
+            "timeoutMs": 60000
+          },
+          "matchingColumns": [],
+          "schema": []
+        }
+      },
+      "id": "d28dcf53-357d-53ba-94e4-eecd40ec9a6e",
+      "name": "Call _Trigger Caller (fx)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        460,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Call _Trigger Caller (fx)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "_Shared Error Handler",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Calls refreshFxRates() via POST /api/trigger/fx. Daily \u2014 FX rates don't move fast enough to need more. After import, open the Execute Workflow node and re-select '_Trigger Caller' from its workflow dropdown (same caveat as the Error Workflow field \u2014 n8n assigns the real id at import time, the JSON placeholder can't resolve it automatically)."
+  },
+  "id": "2f78e21f-85c3-4bb2-8221-460cd0c8db6c",
+  "tags": [
+    {
+      "name": "averonai"
+    },
+    {
+      "name": "n8n-integration-plan"
+    }
+  ]
+}

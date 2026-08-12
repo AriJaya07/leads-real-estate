@@ -1,0 +1,87 @@
+{
+  "name": "Trigger - Retention Prune",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "19e056a4-93e1-54d2-8ae2-d8bb9fed7105",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_TRIGGER_CALLER_WORKFLOW_ID",
+          "mode": "list",
+          "cachedResultName": "_Trigger Caller"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "route": "retention",
+            "timeoutMs": 60000
+          },
+          "matchingColumns": [],
+          "schema": []
+        }
+      },
+      "id": "3e291caa-d440-507e-b646-1dedc809e8a0",
+      "name": "Call _Trigger Caller (retention)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        460,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Call _Trigger Caller (retention)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "_Shared Error Handler",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Calls pruneOldRows() via POST /api/trigger/retention. Weekly, off-peak (Sunday 3am). After import, open the Execute Workflow node and re-select '_Trigger Caller' from its workflow dropdown (same caveat as the Error Workflow field \u2014 n8n assigns the real id at import time, the JSON placeholder can't resolve it automatically)."
+  },
+  "id": "a018a461-ae5f-4db8-90c2-f94bab4caa20",
+  "tags": [
+    {
+      "name": "averonai"
+    },
+    {
+      "name": "n8n-integration-plan"
+    }
+  ]
+}

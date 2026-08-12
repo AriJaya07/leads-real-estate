@@ -29,9 +29,16 @@ const serverEnvSchema = z.object({
    */
   N8N_TRIGGER_SECRET: z.string().min(16, "N8N_TRIGGER_SECRET must be at least 16 chars").optional(),
 
-  /** WhatsApp Cloud API. Optional — without both, the notifier logs instead of sending. */
-  WHATSAPP_API_TOKEN: z.string().optional(),
-  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  /**
+   * Relay for the `whatsapp`/`slack` notifier channels and the weekly report
+   * — both hand off to n8n instead of the app holding those provider
+   * credentials directly. See `infrastructure/notifiers/n8n.notifier.ts`.
+   * Optional so an instance that hasn't wired up n8n notifications just logs
+   * instead of sending, same posture as `RESEND_API_KEY`.
+   */
+  N8N_NOTIFY_WEBHOOK_URL: z.string().url().optional(),
+  N8N_WEEKLY_REPORT_WEBHOOK_URL: z.string().url().optional(),
+  AVERONAI_NOTIFY_SHARED_SECRET: z.string().min(16, "AVERONAI_NOTIFY_SHARED_SECRET must be at least 16 chars").optional(),
 
   /** Anthropic API key for the shadow-mode LLM classifier. Optional — unset means it never runs. */
   ANTHROPIC_API_KEY: z.string().optional(),

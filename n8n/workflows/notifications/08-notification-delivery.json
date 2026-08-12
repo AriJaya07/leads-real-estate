@@ -12,10 +12,7 @@
       "name": "Webhook - Notify",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [
-        240,
-        400
-      ],
+      "position": [240, 400],
       "webhookId": "84edaacd-9433-406a-a3b3-97648cfa99b9"
     },
     {
@@ -26,10 +23,7 @@
       "name": "Verify Shared Secret",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        460,
-        400
-      ]
+      "position": [460, 400]
     },
     {
       "parameters": {
@@ -37,56 +31,17 @@
         "value1": "={{ $json[\"body\"][\"channel\"] }}",
         "rules": {
           "rules": [
-            {
-              "value2": "email"
-            },
-            {
-              "value2": "whatsapp"
-            },
-            {
-              "value2": "slack"
-            }
+            { "value2": "whatsapp" },
+            { "value2": "slack" }
           ]
         },
-        "fallbackOutput": 3
+        "fallbackOutput": 2
       },
       "id": "752cef90-c7db-43e6-b204-e9c9a304adfd",
       "name": "Route by Channel",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 1,
-      "position": [
-        680,
-        400
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.resend.com/emails",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ { \"from\": $env.AVERONAI_NOTIFY_FROM_EMAIL, \"to\": [$json.body.to], \"subject\": $json.body.subject, \"html\": $json.body.html, \"text\": $json.body.text } }}",
-        "options": {}
-      },
-      "id": "0c69cad7-e976-4477-9a39-f878f79c87ef",
-      "name": "Send Email (Resend)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        900,
-        220
-      ],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 2000,
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
-          "name": "Resend API Bearer"
-        }
-      }
+      "position": [680, 400]
     },
     {
       "parameters": {
@@ -103,10 +58,7 @@
       "name": "Send WhatsApp (Cloud API)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        900,
-        400
-      ],
+      "position": [900, 300],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 2000,
@@ -130,10 +82,7 @@
       "name": "Send Slack",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        900,
-        580
-      ],
+      "position": [900, 460],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 2000
@@ -144,10 +93,7 @@
       "name": "Unknown Channel (fallback)",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [
-        900,
-        760
-      ]
+      "position": [900, 620]
     },
     {
       "parameters": {
@@ -158,110 +104,31 @@
       "name": "Respond 200",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [
-        1120,
-        400
-      ]
+      "position": [1120, 400]
     }
   ],
   "connections": {
     "Webhook - Notify": {
-      "main": [
-        [
-          {
-            "node": "Verify Shared Secret",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Verify Shared Secret", "type": "main", "index": 0 }]]
     },
     "Verify Shared Secret": {
-      "main": [
-        [
-          {
-            "node": "Route by Channel",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Route by Channel", "type": "main", "index": 0 }]]
     },
     "Route by Channel": {
       "main": [
-        [
-          {
-            "node": "Send Email (Resend)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Send WhatsApp (Cloud API)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Send Slack",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Unknown Channel (fallback)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send Email (Resend)": {
-      "main": [
-        [
-          {
-            "node": "Respond 200",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Send WhatsApp (Cloud API)", "type": "main", "index": 0 }],
+        [{ "node": "Send Slack", "type": "main", "index": 0 }],
+        [{ "node": "Unknown Channel (fallback)", "type": "main", "index": 0 }]
       ]
     },
     "Send WhatsApp (Cloud API)": {
-      "main": [
-        [
-          {
-            "node": "Respond 200",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]]
     },
     "Send Slack": {
-      "main": [
-        [
-          {
-            "node": "Respond 200",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]]
     },
     "Unknown Channel (fallback)": {
-      "main": [
-        [
-          {
-            "node": "Respond 200",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]]
     }
   },
   "active": false,
@@ -274,15 +141,11 @@
   "staticData": null,
   "meta": {
     "instanceId": "REPLACE_ON_IMPORT",
-    "templateNote": "Webhook-triggered. Replaces infrastructure/notifiers/{email,whatsapp,slack}.notifier.ts's actual send mechanics \u2014 the app still decides WHO/WHEN (dedup, throttle, alert rules), this workflow only does the physical delivery for whichever channel is requested. Requires: a new infrastructure/notifiers/n8n.notifier.ts adapter in the app (see plan doc)."
+    "templateNote": "Webhook-triggered. Delivery-only relay for infrastructure/notifiers/n8n.notifier.ts (whatsapp + slack channels) — the app still decides WHO/WHEN (dedup, throttle, alert rules, message rendering), this workflow only does the physical send. Deliberately has NO email branch: `email` stays on the app's direct Resend notifier (infrastructure/notifiers/email.notifier.ts) because it's shared with password-reset and team-invite sends, which must not depend on n8n being reachable — see infrastructure/notifiers/registry.ts. If a request somehow arrives with channel=email it falls through to the Unknown Channel stub rather than silently sending, which is the correct behavior (this route should never receive it)."
   },
   "id": "500bebcc-8e81-4848-ba73-6ebfcd8e6ff0",
   "tags": [
-    {
-      "name": "averonai"
-    },
-    {
-      "name": "n8n-integration-plan"
-    }
+    { "name": "averonai" },
+    { "name": "n8n-integration-plan" }
   ]
 }

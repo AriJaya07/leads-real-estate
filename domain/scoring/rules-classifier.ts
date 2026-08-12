@@ -7,15 +7,8 @@ import {
   extractPropertyTypes,
   matchPhrases,
 } from "./extractors";
-import {
-  AGENT_PHRASES,
-  BROKER_PHRASES,
-  BUYER_PHRASES,
-  INVESTOR_PHRASES,
-  RECRUITMENT_PHRASES,
-  SELLER_PHRASES,
-  SPAM_PHRASES,
-} from "./lexicon";
+import { RECRUITMENT_PHRASES, SPAM_PHRASES } from "./lexicon";
+import { REAL_ESTATE_LEXICON, type LexiconBundle } from "./lexicon-registry";
 import type {
   Classification,
   ClassifierInput,
@@ -26,7 +19,18 @@ import type {
 
 export const RULES_CLASSIFIER_ID = "rules@2";
 
-/** Structured listing shape ("3 beds · 3 bath · Villa" + a price) means inventory. */
+/**
+ * Structured listing shape ("3 beds · 3 bath · Villa" + a price) means inventory.
+ *
+ * Real-estate-specific by construction, unlike the phrase lexicon above (which
+ * is swappable per category via `lexicon-registry.ts`) — a travel/courses post
+ * has no bed/bath count to match, so this simply never fires for those
+ * categories rather than misfiring. Known limit, not a bug: a vertical whose
+ * "structured listing" concept isn't bed/bath-shaped (e.g. flight
+ * dates+price) would need its own detector, not a phrase-list swap. Not
+ * built yet — see `extractBedrooms`/`extractBathrooms` in `./extractors.ts`
+ * for the other real-estate-shaped heuristics with the same caveat.
+ */
 function looksLikeListing(input: ClassifierInput): boolean {
   const hasStructuredTitle = Boolean(input.listingTitle && /\d+\s*(bed|bath)/i.test(input.listingTitle));
   return hasStructuredTitle && Boolean(input.priceRaw);
@@ -157,8 +161,17 @@ function classifyEngagement(input: ClassifierInput): Classification {
  *    buyer. It is reported separately as `reach`.
  *  - Intent and quality are separate axes. "I want to buy a villa" is high intent
  *    and low quality (no budget, no contact, no location). Agents need both.
+ *
+ * `lexicon` defaults to the original real-estate phrase set — every existing
+ * caller that doesn't pass one (including this file's own tests) gets
+ * identical behavior to before per-vertical lexicons existed. A different
+ * bundle (`domain/scoring/lexicon-registry.ts::getLexiconForCategory`) only
+ * swaps which phrases count as buyer/seller/agent/investor/broker signal —
+ * the scoring algorithm itself, and the `looksLikeListing`/bed-bath/budget
+ * extractors below, stay the same across every category (see that file's
+ * own comment for why that's a known, deliberate limit for now).
  */
-export function classifyWithRules(input: ClassifierInput): Classification {
+export function classifyWithRules(input: ClassifierInput, lexicon: LexiconBundle = REAL_ESTATE_LEXICON): Classification {
   if (input.recordKind === "engagement_like" || input.recordKind === "engagement_comment") {
     return classifyEngagement(input);
   }
@@ -168,11 +181,11 @@ export function classifyWithRules(input: ClassifierInput): Classification {
 
   const spamHits = matchPhrases(haystack, SPAM_PHRASES);
   const recruitmentHits = matchPhrases(haystack, RECRUITMENT_PHRASES);
-  const buyerHits = matchPhrases(haystack, BUYER_PHRASES);
-  const sellerHits = matchPhrases(haystack, SELLER_PHRASES);
-  const agentHits = matchPhrases(haystack, AGENT_PHRASES);
-  const investorHits = matchPhrases(haystack, INVESTOR_PHRASES);
-  const brokerHits = matchPhrases(haystack, BROKER_PHRASES);
+  const buyerHits = matchPhrases(haystack, lexicon.buyer);
+  const sellerHits = matchPhrases(haystack, lexicon.seller);
+  const agentHits = matchPhrases(haystack, lexicon.agent);
+  const investorHits = matchPhrases(haystack, lexicon.investor);
+  const brokerHits = matchPhrases(haystack, lexicon.broker);
   // Additive signals, computed regardless of the primary intent pick — see the
   // `investorScore`/`brokerScore` doc comment on `Classification`. Zeroed out
   // below if this record turns out to be spam.

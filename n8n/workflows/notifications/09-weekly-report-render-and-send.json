@@ -1,0 +1,158 @@
+{
+  "name": "09 - Weekly Report Render and Send",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "averonai-weekly-report",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f7f06da8-14b2-4f05-9eea-c64e96415bf1",
+      "name": "Webhook - Weekly Report",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "41af342f-fc98-4d69-b67f-497b3f8104ab"
+    },
+    {
+      "parameters": {
+        "jsCode": "const secret = $env.AVERONAI_NOTIFY_SHARED_SECRET;\nconst provided = $input.first().json.headers['x-averonai-notify-secret'];\nif (!provided || provided !== secret) {\n  throw new Error('Invalid or missing x-averonai-notify-secret header');\n}\nreturn $input.all();"
+      },
+      "id": "08a6e880-ecc5-40fb-825b-2c5c15e098b5",
+      "name": "Verify Shared Secret",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Matches the payload shape posted by application/automation/send-weekly-report.ts's\n// postWeeklyReport() \u2014 { companyName, recipient, newThisWeek, stats, revenue, funnel,\n// topUncontacted }. If that function's payload shape changes, this node needs updating\n// to match (there is no shared type between the two repos to keep this in sync\n// automatically).\nconst n = (v) => Number(v).toLocaleString('en-US');\nconst money = (v) => `$${n(v)}`;\nconst minutes = (m) => {\n  if (m === null || m === undefined) return 'no data yet';\n  if (m < 60) return `${Math.round(m)}m`;\n  if (m < 1440) return `${Math.round(m / 60)}h`;\n  return `${Math.round(m / 1440)}d`;\n};\n\nconst b = $input.first().json.body;\nconst rows = [\n  ['New leads this week', n(b.newThisWeek)],\n  ['Total leads', n(b.stats.total)],\n  ['Buyers', `${n(b.stats.buyers)} (${n(b.stats.hotBuyers)} hot)`],\n  ['Unassigned', n(b.stats.unassigned)],\n  ['Contactable', n(b.stats.contactable)],\n  ['High potential', n(b.stats.highPotential)],\n  ['High score (80+)', n(b.stats.highScore)],\n  ['Uncontacted 2h+', n(b.stats.uncontactedOver2h)],\n  ['Median time to first touch', minutes(b.stats.medianTimeToFirstTouchMinutes)],\n  ['Revenue this week', `${money(b.revenue.revenueLast30Days)} (${n(b.revenue.dealsLast30Days)} deals)`],\n  ['Overall conversion to closed', `${Number(b.funnel.overallConversionPct).toFixed(1)}%`],\n];\nconst tableRows = rows.map(([label, value]) =>\n  `<tr><td style=\\\"padding:6px 0;border-bottom:1px solid #e6e6e6;color:#6b7280;\\\">${label}</td>` +\n  `<td style=\\\"padding:6px 0;border-bottom:1px solid #e6e6e6;text-align:right;font-weight:600;\\\">${value}</td></tr>`\n).join('');\n\nconst uncontacted = b.topUncontacted || [];\nconst uncontactedRows = uncontacted.map((l) =>\n  `<tr><td style=\\\"padding:6px 0;border-bottom:1px solid #e6e6e6;\\\">${l.name}${l.where ? ` \u2014 ${l.where}` : ''}</td>` +\n  `<td style=\\\"padding:6px 0;border-bottom:1px solid #e6e6e6;text-align:right;font-weight:600;\\\">${l.score}</td></tr>`\n).join('');\nconst uncontactedSection = uncontacted.length === 0 ? '' :\n  `<h3 style=\\\"font:600 13px/1.3 system-ui,sans-serif;margin:20px 0 8px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;\\\">Top leads you haven't touched</h3>` +\n  `<table style=\\\"width:100%;border-collapse:collapse;font:400 14px/1.6 system-ui,sans-serif;\\\">${uncontactedRows}</table>`;\n\nconst html = `<div style=\\\"max-width:480px;margin:0 auto;font-family:system-ui,sans-serif;\\\">` +\n  `<h2 style=\\\"font:600 18px/1.3 system-ui,sans-serif;margin:0 0 12px;\\\">${b.companyName} \u2014 weekly lead report</h2>` +\n  `<table style=\\\"width:100%;border-collapse:collapse;font:400 14px/1.6 system-ui,sans-serif;\\\">${tableRows}</table>${uncontactedSection}</div>`;\n\nconst textLines = [\n  `${b.companyName} \u2014 weekly lead report`,\n  '',\n  ...rows.map(([label, value]) => `${label}: ${value}`),\n  ...(uncontacted.length > 0 ? ['', \"Top leads you haven't touched:\", ...uncontacted.map((l) => `- ${l.name} \u2014 ${l.where} (${l.score})`)] : []),\n];\n\nreturn [{ json: { to: b.recipient, subject: `Weekly lead report \u2014 ${n(b.newThisWeek)} new this week`, html, text: textLines.join('\\n') } }];"
+      },
+      "id": "8329cfa0-7bb6-4a15-823e-d5269891c0b1",
+      "name": "Render HTML Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"from\": $env.AVERONAI_NOTIFY_FROM_EMAIL, \"to\": [$json.to], \"subject\": $json.subject, \"html\": $json.html, \"text\": $json.text } }}",
+        "options": {}
+      },
+      "id": "5484c12c-f2dc-48fb-8b02-14c4d286c1d4",
+      "name": "Send Email (Resend)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Resend API Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"sent\": true } }}"
+      },
+      "id": "0cf3dbc6-5abd-4902-b500-2049174a1cd1",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Weekly Report": {
+      "main": [
+        [
+          {
+            "node": "Verify Shared Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Shared Secret": {
+      "main": [
+        [
+          {
+            "node": "Render HTML Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render HTML Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email (Resend)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email (Resend)": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "_Shared Error Handler",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Webhook-triggered by application/automation/send-weekly-report.ts's postWeeklyReport(), called once per recipient from the /api/trigger/weekly-report route (self-throttled to once/7 days by automation_settings.weeklyReportLastSentAt). App computes the numbers server-side (getLeadStats/getLeadTrend/getRevenueSummary/getConversionFunnel/getTopUncontactedLeads, unchanged); this workflow owns rendering (HTML/text/subject) and sending (Resend). Requires the same AVERONAI_NOTIFY_SHARED_SECRET and N8N_WEEKLY_REPORT_WEBHOOK_URL as workflow 08, plus a Resend API Bearer credential and AVERONAI_NOTIFY_FROM_EMAIL env var."
+  },
+  "id": "812d3d08-305b-414d-97f3-ab57c84d6811",
+  "tags": [
+    {
+      "name": "averonai"
+    },
+    {
+      "name": "n8n-integration-plan"
+    }
+  ]
+}

@@ -19,11 +19,12 @@ Create `.env` (single file, gitignored — no template checked into the repo) an
 | `APIFY_WEBHOOK_SECRET` | yes | Min 16 chars. Shared secret checked on `POST /api/webhooks/apify`. |
 | `AUTH_SECRET` | yes | Min 32 chars. Signs session JWTs (`jose`, HS256). Rotating it invalidates every session. |
 | `AUTH_ALLOWED_EMAILS` | no | Comma-separated. Bootstrap guard only — restricts which address may claim the instance as first admin. Empty = anyone claims it. Not consulted after bootstrap; team members are added from `/admin/team` instead. |
-| `RESEND_API_KEY` | no | Only used for lead-alert emails. Sign-in never needs it. Without it, alerts log a warning instead of sending and the app runs fine. |
+| `RESEND_API_KEY` | no | Used for invite emails, password-reset emails, and lead-alert emails (the `email` notifier channel). Without it, all three log a warning instead of sending and the app runs fine. |
 | `RESEND_FROM_EMAIL` | no | Defaults to `AveronAi Lead Radar <onboarding@resend.dev>`. |
-| `WHATSAPP_API_TOKEN` | no | WhatsApp Cloud API token, only used for lead-alert WhatsApp messages. Without it (or `WHATSAPP_PHONE_NUMBER_ID`), alerts log a warning instead of sending. |
-| `WHATSAPP_PHONE_NUMBER_ID` | no | The WhatsApp Cloud API sender's phone number id. |
-| `N8N_TRIGGER_SECRET` | no | Min 16 chars. Shared secret for `POST /api/trigger/{discover,sync,fx,retention}` — see "Scheduled jobs" below. Unset means every trigger route always returns 401. |
+| `N8N_TRIGGER_SECRET` | no | Min 16 chars. Shared secret for `POST /api/trigger/{discover,sync,fx,retention,weekly-report,auto-assign,reminders}` — see "Scheduled jobs" below. Unset means every trigger route always returns 401. |
+| `N8N_NOTIFY_WEBHOOK_URL` | no | n8n workflow 08's Production URL. Used by the `whatsapp`/`slack` notifier channels (`infrastructure/notifiers/n8n.notifier.ts`) — the app renders the message and hands off delivery to n8n, which owns the WhatsApp Cloud API token and Slack webhook. Without it (or `AVERONAI_NOTIFY_SHARED_SECRET`), those two channels log a warning instead of sending. Does **not** affect the `email` channel, which stays direct via Resend. |
+| `N8N_WEEKLY_REPORT_WEBHOOK_URL` | no | n8n workflow 09's Production URL. The weekly digest's numbers are computed here and posted raw; rendering and sending both happen in n8n. Without it (or `AVERONAI_NOTIFY_SHARED_SECRET`), the digest silently doesn't go out (`weeklyReportLastSentAt` still advances, so it won't retry-loop). |
+| `AVERONAI_NOTIFY_SHARED_SECRET` | no | Min 16 chars. Shared secret sent as `x-averonai-notify-secret` to both n8n notify webhooks above, checked by their "Verify Shared Secret" nodes. |
 | `ANTHROPIC_API_KEY` | no | Only used by the shadow-mode LLM classifier (see `docs/tech-debt.md`). Unset means it never runs. |
 | `LLM_SHADOW_CLASSIFY_ENABLED` | no | Explicit opt-in to fire the shadow LLM classifier alongside the real rules classifier. Default off; needs `ANTHROPIC_API_KEY` too. |
 | `NODE_ENV` | no | `development` \| `test` \| `production`, defaults `development`. |
@@ -65,10 +66,12 @@ min, sync every 5, FX daily, retention weekly), each hitting a `GET /api/cron/*`
 behind a `CRON_SECRET`. All of that — routes, `vercel.json`, and the env var — was
 removed in favour of triggering from n8n.
 
-n8n is now the trigger. Four `POST /api/trigger/*` routes exist for exactly this, each
+n8n is now the trigger. Seven `POST /api/trigger/*` routes exist for exactly this, each
 guarded by `N8N_TRIGGER_SECRET` (checked with `secretsMatch()`, sent as either an
 `x-webhook-secret` header or `Authorization: Bearer <secret>`) — an n8n workflow should
-call each on its own schedule:
+call each on its own schedule. `n8n/workflows/triggers/` ships one thin workflow per
+route (01–07), each just an n8n Schedule Trigger calling a shared `_Trigger Caller`
+sub-workflow with `{ route, timeoutMs }` — see `n8n/README.md`.
 
 | Work | Route | Function | Suggested cadence |
 | --- | --- | --- | --- |
@@ -76,6 +79,9 @@ call each on its own schedule:
 | Incremental sync | `POST /api/trigger/sync` | `application/sync/sync-dataset.ts::dueDatasets` → `syncDataset` | every 5 min |
 | FX refresh | `POST /api/trigger/fx` | `application/fx/refresh-fx-rates.ts::refreshFxRates` | daily |
 | Retention pruning | `POST /api/trigger/retention` | `application/maintenance/prune-old-rows.ts::pruneOldRows` | weekly |
+| Weekly report | `POST /api/trigger/weekly-report` | `application/automation/send-weekly-report.ts::sendWeeklyReport` (self-throttled to once/7 days; posts to n8n workflow 09 to render+send) | daily |
+| Auto-assign sweep | `POST /api/trigger/auto-assign` | `application/automation/auto-assign.ts::runAutoAssignment` | every 10 min |
+| Stale-lead reminders | `POST /api/trigger/reminders` | `application/automation/send-reminders.ts::sendStaleLeadReminders` | every 30 min |
 
 Note the sync pair specifically: per-dataset intervals still adapt (faster after new
 items, backing off when quiet, tightened on weekends Bali time — see
@@ -96,11 +102,11 @@ See `docs/api-patterns.md`'s "System routes" section for the full pattern.
 | --- | --- | --- | --- |
 | Postgres | Everything — the only datastore | `DATABASE_URL` | No — hard requirement |
 | Apify | Dataset discovery + item ingestion | `APIFY_API_TOKEN`, admin `sources` row | No — the only connector implemented today |
-| Resend | Lead alert emails | `RESEND_API_KEY` (optional) | Yes — logs instead of sending |
-| WhatsApp Cloud API | Lead alert WhatsApp messages | `WHATSAPP_API_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` (optional) | Yes — logs instead of sending |
+| Resend | Invite/password-reset emails + lead-alert emails (`email` notifier channel) | `RESEND_API_KEY` (optional) | Yes — logs instead of sending |
+| n8n (notifications) | WhatsApp/Slack alert delivery (`whatsapp`/`slack` notifier channels) + weekly report render+send — see `n8n/workflows/notifications/` | `N8N_NOTIFY_WEBHOOK_URL` / `N8N_WEEKLY_REPORT_WEBHOOK_URL` + `AVERONAI_NOTIFY_SHARED_SECRET` (all optional) | Yes — logs instead of sending, `email` channel unaffected |
 | Anthropic | Shadow-mode LLM classifier (comparison logging only, never live) | `ANTHROPIC_API_KEY` + `LLM_SHADOW_CLASSIFY_ENABLED` (both optional, both off by default) | Yes — skipped entirely when either is unset |
 | frankfurter.dev | Daily FX rate refresh | No key needed | Yes — a failed refresh leaves existing `fx_rates` rows untouched, see `application/fx/refresh-fx-rates.ts` |
-| n8n | Upstream data producer (writes into Apify datasets) **and** the trigger for discovery/sync/FX/retention via `POST /api/trigger/*` | `N8N_TRIGGER_SECRET` (optional) for the trigger side; data-producer side entirely external, not part of this repo | Trigger routes: N/A (401s if unconfigured) |
+| n8n (triggers + data) | Upstream data producer (writes into Apify datasets) **and** the trigger for discovery/sync/FX/retention/weekly-report/auto-assign/reminders via `POST /api/trigger/*` | `N8N_TRIGGER_SECRET` (optional) for the trigger side; data-producer side entirely external, not part of this repo | Trigger routes: N/A (401s if unconfigured) |
 
 There is no test/staging Apify token distinct from production configured anywhere in
 this repo — be careful running `npm run db:seed` or triggering a sync from

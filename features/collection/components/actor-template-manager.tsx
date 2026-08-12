@@ -18,6 +18,7 @@ import {
 } from "@/application/collection/actor-templates.actions";
 import { useServerAction } from "@/hooks/use-server-action";
 import { SCRAPE_PLATFORMS } from "@/shared/constants";
+import { COMPANY_CATEGORIES, VERTICALS, type CompanyCategory } from "@/domain/verticals/catalog";
 import type { ActorTemplateRow } from "@/infrastructure/db/schema/collection";
 
 /**
@@ -77,6 +78,7 @@ function TemplateTable({ templates }: { templates: ActorTemplateRow[] }) {
       <DataTableHead>
         <th>Name</th>
         <th className="w-28">Platform</th>
+        <th className="w-28">Category</th>
         <th>Actor id</th>
         <th className="w-24">Status</th>
         <th className="w-20">Actions</th>
@@ -112,6 +114,11 @@ const TemplateRow = memo(function TemplateRow({
         <div className="text-muted-foreground text-xs">{template.requirementKind}</div>
       </td>
       <td className="px-3 py-2.5 text-sm capitalize">{template.platform}</td>
+      <td className="px-3 py-2.5 text-sm">
+        {template.category ? VERTICALS[template.category as CompanyCategory].label : (
+          <span className="text-muted-foreground">All</span>
+        )}
+      </td>
       <td className="text-muted-foreground px-3 py-2.5 font-mono text-xs">{template.actorId}</td>
       <td className="px-3 py-2.5">
         <Badge variant={template.enabled ? "default" : "outline"}>
@@ -133,6 +140,7 @@ function NewTemplateForm({ onDone }: { onDone: () => void }) {
   const { busyId, run } = useServerAction();
   const [name, setName] = useState("");
   const [platform, setPlatform] = useState<string>(SCRAPE_PLATFORMS[0]);
+  const [category, setCategory] = useState<CompanyCategory | "">("");
   const [requirementKind, setRequirementKind] = useState("");
   const [actorId, setActorId] = useState("");
   const [description, setDescription] = useState("");
@@ -165,6 +173,7 @@ function NewTemplateForm({ onDone }: { onDone: () => void }) {
         createActorTemplate({
           name,
           platform,
+          category: category || null,
           requirementKind,
           actorId,
           description: description || undefined,
@@ -207,6 +216,22 @@ function NewTemplateForm({ onDone }: { onDone: () => void }) {
             {SCRAPE_PLATFORMS.map((p) => (
               <option key={p} value={p} className="capitalize">
                 {p}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="template-category">Category</Label>
+          <select
+            id="template-category"
+            value={category}
+            onChange={(event) => setCategory(event.target.value as CompanyCategory | "")}
+            className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
+          >
+            <option value="">All categories</option>
+            {COMPANY_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {VERTICALS[c].label}
               </option>
             ))}
           </select>

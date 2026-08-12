@@ -6,6 +6,7 @@ import { inferSchema } from "@/domain/dataset/schema-inference";
 import { proposeMapping } from "@/domain/dataset/mapping-proposal";
 import { applyMapping } from "@/domain/dataset/mapping";
 import { classifyWithRules } from "@/domain/scoring/rules-classifier";
+import { getLexiconForCategory } from "@/domain/scoring/lexicon-registry";
 import type { LeadIntent } from "@/domain/scoring/types";
 
 export interface SourcePreviewItem {
@@ -39,6 +40,13 @@ export async function previewSource(companyId: string, datasetId: string, sample
     .where(and(eq(schema.datasets.id, datasetId), eq(schema.datasets.companyId, companyId)))
     .limit(1);
   if (!dataset) throw new Error("Dataset not found.");
+
+  const [company] = await db()
+    .select({ category: schema.companies.category })
+    .from(schema.companies)
+    .where(eq(schema.companies.id, companyId))
+    .limit(1);
+  const lexicon = getLexiconForCategory(company?.category ?? "other");
 
   const [source] = await db()
     .select({ kind: schema.sources.kind })
@@ -74,18 +82,21 @@ export async function previewSource(companyId: string, datasetId: string, sample
 
   const items = page.items.map((raw) => {
     const normalized = applyMapping(raw, rules, { passthrough });
-    const classification = classifyWithRules({
-      body: normalized.body,
-      listingTitle: normalized.listingTitle,
-      locationRaw: normalized.locationRaw,
-      priceRaw: normalized.priceRaw,
-      bedrooms: normalized.bedrooms,
-      bathrooms: normalized.bathrooms,
-      engagement: normalized.engagement,
-      sourceGroup: normalized.sourceGroup,
-      postedAt: normalized.postedAt,
-      recordKind,
-    });
+    const classification = classifyWithRules(
+      {
+        body: normalized.body,
+        listingTitle: normalized.listingTitle,
+        locationRaw: normalized.locationRaw,
+        priceRaw: normalized.priceRaw,
+        bedrooms: normalized.bedrooms,
+        bathrooms: normalized.bathrooms,
+        engagement: normalized.engagement,
+        sourceGroup: normalized.sourceGroup,
+        postedAt: normalized.postedAt,
+        recordKind,
+      },
+      lexicon,
+    );
     return {
       authorName: normalized.authorName,
       body: normalized.body,

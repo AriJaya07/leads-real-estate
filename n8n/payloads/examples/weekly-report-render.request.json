@@ -6,8 +6,22 @@
     "total": 612,
     "buyers": 240,
     "hotBuyers": 31,
+    "unassigned": 58,
+    "contactable": 401,
+    "highPotential": 122,
     "highScore": 31,
     "uncontactedOver2h": 6,
     "medianTimeToFirstTouchMinutes": 14.3
-  }
+  },
+  "revenue": {
+    "revenueLast30Days": 42000,
+    "dealsLast30Days": 3
+  },
+  "funnel": {
+    "overallConversionPct": 4.2
+  },
+  "topUncontacted": [
+    { "name": "Marta Kowalska", "where": "Canggu", "score": 92 },
+    { "name": "Dewa Putra", "where": "Ubud", "score": 87 }
+  ]
 }

@@ -3,6 +3,17 @@ import { pgEnum } from "drizzle-orm/pg-core";
 export const sourceKindEnum = pgEnum("source_kind", ["apify", "n8n", "webform", "manual"]);
 
 /**
+ * Business vertical, chosen once at signup — see `domain/verticals/catalog.ts`
+ * for the canonical `CompanyCategory` type this duplicates (domain can't
+ * import this file; this file duplicates domain's literal list, same
+ * `Role`/`userRoleEnum` split). Drives which intent lexicon scores a lead
+ * (`domain/scoring/lexicon-registry.ts`) and which field labels/actor
+ * templates get surfaced first — not a new enum per feature, one column
+ * read in a few places.
+ */
+export const companyCategoryEnum = pgEnum("company_category", ["real_estate", "travel", "courses", "other"]);
+
+/**
  * What *shape* a record is, independent of `sourceKindEnum` (which models
  * transport — apify/n8n/webform — not content). A "Post Likers" scrape produces
  * a person, not a post: no body text, no phrases to classify, a different dedup

@@ -9,6 +9,9 @@ import { ActionError, actionClient } from "@/application/safe-action";
 import { TRIAL_DAYS, TRIAL_STARTER_PLAN_NAME } from "@/shared/constants";
 import { startSession } from "./login.actions";
 
+/** Same literal-duplication convention as `roleSchema` in team.actions.ts/invite.actions.ts — see domain/verticals/catalog.ts::CompanyCategory for the canonical type. */
+const categorySchema = z.enum(["real_estate", "travel", "courses", "other"]);
+
 /** Postgres SQLSTATE for a unique-constraint violation. */
 const UNIQUE_VIOLATION = "23505";
 
@@ -46,6 +49,7 @@ function slugify(name: string): string {
 
 const signUpSchema = z.object({
   companyName: z.string().trim().min(1, "Enter a company name").max(200),
+  category: categorySchema,
   email: z.string().email().transform((value) => value.trim().toLowerCase()),
   password: z.string().min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters`),
 });
@@ -61,7 +65,7 @@ const signUpSchema = z.object({
  * allowlist-of-addresses shape, one level up.
  */
 export const signUp = actionClient.inputSchema(signUpSchema).action(async ({ parsedInput }) => {
-  const { companyName, email, password } = parsedInput;
+  const { companyName, category, email, password } = parsedInput;
 
   const allowed = allowedEmails();
   if (allowed.length > 0 && !allowed.includes(email)) {
@@ -80,7 +84,7 @@ export const signUp = actionClient.inputSchema(signUpSchema).action(async ({ par
 
         const [company] = await tx
           .insert(schema.companies)
-          .values({ name: companyName, slug, status: "trialing", trialEndsAt })
+          .values({ name: companyName, slug, category, status: "trialing", trialEndsAt })
           .returning();
 
         const [user] = await tx

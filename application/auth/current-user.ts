@@ -6,6 +6,7 @@ import { db, schema } from "@/infrastructure/db/client";
 import { getSession } from "@/infrastructure/auth/session";
 import { isSessionRevoked } from "@/domain/auth/session-version";
 import { type Role, roleAtLeast } from "@/domain/auth/permissions";
+import type { CompanyCategory } from "@/domain/verticals/catalog";
 
 export interface CurrentUser {
   userId: string;
@@ -15,6 +16,8 @@ export interface CurrentUser {
   mustChangePassword: boolean;
   /** The tenant this user belongs to — every application/ query scopes by this. */
   companyId: string;
+  /** This tenant's business vertical, chosen at signup — see domain/verticals/catalog.ts. */
+  companyCategory: CompanyCategory;
   /** Cross-company usage visibility — deliberately separate from `role`, which is scoped to one company. See requirePlatformAdmin(). */
   isPlatformAdmin: boolean;
 }
@@ -43,9 +46,11 @@ export const currentUser = cache(async (): Promise<CurrentUser | null> => {
       mustChangePassword: schema.users.mustChangePassword,
       sessionVersion: schema.users.sessionVersion,
       companyId: schema.users.companyId,
+      companyCategory: schema.companies.category,
       isPlatformAdmin: schema.users.isPlatformAdmin,
     })
     .from(schema.users)
+    .innerJoin(schema.companies, eq(schema.companies.id, schema.users.companyId))
     .where(eq(schema.users.id, session.userId))
     .limit(1);
 
@@ -58,6 +63,7 @@ export const currentUser = cache(async (): Promise<CurrentUser | null> => {
     role: row.role,
     mustChangePassword: row.mustChangePassword,
     companyId: row.companyId,
+    companyCategory: row.companyCategory,
     isPlatformAdmin: row.isPlatformAdmin,
   };
 });

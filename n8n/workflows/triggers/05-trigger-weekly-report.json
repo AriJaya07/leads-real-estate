@@ -1,0 +1,87 @@
+{
+  "name": "Trigger - Weekly Report Sweep",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "2401a8ef-f72d-54a2-ba52-e2681a1de5e4",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_TRIGGER_CALLER_WORKFLOW_ID",
+          "mode": "list",
+          "cachedResultName": "_Trigger Caller"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "route": "weekly-report",
+            "timeoutMs": 60000
+          },
+          "matchingColumns": [],
+          "schema": []
+        }
+      },
+      "id": "d01f7870-b856-5a18-97ba-41c18e80c011",
+      "name": "Call _Trigger Caller (weekly-report)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        460,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Call _Trigger Caller (weekly-report)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "_Shared Error Handler",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "REPLACE_ON_IMPORT",
+    "templateNote": "Calls sendWeeklyReport() via POST /api/trigger/weekly-report \u2014 checked daily but self-throttled to once/7 days inside the app (weeklyReportLastSentAt). The report itself now renders and sends via n8n workflow 09, not this route. After import, open the Execute Workflow node and re-select '_Trigger Caller' from its workflow dropdown (same caveat as the Error Workflow field \u2014 n8n assigns the real id at import time, the JSON placeholder can't resolve it automatically)."
+  },
+  "id": "10f3a15d-fcb4-4dba-b051-210abca72485",
+  "tags": [
+    {
+      "name": "averonai"
+    },
+    {
+      "name": "n8n-integration-plan"
+    }
+  ]
+}

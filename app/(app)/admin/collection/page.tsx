@@ -13,6 +13,7 @@ import { RequestScrapeForm } from "@/features/collection/components/request-scra
 import { ScrapeRequestTable } from "@/features/collection/components/scrape-request-table";
 import { ActorTemplateManager } from "@/features/collection/components/actor-template-manager";
 import { formatCount } from "@/shared/format";
+import type { CompanyCategory } from "@/domain/verticals/catalog";
 
 export const metadata: Metadata = { title: "Collect data" };
 
@@ -37,11 +38,20 @@ async function Overview({ companyId }: { companyId: string }) {
   );
 }
 
-async function RequestSection({ companyId }: { companyId: string }) {
+async function RequestSection({ companyId, category }: { companyId: string; category: CompanyCategory }) {
   const [templates, usage] = await Promise.all([listActorTemplates(), getUsageSummary(companyId)]);
+  // Category-matching templates (and category-agnostic ones) first — never
+  // hidden, just prioritized, same "don't hide data, prioritize it" posture
+  // as lead ranking elsewhere in this app.
+  const sorted = [...templates.filter((t) => t.enabled)].sort((a, b) => {
+    const aMatch = a.category === null || a.category === category ? 0 : 1;
+    const bMatch = b.category === null || b.category === category ? 0 : 1;
+    return aMatch - bMatch;
+  });
   return (
     <RequestScrapeForm
-      templates={templates.filter((t) => t.enabled)}
+      templates={sorted}
+      companyCategory={category}
       quota={usage?.apifyRequestsThisMonth ?? null}
     />
   );
@@ -74,7 +84,7 @@ export default async function AdminCollectionPage() {
       <section className="border-border flex flex-col gap-3 rounded-xl border p-4 sm:p-6">
         <h2 className="text-sm font-semibold">Request a scrape</h2>
         <Suspense fallback={<TableSkeleton />}>
-          <RequestSection companyId={user.companyId} />
+          <RequestSection companyId={user.companyId} category={user.companyCategory} />
         </Suspense>
       </section>
 

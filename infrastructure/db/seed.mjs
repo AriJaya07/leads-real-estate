@@ -108,9 +108,9 @@ const LOCATION_ALIASES = [
 
 try {
   const [company] = await sql`
-    INSERT INTO companies (name, slug, status)
-    VALUES (${companyName}, ${companySlug}, 'active')
-    ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+    INSERT INTO companies (name, slug, category, status)
+    VALUES (${companyName}, ${companySlug}, 'real_estate', 'active')
+    ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, category = EXCLUDED.category
     RETURNING id, name
   `;
   console.log(`company: ${company.name} (${company.id})`);
@@ -289,6 +289,70 @@ try {
     RETURNING id, name
   `;
   console.log(`mapping profile: ${profile.name} (${profile.id})`);
+
+  // Starter actor templates, one per category — demonstrates the
+  // category-tagging mechanism (features/collection/components/request-scrape-form.tsx's
+  // "Recommended for your category" sort) with real rows instead of an empty
+  // admin screen. `category: null` (the Facebook Groups one) means "useful
+  // for every category" — the same actor a travel or courses tenant would
+  // also point at a relevant Facebook group. The travel/courses actor ids
+  // below are placeholders — replace with real Apify Store actors before
+  // relying on them.
+  const actorTemplates = [
+    {
+      name: "Facebook Groups Scraper",
+      platform: "facebook",
+      category: null,
+      requirementKind: "group_posts",
+      description: "Posts from a public Facebook Group — the general-purpose social-listening source for any category.",
+      actorId: "apify/facebook-groups-scraper",
+      defaultInput: { resultsLimit: 100 },
+      requiredParams: ["startUrls"],
+      costNote: "~$2 per 1,000 posts",
+    },
+    {
+      name: "Property Portal Listings (example)",
+      platform: "other",
+      category: "real_estate",
+      requirementKind: "listing_search",
+      description: "Example placeholder — replace actorId with a real Apify Store property-portal scraper before use.",
+      actorId: "REPLACE_WITH_REAL_ACTOR_ID",
+      defaultInput: {},
+      requiredParams: ["searchUrl"],
+      costNote: null,
+    },
+    {
+      name: "Travel Forum/OTA Listings (example)",
+      platform: "other",
+      category: "travel",
+      requirementKind: "listing_search",
+      description: "Example placeholder — replace actorId with a real Apify Store travel/OTA scraper before use.",
+      actorId: "REPLACE_WITH_REAL_ACTOR_ID",
+      defaultInput: {},
+      requiredParams: ["searchUrl"],
+      costNote: null,
+    },
+    {
+      name: "Course Provider Listings (example)",
+      platform: "other",
+      category: "courses",
+      requirementKind: "listing_search",
+      description: "Example placeholder — replace actorId with a real Apify Store course-provider scraper before use.",
+      actorId: "REPLACE_WITH_REAL_ACTOR_ID",
+      defaultInput: {},
+      requiredParams: ["searchUrl"],
+      costNote: null,
+    },
+  ];
+
+  for (const t of actorTemplates) {
+    await sql`
+      INSERT INTO actor_templates (name, platform, category, requirement_kind, description, actor_id, default_input, required_params, cost_note)
+      VALUES (${t.name}, ${t.platform}, ${t.category}, ${t.requirementKind}, ${t.description}, ${t.actorId}, ${sql.json(t.defaultInput)}, ${t.requiredParams}, ${t.costNote})
+      ON CONFLICT (name) DO UPDATE SET category = EXCLUDED.category, description = EXCLUDED.description
+    `;
+  }
+  console.log(`actor templates: ${actorTemplates.length} seeded`);
 
   const recipients = (process.env.AUTH_ALLOWED_EMAILS ?? "")
     .split(",")

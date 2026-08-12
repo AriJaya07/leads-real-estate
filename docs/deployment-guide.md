@@ -49,10 +49,13 @@ for each):
   emails, and lead-alert emails to actually send. Without it, all three log a warning
   and drop the message — the app still functions (invite links can be copied manually
   from the admin screen), but real customers need this.
-- `WHATSAPP_API_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` — only if you're using WhatsApp
-  alert channels.
 - `N8N_TRIGGER_SECRET` — needed once you set up the scheduled trigger workflow (§6).
   Leave unset and every `/api/trigger/*` route safely 401s everyone.
+- `N8N_NOTIFY_WEBHOOK_URL` / `N8N_WEEKLY_REPORT_WEBHOOK_URL` / `AVERONAI_NOTIFY_SHARED_SECRET`
+  — only if you're using WhatsApp/Slack alert channels or the weekly report; both
+  channels and the report render/send in n8n now (`n8n/workflows/notifications/`), not
+  the app. Without these, WhatsApp/Slack alerts and the weekly digest log a warning and
+  don't send — email alerts are unaffected, they still go direct via `RESEND_API_KEY`.
 - `ANTHROPIC_API_KEY` / `LLM_SHADOW_CLASSIFY_ENABLED` — optional shadow-mode
   classifier comparison logging; not required for launch.
 

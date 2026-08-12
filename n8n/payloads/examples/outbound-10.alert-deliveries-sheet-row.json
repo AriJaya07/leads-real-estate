@@ -1,0 +1,9 @@
+{
+  "_note": "What workflow 10's 'Format Delivery Summary' node writes as one row to the 'Alert Deliveries' tab (Log to Sheet node) and sends as the WhatsApp ops copy, from an alert.fired event.",
+  "deliveredAt": "2026-08-08T09:16:05.001Z",
+  "ruleName": "Hot Canggu buyers",
+  "channel": "email",
+  "recipient": "sales@bukitvilla.co",
+  "leadCount": 1,
+  "leadNames": "Marta Kowalska"
+}

@@ -9,7 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { companyStatusEnum, subscriptionStatusEnum, usageMetricEnum } from "./enums";
+import { companyCategoryEnum, companyStatusEnum, subscriptionStatusEnum, usageMetricEnum } from "./enums";
 import { NO_PLAN_FEATURES, type PlanFeatures } from "@/domain/billing/plan-features";
 
 /**
@@ -24,6 +24,14 @@ export const companies = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    /**
+     * Business vertical, chosen once at signup (`features/auth/components/signup-form.tsx`)
+     * and not editable from any in-app UI today — changing it would silently
+     * change which classifier lexicon scores existing leads without
+     * reprocessing them. `default("other")` exists only for pre-migration
+     * rows; every new signup sets it explicitly. See `domain/verticals/catalog.ts`.
+     */
+    category: companyCategoryEnum("category").notNull().default("other"),
     status: companyStatusEnum("status").notNull().default("trialing"),
     trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

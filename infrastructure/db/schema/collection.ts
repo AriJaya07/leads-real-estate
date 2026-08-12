@@ -13,7 +13,7 @@ import {
 import { companies } from "./company";
 import { users } from "./auth";
 import { sources, datasets } from "./catalog";
-import { scrapeRequestStatusEnum } from "./enums";
+import { companyCategoryEnum, scrapeRequestStatusEnum } from "./enums";
 
 /**
  * "Which Apify actor scrapes X" — admin-registered, never hardcoded. Same
@@ -30,6 +30,16 @@ export const actorTemplates = pgTable(
     name: text("name").notNull(),
     /** e.g. "instagram", "facebook", "linkedin", "other" — display/grouping only. */
     platform: text("platform").notNull(),
+    /**
+     * Which business vertical this actor is most relevant to — null means
+     * "useful for every category" (e.g. a generic Facebook Groups scraper).
+     * Unlike `platform`/`requirementKind` this is a fixed enum, not free
+     * text: it has to match `companies.category` for the recommend-sort in
+     * `RequestScrapeForm` to work, and the category set is deliberately
+     * small and closed (see `domain/verticals/catalog.ts`), not an
+     * open/unbounded vocabulary the way external platform names are.
+     */
+    category: companyCategoryEnum("category"),
     /** e.g. "profile_posts", "hashtag_search", "post_likers", "company_posts". */
     requirementKind: text("requirement_kind").notNull(),
     description: text("description"),
