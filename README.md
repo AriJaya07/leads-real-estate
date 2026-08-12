@@ -1,7 +1,11 @@
 # AveronAi Lead Intelligence Platform
 
 Finds people who intend to buy property in Bali, ranks them by how real that intent is,
-and gets a salesperson in front of them fast enough to be the first responder.
+and gets a salesperson in front of them fast enough to be the first responder. Real
+estate is the flagship, best-tuned vertical — the platform is multi-tenant and
+multi-category: a company picks Real Estate, Travel, Courses, or Other at signup, which
+selects its own intent-classifier lexicon and field labels without any code change (see
+"Company category" in [docs/prd.md](docs/prd.md)).
 
 Datasets produced by n8n and Apify are **discovered, versioned, normalized and synced
 automatically**. There is no dataset ID in the environment, and adding a source never
@@ -9,6 +13,9 @@ requires a deploy.
 
 The architecture is in [docs/architecture.md](docs/architecture.md), business terms in
 [docs/domain.md](docs/domain.md), and the product framing/roadmap in [docs/prd.md](docs/prd.md).
+Platform-operator tooling (cross-tenant usage/health/billing, never a tenant's actual
+leads) is a separate `/platform/*` portal — see
+[docs/multi-tenant-apify-isolation-plan.md](docs/multi-tenant-apify-isolation-plan.md) §3.
 
 ---
 
@@ -101,19 +108,25 @@ itself, so nobody has to log anything.
 ## Configuration
 
 Sign-in is email + password; nothing about authentication depends on a mail service.
-`RESEND_API_KEY` is only for lead alerts, and the app runs fine without it.
+`RESEND_API_KEY` powers invite/password-reset emails and lead alerts (the `email`
+notifier channel); the app runs fine without it, each degrading to a logged warning
+instead of a hard failure. The `whatsapp`/`slack` alert channels relay through n8n
+instead (`infrastructure/notifiers/n8n.notifier.ts`) — see
+[docs/environment.md](docs/environment.md).
 
 Environment holds **secrets and deployment identity only**. Everything operational —
 which datasets sync, how often, who gets alerted, what counts as a hot lead — is database
 state managed from `/admin`. See [docs/environment.md](docs/environment.md).
 
-Scheduling runs through n8n: four `POST /api/trigger/{discover,sync,fx,retention}` routes,
-each guarded by `N8N_TRIGGER_SECRET`, are what an n8n workflow calls on a schedule
-(suggested: discovery every 15 minutes, sync every 5 — see
-[docs/environment.md](docs/environment.md)'s "Scheduled jobs" section for the full
-table and [docs/api-patterns.md](docs/api-patterns.md) for the request pattern).
-Per-dataset intervals adapt on top of that — faster after new items, backing off when
-quiet, and tightened at weekends (Bali time), which is when consumers browse property.
+Scheduling runs through n8n: seven `POST /api/trigger/*` routes
+(`discover`/`sync`/`fx`/`retention`/`weekly-report`/`auto-assign`/`reminders`), each
+guarded by `N8N_TRIGGER_SECRET`, are what n8n calls on a schedule (suggested: discovery
+every 15 minutes, sync every 5 — see [docs/environment.md](docs/environment.md)'s
+"Scheduled jobs" section for the full table and [docs/api-patterns.md](docs/api-patterns.md)
+for the request pattern, or [n8n/README.md](n8n/README.md) for the ready-to-import
+workflow files). Per-dataset intervals adapt on top of that — faster after new items,
+backing off when quiet, and tightened at weekends (Bali time), which is when consumers
+browse property.
 
 ---
 
@@ -122,16 +135,18 @@ quiet, and tightened at weekends (Bali time), which is when consumers browse pro
 ```
 domain/           Pure TypeScript. No framework, no I/O. Ports and business rules.
   dataset/        Schema inference, mapping engine, auto-proposal
-  scoring/        Intent lexicon, extractors, rules classifier
+  scoring/        Intent lexicon (+ per-category lexicons), extractors, rules classifier
   alerting/       Serialisable predicate language
   sync/           Connector ports, adaptive scheduling, health model
   lead/           Priority ranking
+  verticals/      Company category catalog (real estate/travel/courses/other)
 
 application/      Use cases and orchestration. Server actions, Zod boundaries.
+  platform/       Super Admin portal queries/actions — cross-tenant, read-only + 2 logged writes
 infrastructure/   Adapters: Apify connector, Postgres/Drizzle, notifiers, auth
-features/         Feature-scoped UI (leads, admin, shell, auth)
-components/       ui/ primitives · common/ composed · brand/ custom SVG
-app/              Routes. (app) is authenticated; (auth) is not.
+features/         Feature-scoped UI (leads, admin, shell, auth, platform)
+components/       ui/ primitives · common/ composed · brand/ custom SVG · platform/ Super Admin shell
+app/              Routes. (app) is authenticated; (auth) is not; (platform) is Super Admin only.
 shared/           Config and constants
 ```
 

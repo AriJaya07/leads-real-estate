@@ -4,7 +4,7 @@ import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from "./global-setup";
 async function login(page: import("@playwright/test").Page, email: string, password: string) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
@@ -40,7 +40,7 @@ test.describe("team invites", () => {
     await expect(inviteePage.getByRole("heading", { name: /invited you to/ })).toBeVisible();
 
     await inviteePage.getByLabel("Your name").fill("New Manager");
-    await inviteePage.getByLabel("Password").fill("a-brand-new-password-123");
+    await inviteePage.getByLabel("Set a password").fill("a-brand-new-password-123");
     await inviteePage.getByRole("button", { name: "Join the team" }).click();
 
     await expect(inviteePage).toHaveURL(/\/leads$/);
@@ -99,7 +99,7 @@ test.describe("role management", () => {
     const memberContext = await browser.newContext();
     const memberPage = await memberContext.newPage();
     await memberPage.goto(inviteUrl!);
-    await memberPage.getByLabel("Password").fill("a-brand-new-password-123");
+    await memberPage.getByLabel("Set a password").fill("a-brand-new-password-123");
     await memberPage.getByRole("button", { name: "Join the team" }).click();
     await expect(memberPage).toHaveURL(/\/leads$/);
     await expect(memberPage.getByRole("link", { name: "Datasets" })).toHaveCount(0);

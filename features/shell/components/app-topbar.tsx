@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, HelpCircle, Layers, LogOut, User as UserIcon } from "lucide-react";
+import { Check, ChevronDown, HelpCircle, Layers, LogOut, ShieldCheck, User as UserIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,10 +38,13 @@ export function AppTopbar({
   userEmail,
   role,
   navExtras,
+  isPlatformAdmin,
 }: {
   userEmail: string;
   role: Role;
   navExtras: NavExtras;
+  /** Cross-company visibility, unrelated to `role` — see application/auth/current-user.ts::requirePlatformAdmin. Shows a way *into* /platform/tenants; the return trip is PlatformShell's own "Back to your workspace" link. */
+  isPlatformAdmin: boolean;
 }) {
   const router = useRouter();
   const { searchParams, setParams } = useUrlFilters();
@@ -120,6 +123,12 @@ export function AppTopbar({
             <DropdownMenuLabel className="truncate font-normal">{userEmail}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => router.push("/account")}>Account</DropdownMenuItem>
+            {isPlatformAdmin && (
+              <DropdownMenuItem onClick={() => router.push("/platform/tenants")}>
+                <ShieldCheck className="size-3.5" aria-hidden />
+                Super Admin dashboard
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={() => {
                 void signOut().then(() => router.push("/login"));

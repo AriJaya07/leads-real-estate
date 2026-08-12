@@ -12,7 +12,7 @@ test.describe("homepage", () => {
   test("a signed-in visitor hitting / still lands on the lead inbox", async ({ page }) => {
     await page.goto("/login");
     await page.getByLabel("Email").fill(E2E_ADMIN_EMAIL);
-    await page.getByLabel("Password").fill(E2E_ADMIN_PASSWORD);
+    await page.getByLabel("Password", { exact: true }).fill(E2E_ADMIN_PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/leads$/);
 

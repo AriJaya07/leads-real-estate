@@ -10,3 +10,4 @@ export * from "./leads";
 export * from "./alerts";
 export * from "./automation";
 export * from "./api-keys";
+export * from "./platform";

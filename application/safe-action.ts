@@ -59,6 +59,19 @@ export const ownerActionClient = authActionClient.use(async ({ next, ctx }) => {
   return next({ ctx });
 });
 
+/**
+ * Cross-company usage visibility — deliberately separate from the
+ * role-hierarchy tiers above, same split as `requirePlatformAdmin()`
+ * (`application/auth/current-user.ts`). A company `owner` does not pass
+ * this. Every action gated here writes to `super_admin_actions`, never
+ * directly to a tenant's leads/datasets/rules — see
+ * `application/platform/tenant-actions.ts`.
+ */
+export const platformActionClient = authActionClient.use(async ({ next, ctx }) => {
+  if (!ctx.user.isPlatformAdmin) throw new ActionError("Platform admin access required.");
+  return next({ ctx });
+});
+
 /** Used only by `changePassword` — see the comment on `authActionClient`. */
 export const authActionClientAllowPendingPasswordChange = actionClient.use(async ({ next }) => {
   const user = await currentUser();

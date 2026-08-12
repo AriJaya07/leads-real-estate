@@ -10,22 +10,34 @@ fetching"). All three are documented here.
 
 ## Server actions
 
-Built on `next-safe-action` (see `application/safe-action.ts`). Four clients:
+Built on `next-safe-action` (see `application/safe-action.ts`). Seven clients, each a
+`.use()` layer on the one above it:
 
 ```ts
 export const actionClient = createSafeActionClient({ handleServerError(error) { ... } });
 export const authActionClient = actionClient.use(/* re-verify session; block if mustChangePassword */);
-export const adminActionClient = authActionClient.use(/* require role === "admin" */);
+export const adminActionClient = authActionClient.use(/* require roleAtLeast(role, "admin") */);
+export const managerActionClient = authActionClient.use(/* require roleAtLeast(role, "manager") */);
+export const ownerActionClient = authActionClient.use(/* require role === "owner" */);
 export const authActionClientAllowPendingPasswordChange = actionClient.use(/* re-verify session only */);
+export const platformActionClient = authActionClient.use(/* require ctx.user.isPlatformAdmin */);
 ```
 
 `authActionClient` blocks while `mustChangePassword` is set — a temporary password must
 be changed before anything else, and this is what closes that gap for a server action
 called directly, not just page navigation (see
-[docs/architecture.md](architecture.md)'s Auth model section). The fourth client exists
-for exactly one reason: `changePassword` (and `signOutEverywhere`) must work *while*
-that flag is set, since resolving it is the whole point. Don't reach for the fourth
-client for anything else — it's a narrow, deliberate exception, not a weaker default.
+[docs/architecture.md](architecture.md)'s Auth model section).
+`authActionClientAllowPendingPasswordChange` exists for exactly one reason:
+`changePassword` (and `signOutEverywhere`) must work *while* that flag is set, since
+resolving it is the whole point. Don't reach for it for anything else — it's a narrow,
+deliberate exception, not a weaker default.
+
+`platformActionClient` is orthogonal to the `admin`/`manager`/`owner` tiers above, not
+a rung above `owner` — it checks `isPlatformAdmin`, a cross-company flag unrelated to
+the per-company role hierarchy (a company `owner` does not pass it). Every action gated
+by it must write to `super_admin_actions` and must never mutate a tenant's
+leads/datasets/rules — see `application/platform/tenant-actions.ts` and
+[docs/multi-tenant-apify-isolation-plan.md](docs/multi-tenant-apify-isolation-plan.md) §3.
 
 ### Writing a new action
 
@@ -48,9 +60,13 @@ Rules, all illustrated in `application/leads/lead.actions.ts`:
 - **Always `.inputSchema(...)`.** No action skips Zod validation. Constrain strings
   (`z.string().max(10_000)` for notes), use `z.string().uuid()` for ids, use `z.enum` for
   closed sets.
-- **Pick the narrowest client.** `authActionClient` unless the action must be
-  admin-only, in which case `adminActionClient`. Never reach for `db()`/`currentUser()`
-  directly from a client component as a shortcut.
+- **Pick the narrowest client.** `authActionClient` for anything any signed-in
+  teammate may do; `managerActionClient`/`adminActionClient`/`ownerActionClient` for
+  "manage projects and data"/"manage users and settings"/owner-only actions
+  respectively (`domain/auth/permissions.ts`'s role hierarchy); `platformActionClient`
+  only for a Super Admin write against `super_admin_actions` (never a tenant's own
+  data — see the note above). Never reach for `db()`/`currentUser()` directly from a
+  client component as a shortcut.
 - **Ensure the sacred row exists before mutating it.** Lead-state-touching actions call
   `ensureState(leadId)` (`insert ... onConflictDoNothing`) first — `lead_states` rows are
   created lazily on first human touch, not eagerly when a lead is created.

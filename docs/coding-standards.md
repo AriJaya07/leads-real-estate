@@ -214,6 +214,27 @@ conventions.
   [docs/architecture.md](architecture.md)'s Auth model section for why the layout alone
   isn't sufficient (it doesn't re-run on client-side navigation between siblings).
   Forgetting this on a new page silently relies on the layout's weaker guarantee.
+- **Every password field is `components/ui/password-input.tsx`'s `PasswordInput`, not
+  a bare `Input type="password"`.** Show/hide toggle, consistent across login/signup/
+  reset/invite-accept/change-password. Its toggle button's `aria-label` ("Show
+  password"/"Hide password") deliberately contains the word "password" for real
+  accessibility — if you write an e2e test against a password field, use
+  `getByLabel("Password", { exact: true })` (or the field's real label, e.g. `"Set a
+  password"`), not a bare substring match, or it resolves to two elements.
+- **`StatTile` (`components/common/stat-tile.tsx`) is for numbers, not strings** — it
+  always renders its `value` in `font-mono text-2xl tabular-nums` by design ("a single
+  number is a form in its own right," per its own comment). Passing a name or a
+  multi-word phrase produces oversized, awkwardly-wrapped monospace text. Put text
+  values in a page's description line or a plain labeled field instead.
+- **A value that's correct on the client but can't be known during SSR** (a live
+  query's `isFetching`, anything reading `window`) — use `hooks/use-has-mounted.ts`'s
+  `useHasMounted()` (a `useSyncExternalStore`-based hook: `false` during SSR and the
+  client's first paint, `true` after), not a `useEffect` + `setState`. This project's
+  lint config (`react-hooks/set-state-in-effect`) blocks the latter, and the former is
+  what actually avoids a hydration mismatch — SSR and the client's *first* render both
+  see `false`, so they agree, then a normal client-only re-render picks up the real
+  value. Same pattern `useLocalStorageValue` already uses for the same class of
+  problem — see that hook's comment.
 
 ## Logging
 

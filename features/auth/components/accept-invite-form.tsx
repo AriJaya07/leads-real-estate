@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/common/spinner";
 import { FormError } from "@/features/auth/components/form-error";
@@ -54,10 +55,9 @@ export function AcceptInviteForm({ token }: { token: string }) {
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="password">Set a password</Label>
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           required
           autoComplete="new-password"
           placeholder="At least 10 characters"

@@ -1,8 +1,10 @@
 # Multi-Tenant Apify Isolation Plan
 
-Planning only — nothing here is implemented. Answers: how does data pulled through one
-shared Apify account get tagged, validated, and routed to the *correct* company, with
-zero cross-tenant mixing, while the platform owner still gets a cross-company usage view.
+Answers: how does data pulled through one shared Apify account get tagged, validated,
+and routed to the *correct* company, with zero cross-tenant mixing, while the platform
+owner still gets a cross-company usage view. **Mixed state, not all planning anymore**
+— §2 (the collision guard) and §3 (the Super Admin portal) are built and tested; §1
+(auto-derived `namePatterns`) is still design-only. Each section says which.
 
 ## 0. Ground truth this plan is built on
 
@@ -20,9 +22,9 @@ zero cross-tenant mixing, while the platform owner still gets a cross-company us
   (`infrastructure/db/schema/catalog.ts`). If two companies' sources both discover the
   same Apify dataset id, Postgres happily creates two separate `datasets` rows — each
   syncs independently, each ingests the same scraped items into that company's own
-  `raw_records`/`leads`. **This is a real cross-tenant leak/duplication path, not a
-  hypothetical** — it just hasn't been hit yet because only one company's source
-  exists in the seeded data.
+  `raw_records`/`leads`. **This was a real cross-tenant leak/duplication path, not a
+  hypothetical — now closed by §2's collision guard**, built and tested
+  (`application/sync/discovery.integration.test.ts`).
 - **`companies.slug`** already exists (`infrastructure/db/schema/company.ts`), unique,
   and its own doc comment says it's meant for exactly this kind of external-system
   identifier ("for future subdomain routing"). Reusable as the tenant key for Apify
@@ -32,15 +34,15 @@ zero cross-tenant mixing, while the platform owner still gets a cross-company us
   (`incrementApifyRequestUsage`), enforced against `plans.maxApifyRequestsPerMonth`.
   The data for "how much is each tenant using" already exists in `usage_counters` —
   what's missing is a view that shows it *across* companies at once.
-- **No platform/superadmin role exists.** The 4-tier role hierarchy
-  (`domain/auth/permissions.ts`: `owner > admin > manager > member`) is entirely
-  per-company — an `owner` sees their own company's data, full stop. "I as owner want
-  to see all tenants' usage" describes a role that doesn't exist yet in this codebase;
-  it is not the company-level `owner` role, which is intentionally scoped.
+- **The 4-tier role hierarchy is entirely per-company, and stays that way.**
+  (`domain/auth/permissions.ts`: `owner > admin > manager > member`) — an `owner` sees
+  their own company's data, full stop. "I as owner want to see all tenants' usage"
+  isn't the company-level `owner` role scoped up; it's `users.isPlatformAdmin`, a
+  separate, orthogonal, cross-company flag — see §3, built.
 
 ---
 
-## 1. The core design decision: how a dataset proves which tenant it belongs to
+## 1. The core design decision: how a dataset proves which tenant it belongs to — design only, not built
 
 Three options, in order of how much they cost to build. Recommendation: **A now, B as
 reinforcement, C only if a customer's contract demands dedicated infrastructure.**
@@ -95,7 +97,7 @@ existing "don't build for a need that hasn't shown up yet" discipline.
 
 ---
 
-## 2. Closing the actual leak path: a cross-company collision guard
+## 2. Closing the actual leak path: a cross-company collision guard — built
 
 Naming conventions reduce *accidental* overlap; they don't make it structurally
 impossible, and admin-typed `namePatterns` can still be sloppy (e.g. an admin leaves it
@@ -103,9 +105,9 @@ empty like today's seeded row, or two prefixes accidentally overlap). The **hard
 guarantee** needs a check at the one place all companies' discovery converges:
 `discoverDatasets(sourceId)` in `application/sync/discovery.ts`.
 
-**New validation rule to add** (not yet built): before registering a newly-discovered
-`RemoteDataset` under company A's source, check whether that `externalId` already
-exists in `datasets` under a **different** `companyId`. Concretely:
+**The validation rule, built:** before registering a newly-discovered `RemoteDataset`
+under company A's source, check whether that `externalId` already exists in `datasets`
+under a **different** `companyId`. Concretely (and this is what the shipped code does):
 
 ```
 for each candidate dataset matched by matchesFilters():
@@ -140,42 +142,66 @@ crash the batch (`docs/api-patterns.md`'s error-handling conventions).
 
 ---
 
-## 3. Platform-owner cross-tenant usage view (new concept, doesn't exist today)
+## 3. Platform-owner cross-tenant usage view — built
 
-What you're describing — "I as owner want to see how much each tenant/company uses" —
-needs a role that isn't in the schema yet. The per-company `owner` role is deliberately
-scoped to one company; don't overload it. Two ways to add this, pick based on how many
-people need this view:
+What this section originally proposed is now built, as the minimal version described
+below (not yet promoted to the multi-person table variant — still fine for a
+single-operator case, revisit if a support team needs this).
 
-**Minimal (recommended to start): a boolean flag, not a new role.**
-`users.isPlatformAdmin boolean default false`, settable only by direct DB edit (or a
-one-off script) — not through any in-app UI, since this is you-the-operator, not a
-tenant-facing feature. A new route, `/platform/usage` (outside the `(app)` layout's
-per-company assumptions, its own `requirePlatformAdmin()` guard), reads:
+**A boolean flag, not a new role.** `users.isPlatformAdmin boolean default false`,
+settable only by direct DB edit — not through any in-app UI, since this is
+you-the-operator, not a tenant-facing feature. `application/auth/current-user.ts::requirePlatformAdmin()`
+is the guard; `platformActionClient` (`application/safe-action.ts`) is its server-action
+counterpart for the two writes below.
 
-```sql
-SELECT c.id, c.name, c.slug, c.status,
-       uc_apify.value AS apify_requests_this_month,
-       uc_leads.value AS leads_this_month,
-       (SELECT count(*) FROM datasets d WHERE d.company_id = c.id) AS dataset_count
-FROM companies c
-LEFT JOIN usage_counters uc_apify ON uc_apify.company_id = c.id
-  AND uc_apify.metric = 'apify_requests_month' AND uc_apify.period = date_trunc('month', now())
-LEFT JOIN usage_counters uc_leads ON uc_leads.company_id = c.id
-  AND uc_leads.metric = 'leads_month' AND uc_leads.period = date_trunc('month', now())
-ORDER BY apify_requests_this_month DESC NULLS LAST;
-```
+**Five pages under `/platform/*`** (`app/(platform)/`, its own dark-shelled
+`PlatformShell` — deliberately unmistakable from the tenant app's light sidebar, no
+link to any of this from inside the tenant app; a platform admin reaches it by typing
+the URL, or via the "Super Admin dashboard" item in their own account menu):
 
-This is a **read-only aggregate over already-existing per-company data** — it does not
-require touching `leads`/`raw_records` cross-tenant, it reads the counters that already
-exist. Keep it that way: platform-level visibility into *usage numbers*, never a
-"browse another company's actual leads" surface — that would defeat the entire tenant
-isolation model documented in §5 of `saas-platform-architecture.md`.
+- **`/platform/tenants`** (`application/platform/tenants.queries.ts`) — the usage
+  table this section originally proposed, plus stat tiles (active tenants, tenants
+  with a sync issue, trials ending within 7 days) and each tenant's category
+  (`docs/domain.md`'s "Company category").
+- **`/platform/category-templates`** — tenant adoption vs. registered Apify actor
+  templates per vertical (`domain/verticals/catalog.ts`), flags categories with
+  tenants but no matching template.
+- **`/platform/analytics`** — platform-wide totals (leads/Apify requests this vs.
+  last month, tenants by status) — sums of the same per-company `usage_counters`
+  rows, never a `leads` row.
+- **`/platform/connectors`** — every non-healthy dataset across every tenant,
+  metadata only (name, health, company, last-synced) — the cross-tenant version of
+  `/admin/sync`'s per-company health view.
+- **`/platform/billing`** — plan distribution and estimated MRR from `plans`/`subscriptions`.
+
+All five read **only** usage/health/billing metadata — never `leads`/`lead_appearances`/
+`raw_records`, the same boundary this section's original SQL sketch already committed
+to. Keep it that way: platform-level visibility into *usage numbers*, never a "browse
+another company's actual leads" surface — that would defeat the entire tenant isolation
+model documented in §5 of `saas-platform-architecture.md`.
+
+**Tenant drill-in (`/platform/tenants/[companyId]`) — the one place the two shells
+overlap, on purpose, unmissably.** Clicking a tenant row opens a read-only view of that
+tenant framed by a persistent amber banner ("Viewing X as Super Admin — read only") and
+exactly two enabled actions — `application/platform/tenant-actions.ts`:
+
+- `extendTenantTrial` — pushes `trialEndsAt` forward (only callable on a `trialing`
+  company).
+- `resendTenantInvite` — reissues a pending invite's token and re-sends the email.
+
+Both are `platformActionClient`-gated and **both write to `super_admin_actions`**
+(`infrastructure/db/schema/platform.ts`) — an append-only audit log, one row per
+action, never edited or deleted, visible on the drill-in page itself so a tenant owner
+could be shown "did anyone touch my account" and get a real answer. This is the closed
+set — adding a third capability means adding a third `superAdminActionEnum` value and a
+third function, not loosening what either of these already does. Neither action ever
+touches a lead, a dataset, or a rule.
 
 **If more than one or two people need this** (a support team, not just you): promote
 `isPlatformAdmin` to a proper separate table (`platform_admins`, one row per person,
 audit-logged grant/revoke) rather than a column anyone with DB access could quietly
-flip. Not needed for a single-operator case — start minimal.
+flip. Not needed for a single-operator case — the `super_admin_actions` log above
+already gives per-action audit trail regardless of how many people hold the flag.
 
 **Identifying which Apify dataset belongs to which tenant, visually, in the Apify
 console itself**: this is what §1's naming convention already gives you for free — every
@@ -203,14 +229,14 @@ the name prefix alone is sufficient for what you described.)
    a per-company n8n configuration step, not a one-time app change — every new company
    that connects a source needs its own n8n workflow (or workflow variable) pointed at
    its own prefix.
-4. **Build the cross-company collision guard** (§2) inside `discoverDatasets()`. This
-   is the one piece that's a real code change, not just configuration — do it before
-   onboarding a second company with its own Apify-kind source, not after.
-5. **Backfill the existing seeded source's `namePatterns`** — it's currently empty
-   (matches everything). Set it to that company's real prefix once §2's naming
-   convention exists, so the one company already in the system also benefits from the
-   isolation instead of being the one row that still matches anything.
-6. **Build the platform usage view** (§3) — independent of 1–5, can happen in parallel.
+4. ~~**Build the cross-company collision guard** (§2) inside `discoverDatasets()`.~~
+   **Done** — `application/sync/discovery.ts`, tested by
+   `discovery.integration.test.ts`'s "cross-company collision guard" case.
+5. **Backfill the existing seeded source's `namePatterns`** — still empty (matches
+   everything). Still open — do this once step 2 (the auto-fill UI) exists, so it's
+   set to a real prefix instead of typed by hand.
+6. ~~**Build the platform usage view** (§3)~~ **Done** — `/platform/tenants` and four
+   sibling pages, see §3.
 7. **Verify with a second company** — create a second company via `/signup`, connect a
    second Apify-kind source with a deliberately *overlapping* `namePatterns` (to
    simulate a mistake), push a test item under both prefixes, run discovery, and
@@ -235,16 +261,24 @@ the name prefix alone is sufficient for what you described.)
 
 ---
 
-## 6. Verification checklist (once built)
+## 6. Verification checklist
 
 - [ ] A brand-new company's `/admin/collection` "connect a source" step shows a
-      specific, non-empty, auto-derived `namePatterns` prefix — never blank.
-- [ ] Two companies' sources with deliberately overlapping `namePatterns` — the second
+      specific, non-empty, auto-derived `namePatterns` prefix — never blank. **Not
+      built** — sources are currently seeded (`infrastructure/db/seed.mjs`), there is
+      no "connect a source" UI step yet that would need this auto-fill.
+- [x] Two companies' sources with deliberately overlapping `namePatterns` — the second
       company's discovery run logs a `cross-tenant-collision` warning and does **not**
-      create a `datasets` row for the already-claimed `externalId`.
-- [ ] `/admin/sync`'s health feed surfaces that warning, not just a server log.
-- [ ] `/platform/usage` (or whatever route name is chosen) shows every company's
-      `apify_requests_month` side by side, reachable only by a user with
-      `isPlatformAdmin = true`, 403s for everyone else including a company `owner`.
-- [ ] The platform view's queries never `SELECT` from `leads`/`lead_appearances`/
-      `raw_records` — grep the route's implementation for this before shipping it.
+      create a `datasets` row for the already-claimed `externalId`. Built and tested —
+      `application/sync/discovery.integration.test.ts`'s "cross-company collision
+      guard" case.
+- [ ] `/admin/sync`'s health feed surfaces that warning, not just a server log. Not
+      verified either way — check before relying on it.
+- [x] `/platform/tenants` shows every company's `apify_requests_month` side by side,
+      reachable only by a user with `isPlatformAdmin = true`, redirects (not a 403 —
+      see `requirePlatformAdmin()`'s own comment on why a redirect over a 403) to
+      `/leads` for everyone else including a company `owner`. Built and tested —
+      `e2e/platform-admin.spec.ts`.
+- [x] The platform view's queries never `SELECT` from `leads`/`lead_appearances`/
+      `raw_records` — true by construction across all five `application/platform/*.queries.ts`
+      files (usage counters, dataset/subscription/invite metadata only).

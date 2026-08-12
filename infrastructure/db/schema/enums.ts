@@ -187,6 +187,17 @@ export const leadPotentialEnum = pgEnum("lead_potential", [
   "low_potential",
 ]);
 
+/**
+ * The fixed, closed set of writes a Super Admin may perform against a
+ * tenant's data — see `docs/multi-tenant-apify-isolation-plan.md` §3 and
+ * `infrastructure/db/schema/platform.ts`'s `superAdminActions` table. An
+ * enum, not free text: this list is a security boundary (everything a
+ * platform operator is allowed to touch on someone else's tenant), so
+ * adding a new one is a deliberate code change and migration, not a typo
+ * away from a new capability.
+ */
+export const superAdminActionEnum = pgEnum("super_admin_action", ["extend_trial", "resend_invite"]);
+
 export const leadEventTypeEnum = pgEnum("lead_event_type", [
   "created",
   "status_changed",

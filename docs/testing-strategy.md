@@ -102,11 +102,23 @@ rather than importing `infrastructure/db/client.ts` or `infrastructure/auth/pass
 because both start with `import "server-only"`, which throws unconditionally outside
 Next's RSC build (Playwright's global setup runs in plain Node, not through Next).
 
-**What's covered**: sign-in (including the first-run-becomes-admin path, wrong
-credentials, throttling after 5 failed attempts, and the proxy redirect for signed-out
-visitors); the lead triage view and the mark-contacted flow via the "Open original post"
-action; an admin manually triggering a dataset sync against a real (intentionally
-invalid) Apify token and seeing the failure surfaced as a toast.
+**What's covered** (15 spec files, ~49 tests): sign-in (wrong credentials, throttling
+after 5 failed attempts, the proxy redirect for signed-out visitors); `/signup`'s
+category-then-details flow, including a brand-new company landing on an empty inbox and
+duplicate-email rejection; the lead triage view and the mark-contacted flow via the
+"Open original post" action; an admin manually triggering a dataset sync against a real
+(intentionally invalid) Apify token and seeing the failure surfaced as a toast; the
+pipeline board's drag-and-drop and dropdown status changes; team invites end to end
+(owner invites → recipient accepts and signs in → role promotion unlocks admin nav);
+billing (plan display, a downgrade blocked by seat limits, a non-owner refused
+`/admin/billing`); account settings (forced password change, profile, teams panel,
+sign-out, session revocation); automation settings persistence; responsive layout
+(mobile drawer nav, card view below `md`); previously-404 nav destinations; and —
+**the multi-tenant and Super Admin boundaries specifically** — `multi-tenant.spec.ts`
+proves company A never sees company B's data (list, search, or a direct API id guess)
+and `platform-admin.spec.ts` proves a company owner cannot reach `/platform/*`, a
+platform admin can and sees every tenant, and the platform flag grants no extra tenant
+data access anywhere else.
 
 **On not mocking external services**: the dataset-sync spec deliberately does *not* mock
 Apify. `.env.e2e`'s `APIFY_API_TOKEN` is a placeholder and the seeded dataset's

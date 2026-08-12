@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useUrlFilters } from "@/hooks/use-url-filters";
+import { useHasMounted } from "@/hooks/use-has-mounted";
 import { triageFilters } from "@/application/leads/filters.schema";
 import type { FacetDescriptor } from "@/application/leads/facets";
 
@@ -26,6 +27,14 @@ export function LeadFilterBar({
 }) {
   const { searchParams: params, setParams: update } = useUrlFilters();
   const view = params.get("view") === "cards" ? "cards" : "table";
+
+  // `isFetching` reflects real-time query state that can differ between the
+  // server's one-shot render and the client's first paint (a hydration
+  // mismatch — the "Updating…" indicator showing/hiding shifts every sibling
+  // after it in the tree). Gate it on `useHasMounted()`: SSR and the client's
+  // *first* render both see `false` (identical output, hydration succeeds),
+  // then a normal client-only re-render picks up the real value.
+  const showFetchingIndicator = useHasMounted() && isFetching;
 
   function toggleMulti(key: string, value: string) {
     update((next) => {
@@ -175,7 +184,7 @@ export function LeadFilterBar({
   );
 
   const facetChips = (
-    <div className={cn("flex flex-col gap-2", isFetching && "opacity-60")}>
+    <div className={cn("flex flex-col gap-2", showFetchingIndicator && "opacity-60")}>
       {enumFacets.map((facet) => (
         <div key={facet.key} className="flex flex-wrap items-center gap-1.5">
           <span className="text-muted-foreground inline-flex w-28 shrink-0 items-center gap-1 text-xs font-medium">
@@ -231,7 +240,7 @@ export function LeadFilterBar({
           {actionButtons}
         </div>
 
-        {isFetching && (
+        {showFetchingIndicator && (
           <span className="text-muted-foreground text-xs" role="status" aria-live="polite">
             Updating…
           </span>

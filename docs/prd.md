@@ -10,14 +10,69 @@ much larger volume of seller listings and agency posts in the same groups.
 
 ## Users
 
-- **Agent** (role `agent`) — works the inbox: filters/searches leads, claims and
-  contacts them, logs notes, tracks status through a pipeline.
-- **Admin** (role `admin`) — everything an agent can do, plus: manages team accounts
-  (`/admin/team`), reviews/approves dataset mapping profiles, monitors dataset health,
-  tunes alert rules and thresholds (`/admin/datasets`).
+Every user belongs to exactly one company (tenant) and has one role in a fixed,
+flat hierarchy — `domain/auth/permissions.ts::Role` — each rank including
+everything below it:
 
-No public-facing or buyer-facing surface exists — this is entirely an internal sales
-tool.
+- **Member** — works the inbox: filters/searches leads, claims and contacts them,
+  logs notes, tracks status through a pipeline. The base role every teammate gets
+  by default.
+- **Manager** — everything a member can do, plus: triggers manual sync/discovery,
+  connects data sources (`/admin/collection`), manages datasets and mapping-profile
+  review (`/admin/datasets`, `/admin/sync`).
+- **Admin** — everything a manager can do, plus: manages team accounts and invites
+  (`/admin/team`), alert rules and automation (`/admin/alerts`, `/admin/automation`),
+  API keys (`/admin/api-keys`).
+- **Owner** — everything an admin can do, plus: billing/plan changes
+  (`/admin/billing`), granting the owner role to someone else, deleting the
+  company. Exactly who a company's `/signup` creator becomes — see "Company
+  category" below.
+
+**Super Admin** (`isPlatformAdmin`) is a separate, orthogonal flag — not a fifth
+rung on the ladder above, and not scoped to any one company. It unlocks
+`/platform/*` (Tenants, Category Templates, Platform Analytics, Connector Health,
+Platform Billing — a completely different, dark-shelled UI, not reachable from any
+link inside the tenant app) and grants **read-only** visibility into cross-company
+usage/health, plus exactly two logged, reversible support actions (extend a
+tenant's trial, resend a stuck invite) — never a way to view or edit a tenant's
+actual leads. Not grantable from any in-app UI by design — set only by a direct
+database edit (`users.is_platform_admin`). See
+[multi-tenant-apify-isolation-plan.md](multi-tenant-apify-isolation-plan.md) §3.
+
+No public-facing or buyer-facing surface exists — this is entirely an internal
+sales tool. (The one screen a non-member sees pre-login is `/invite/[token]` —
+accepting a team invite — and `/signup`, which creates a brand-new, empty,
+isolated company; see "Company category" below for what that flow now asks.)
+
+## Company category (vertical)
+
+Chosen once, as the first step of `/signup` (`features/auth/components/signup-form.tsx`),
+before the company name/email/password fields — **Real Estate**, **Travel**,
+**Courses**, or **Other**. Not editable from any in-app UI afterward (see
+`companies.category`'s column comment) — changing it after leads exist would
+silently change which classifier lexicon scores them without ever reprocessing
+those leads, so it's treated as a one-time, deliberate decision, not a settings
+toggle.
+
+Drives, per company:
+
+- **Which intent-phrase lexicon** scores a lead's text — `domain/scoring/lexicon-registry.ts`
+  selects buyer/seller/agent/investor/broker phrase sets per category (Real
+  Estate keeps the original, best-tuned lexicon unchanged; Travel and Courses
+  get their own starter lexicons). `Other` falls back to Real Estate's rather
+  than an empty one.
+- **Field labels** in the lead inbox and detail sheet — "Property types" vs.
+  "Trip interests" vs. "Course interests," etc. — `domain/verticals/catalog.ts`.
+- **Which registered Apify actor templates get recommended first** at
+  `/admin/collection` — templates can be tagged with a category
+  (`actor_templates.category`); a company sees its own category's templates
+  surfaced above the rest, never hidden.
+
+What does **not** vary by category: the core pipeline (discover → sync →
+classify → score → serve → alert), the `leadTypeEnum`
+(buyer/seller/agent/broker/investor/unknown — maps reasonably across verticals
+as-is), and the canonical spine columns (`propertyTypes`, `locations`, budget) —
+these stay one shared shape, just relabeled per category, not duplicated.
 
 ## Core user stories (implemented)
 
@@ -63,9 +118,14 @@ tool.
   language in `domain/alerting/predicate.ts`.
 - As the sales team, we get one digest email per matching alert rule per sync run, not
   one email per lead — so the channel stays useful instead of getting muted.
-- Sign-in requires no external email provider; the first person to sign in on a fresh
-  instance becomes the admin, and admins add teammates with a one-time temporary
-  password.
+- Sign-in requires no external email provider. `/signup` creates a brand-new company
+  with its creator as owner (picking a category first — see above); every teammate
+  after that joins via an emailed invite link (`application/auth/invite.actions.ts`),
+  not a temporary password handed out up front.
+- As a platform operator (Super Admin), I can see every tenant's usage, health, and
+  billing at a glance, without ever seeing a tenant's actual leads — and when a
+  tenant needs support (a trial extension, a resent invite), I do it through a
+  logged action, not a direct database edit — `/platform/tenants`, `super_admin_actions`.
 - As an agent, I can see and move every lead through its pipeline on a kanban board
   (`/pipeline`) — drag a card to another column, or use its status/assignee dropdowns —
   without leaving the board to open each lead individually.

@@ -15,7 +15,7 @@ const SESSION_COOKIE_NAME = "averonai_session";
 async function login(page: import("@playwright/test").Page, email: string, password: string) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
@@ -44,8 +44,8 @@ test.describe("forced password change", () => {
     await login(page, E2E_TEMP_PASSWORD_EMAIL, E2E_TEMP_PASSWORD_TEMP);
     await expect(page).toHaveURL(/\/account$/);
 
-    await page.getByLabel("Current password").fill(E2E_TEMP_PASSWORD_TEMP);
-    await page.getByLabel("New password").fill(E2E_TEMP_PASSWORD_NEW);
+    await page.getByLabel("Current password", { exact: true }).fill(E2E_TEMP_PASSWORD_TEMP);
+    await page.getByLabel("New password", { exact: true }).fill(E2E_TEMP_PASSWORD_NEW);
     await page.getByRole("button", { name: "Change password" }).click();
 
     // The action re-issues the session for this device, so no re-login needed.
@@ -127,8 +127,8 @@ test.describe("session revocation", () => {
     // Change the password on device A only.
     await pageA.goto("/account");
     await pageA.getByRole("tab", { name: "Security" }).click();
-    await pageA.getByLabel("Current password").fill(E2E_REVOCATION_PASSWORD);
-    await pageA.getByLabel("New password").fill(E2E_REVOCATION_NEW_PASSWORD);
+    await pageA.getByLabel("Current password", { exact: true }).fill(E2E_REVOCATION_PASSWORD);
+    await pageA.getByLabel("New password", { exact: true }).fill(E2E_REVOCATION_NEW_PASSWORD);
     await pageA.getByRole("button", { name: "Change password" }).click();
     await expect(pageA).toHaveURL(/\/leads$/); // device A stays signed in — it proved the current password
 

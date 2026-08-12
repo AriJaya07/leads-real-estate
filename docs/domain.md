@@ -6,6 +6,35 @@ definitions — this document explains the *why*, not the shape.
 
 ## Core entities
 
+**Company** (`companies` table) — a tenant. Every business-data table carries a
+`companyId` back to this table (see `docs/saas-platform-architecture.md`). Has a
+**category** (`real_estate | travel | courses | other`), chosen once at signup and
+not editable afterward — see the next entry.
+
+**Company category** (`companies.category`, `domain/verticals/catalog.ts`) — the
+business vertical a tenant operates in, picked as step one of `/signup`, before
+the company name/email/password. Not a UI skin: it selects which intent-phrase
+lexicon scores that company's leads (`domain/scoring/lexicon-registry.ts`), which
+labels the lead inbox/detail-sheet fields use ("Property types" vs. "Trip
+interests" vs. "Course interests"), and which registered Apify actor templates
+get recommended first at `/admin/collection`. Deliberately immutable post-signup:
+changing it later would silently change how existing leads *would have* scored
+without ever reprocessing them. The canonical spine itself
+(`propertyTypes`/`locations`/budget columns, the `leadTypeEnum`) stays one shared
+shape across every category — only the *lexicon* and *labels* vary, not the
+schema.
+
+**Super Admin** (`users.isPlatformAdmin`) — a cross-company, platform-operator
+flag, orthogonal to the per-company `role` hierarchy (a company `owner` does not
+pass this check). Not grantable from any in-app UI — set only by a direct
+database edit. Unlocks `/platform/*`, a separate dark-shelled UI unreachable from
+any link inside the tenant app, with **read-only** visibility into every
+company's usage/health/billing metadata and exactly two logged, reversible
+support actions (extend a trial, resend a stuck invite) — never a tenant's actual
+leads. See `docs/multi-tenant-apify-isolation-plan.md` §3 and the
+`super_admin_actions` table (`infrastructure/db/schema/platform.ts`), the
+append-only audit log every such action writes to.
+
 **Source** (`sources` table) — a connector instance, e.g. "Apify — Facebook & Instagram
 scrapers." Replaces what used to be an `APIFY_ACTOR_ID` env var. Has a `kind`
 (`apify` | `n8n` | `webform` | `manual`) that selects the adapter from

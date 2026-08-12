@@ -39,6 +39,10 @@ export interface VerticalFieldLabels {
   budget: string;
   /** Label for the `locations` column — where, not what. */
   locations: string;
+  /** Label for the company-name field on step 2 of `/signup` — "Agency" reads oddly for a course provider. */
+  companyName: string;
+  /** Placeholder example for that same field. */
+  companyNamePlaceholder: string;
 }
 
 export interface VerticalDefinition {
@@ -59,6 +63,8 @@ export const VERTICALS: Record<CompanyCategory, VerticalDefinition> = {
       wants: "Property types",
       budget: "Budget",
       locations: "Locations",
+      companyName: "Agency name",
+      companyNamePlaceholder: "Bukit Villa Partners",
     },
   },
   travel: {
@@ -70,6 +76,8 @@ export const VERTICALS: Record<CompanyCategory, VerticalDefinition> = {
       wants: "Trip interests",
       budget: "Budget",
       locations: "Destinations",
+      companyName: "Company name",
+      companyNamePlaceholder: "Nomad Journeys Co",
     },
   },
   courses: {
@@ -81,17 +89,21 @@ export const VERTICALS: Record<CompanyCategory, VerticalDefinition> = {
       wants: "Course interests",
       budget: "Budget",
       locations: "Locations",
+      companyName: "Provider name",
+      companyNamePlaceholder: "Bali Yoga Academy",
     },
   },
   other: {
     id: "other",
     label: "Other",
-    description: "A different kind of business — generic labels, tune later from /admin.",
+    description: "A different kind of business — generic labels and classifier by default.",
     fieldLabels: {
       categoryField: "Categories",
       wants: "Interests",
       budget: "Budget",
       locations: "Locations",
+      companyName: "Company name",
+      companyNamePlaceholder: "Your company",
     },
   },
 };

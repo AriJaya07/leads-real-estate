@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/common/spinner";
 import { FormError } from "@/features/auth/components/form-error";
@@ -70,8 +71,8 @@ export function SignupForm() {
         <div className="flex flex-col gap-1">
           <h2 className="text-sm font-semibold">What kind of business is this?</h2>
           <p className="text-muted-foreground text-sm">
-            Sets up the right fields, filters, and Apify actor suggestions for your industry. You can&apos;t change
-            this later without contacting support.
+            Sets up the right fields, filters, and Apify actor suggestions for your industry. Choose carefully —
+            this can&apos;t be changed after your workspace is created.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -96,6 +97,8 @@ export function SignupForm() {
     );
   }
 
+  const labels = VERTICALS[category ?? "other"].fieldLabels;
+
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       {error && <FormError>{error}</FormError>}
@@ -114,14 +117,14 @@ export function SignupForm() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="companyName">Agency name</Label>
+        <Label htmlFor="companyName">{labels.companyName}</Label>
         <Input
           id="companyName"
           name="companyName"
           type="text"
           required
           autoFocus
-          placeholder="Bukit Villa Partners"
+          placeholder={labels.companyNamePlaceholder}
         />
       </div>
 
@@ -133,16 +136,15 @@ export function SignupForm() {
           type="email"
           required
           autoComplete="username"
-          placeholder="you@agency.com"
+          placeholder="you@company.com"
         />
       </div>
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="password">Password</Label>
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           required
           autoComplete="new-password"
           placeholder="At least 10 characters"

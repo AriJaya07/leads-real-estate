@@ -7,14 +7,10 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
  * Deliberately not nested under `(app)`'s layout — that shell (`AppSidebar`/
  * `AppTopbar`) assumes exactly one company in scope (dataset switcher, nav
  * badges, etc.), which is the opposite of what a cross-company view needs.
- * No custom chrome beyond that: this is a single-operator internal tool, not
- * a product surface — same "no more UI than the job needs" restraint
- * `docs/saas-platform-architecture.md` already applies to the billing UI.
+ * Full-width here on purpose: `PlatformShell` (rendered by each page, after
+ * its own `requirePlatformAdmin()` check — see that component's comment on
+ * why the check can't live in this layout) owns the sidebar + page chrome.
  */
 export default function PlatformLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <main id="main-content" className="mx-auto min-h-dvh max-w-5xl px-4 py-10 sm:px-6">
-      {children}
-    </main>
-  );
+  return <div id="main-content">{children}</div>;
 }

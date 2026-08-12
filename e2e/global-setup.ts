@@ -44,6 +44,17 @@ export const E2E_OTHER_COMPANY_ADMIN_EMAIL = "e2e-other-company@averonai.test";
 export const E2E_OTHER_COMPANY_ADMIN_PASSWORD = "e2e-other-company-password-123";
 export const E2E_OTHER_COMPANY_LEAD_AUTHOR = "E2E Other Company Buyer";
 
+/**
+ * `isPlatformAdmin=true` — cross-company usage visibility, unrelated to
+ * `role`. Belongs to company A like any other user (the flag grants
+ * `/platform/usage` access, not tenant data access — see
+ * `e2e/platform-admin.spec.ts`, which checks both directions: this account
+ * can reach `/platform/usage`, and a regular company `owner` (E2E_ADMIN_EMAIL)
+ * cannot.
+ */
+export const E2E_PLATFORM_ADMIN_EMAIL = "e2e-platform-admin@averonai.test";
+export const E2E_PLATFORM_ADMIN_PASSWORD = "e2e-platform-admin-password-123";
+
 // Mirrors infrastructure/auth/password.ts's format/params exactly, so the real
 // `verifyPassword` (used by the login page under test) accepts this hash.
 const scrypt = promisify(scryptCallback) as (
@@ -195,6 +206,15 @@ export default async function globalSetup(): Promise<void> {
         name: "E2E Other Company Admin",
         role: "owner",
         passwordHash: await hashPassword(E2E_OTHER_COMPANY_ADMIN_PASSWORD),
+        passwordSetAt: new Date(),
+      },
+      {
+        companyId: companyA.id,
+        email: E2E_PLATFORM_ADMIN_EMAIL,
+        name: "E2E Platform Admin",
+        role: "member",
+        isPlatformAdmin: true,
+        passwordHash: await hashPassword(E2E_PLATFORM_ADMIN_PASSWORD),
         passwordSetAt: new Date(),
       },
     ]);

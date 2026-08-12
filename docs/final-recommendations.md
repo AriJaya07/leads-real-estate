@@ -15,9 +15,13 @@ not everything here needs to happen before launch (see
    decision on what happens to data access when a subscription lapses (the
    `past_due`/`canceled` states already exist in the `company_status` enum — the
    billing side just isn't connected to a real payment event yet).
-2. **Configure the n8n scheduled-trigger workflow** (or an equivalent scheduler) for
-   the four `/api/trigger/*` routes. Code-complete and tested; genuinely just needs
-   someone to go set up the external cron. See deployment-guide.md §6.
+2. **Configure the n8n workflows** — the full set now exists and is documented
+   (`n8n/workflows/triggers|outbound|exports|notifications`, see `n8n/README.md`
+   and `docs/n8n-integration-plan.md`), including the seven scheduled-trigger
+   routes, outbound lead events to Slack/WhatsApp/Sheets, the Sheets export sync,
+   and WhatsApp/Slack notification delivery. Code-complete and tested; genuinely
+   just needs someone to import them into a real n8n instance and wire
+   credentials. See `n8n/README.md`'s import order.
 3. **Legal**: Terms of Service, Privacy Policy, and a data-processing agreement
    template for customers whose own customers' data flows through this (real estate
    leads scraped from social platforms carry real privacy obligations depending on
@@ -35,63 +39,72 @@ not everything here needs to happen before launch (see
    Requires `infrastructure/db/client.ts`'s `db()` singleton to support per-request
    `SET LOCAL app.current_company_id` — a structural change, scope it as its own
    project, don't bolt it on quickly.
-6. **A platform-wide operations view** for the AveronAi team itself — today
-   `/admin/sync` and the dashboard's stats are all per-company; there's no single
-   place to see "which customers have unhealthy syncs right now" across the whole
-   platform. Useful the moment there are more than a handful of customers.
-7. **Fix the `storage_kb` usage counter** to actually decrement when data is pruned or
+6. **Fix the `storage_kb` usage counter** to actually decrement when data is pruned or
    a company deletes a dataset — currently only grows (documented in
    `docs/tech-debt.md`). Low urgency today given generous storage limits, but it's a
    real metric-drift bug that will eventually block a legitimate plan downgrade.
-8. **Close the buyer-side data collection gap.** This is a product/data-sourcing
+7. **Close the buyer-side data collection gap.** This is a product/data-sourcing
    problem, not a code problem (see `docs/tech-debt.md`'s "product-level gap" entry):
    most data currently flowing in is seller listings, not buyer intent posts, which
-   is the actual product promise. The on-demand scrape-request system built this
-   session (actor templates + Collect Data page) is the tool to close this with —
-   someone needs to actually register templates for buyer-side sources (Facebook
-   buyer groups, keyword searches, commenter mining on listing posts) and use them.
+   is the actual product promise. The on-demand scrape-request system (actor
+   templates + Collect Data page) is the tool to close this with — someone needs to
+   actually register templates for buyer-side sources (Facebook buyer groups,
+   keyword searches, commenter mining on listing posts) and use them.
 
 ## Tier 3 — Worth doing, not urgent
 
-9. **A load/concurrency test for the two race-condition fixes made this pass** (login
+8. **A load/concurrency test for the two race-condition fixes made this pass** (login
    lockout, Apify budget check) — both are correct by construction (Postgres advisory
    locks), but there's no automated test proving it under real concurrency, since the
    architecture (safe actions needing a request context) makes that awkward to write
    cheaply today. A k6/Artillery script hitting `signIn` concurrently against a test
    deploy would be the natural shape.
-10. **Content-Security-Policy header.** Not flagged as a launch blocker (nothing in
-    the app renders untrusted HTML), but a reasonable defense-in-depth addition
-    alongside the security headers already set in `next.config.ts`.
-11. **Indexed search for the `locations`/`propertyTypes` array-search branches**
+9. **Content-Security-Policy header.** Not flagged as a launch blocker (nothing in
+   the app renders untrusted HTML), but a reasonable defense-in-depth addition
+   alongside the security headers already set in `next.config.ts`.
+10. **Indexed search for the `locations`/`propertyTypes` array-search branches**
     (documented limitation, `docs/tech-debt.md`) — revisit if per-company lead volume
     grows enough that search latency becomes a measured problem, not before. The fix
     path is already scoped in the tech-debt entry (a custom `IMMUTABLE` SQL function
     or a generated column).
-12. **Link the customer user guide from inside the product.** A full DOCX user guide
+11. **Link the customer user guide from inside the product.** A full DOCX user guide
     covering all ten onboarding/usage topics was produced separately this session —
     add a help link in the app topbar pointing to wherever it ends up hosted.
-13. **A connection pooler** (PgBouncer, or your Postgres provider's built-in one) if
+12. **A connection pooler** (PgBouncer, or your Postgres provider's built-in one) if
     deploying to a platform with many concurrent serverless function instances against
     the current small connection pool (`max: 10`) — a capacity-planning item, not a
     correctness bug, worth having a plan for before it's actually needed.
+13. **A visual mapping-profile editor** — still edited as JSON rows (`docs/prd.md`'s
+    roadmap #2) — and **an LLM classifier cutover** (`docs/prd.md`'s roadmap #3),
+    both still exactly as scoped there.
 
 ## What's already genuinely solid (don't re-litigate these)
 
 Worth stating explicitly so future work doesn't waste time re-auditing settled ground:
 
-- **Multi-tenant data isolation** — audited by direct trace across every action/query
-  this session, proven by `e2e/multi-tenant.spec.ts`, zero findings.
+- **Multi-tenant data isolation** — audited by direct trace across every action/query,
+  proven by `e2e/multi-tenant.spec.ts` (company-vs-company) and
+  `e2e/platform-admin.spec.ts` (the Super Admin boundary — a platform operator's
+  cross-company visibility never widens what a tenant-scoped query returns), zero
+  findings.
 - **SQL injection surface** — audited specifically, including the open-ended dynamic
   `attr.*` filter path, zero findings.
 - **Password/session security** — scrypt hashing, constant-time verification, DB-backed
   session revocation, all correct.
-- **Test coverage** — genuinely comprehensive across every product area (328
-  automated tests: 191 unit + 99 integration + 40 e2e, all passing), not just a token
-  suite.
+- **Test coverage** — genuinely comprehensive across every product area (406
+  automated tests: 225 unit + 132 integration + 49 e2e, all passing), not just a
+  token suite.
 - **CI** — already enforces typecheck/lint/unit/integration/e2e on every PR.
 - **Caching strategy** — deliberate, tag-invalidated, applied only where the argument
   space is actually bounded. Not over- or under-applied.
 - **The core product loop** (discover → ingest → normalize → classify → identify →
-  dedupe → score → serve → alert, plus the newer on-demand collection and
-  data-validation scoring layers) — functionally complete, tested, and internally
-  consistent with the product's own stated design principles throughout.
+  dedupe → score → serve → alert, plus the on-demand collection and data-validation
+  scoring layers) — functionally complete, tested, and internally consistent with
+  the product's own stated design principles throughout.
+- **Company category / vertical system** — real estate, travel, courses, or other,
+  chosen once at signup, driving classifier lexicon selection, field labels, and
+  actor-template recommendations. See `docs/prd.md`'s "Company category" section.
+- **Super Admin portal** — `/platform/tenants` and four sibling pages
+  (Category Templates, Platform Analytics, Connector Health, Platform Billing),
+  read-only on tenant data with two logged, reversible support actions. See
+  `docs/multi-tenant-apify-isolation-plan.md` §3.

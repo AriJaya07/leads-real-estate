@@ -6,7 +6,7 @@ test.describe("login", () => {
     await page.goto("/login");
 
     await page.getByLabel("Email").fill(E2E_ADMIN_EMAIL);
-    await page.getByLabel("Password").fill(E2E_ADMIN_PASSWORD);
+    await page.getByLabel("Password", { exact: true }).fill(E2E_ADMIN_PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
 
     await expect(page).toHaveURL(/\/leads$/);
@@ -19,7 +19,7 @@ test.describe("login", () => {
     await page.goto("/login");
 
     await page.getByLabel("Email").fill(E2E_ADMIN_EMAIL);
-    await page.getByLabel("Password").fill("definitely-the-wrong-password");
+    await page.getByLabel("Password", { exact: true }).fill("definitely-the-wrong-password");
     await page.getByRole("button", { name: "Sign in" }).click();
 
     // Next's route announcer also carries role="alert", so scope to the form's
@@ -45,13 +45,13 @@ test.describe("login", () => {
     // without even reaching the password check.
     for (let attempt = 0; attempt < 5; attempt++) {
       await page.getByLabel("Email").fill(E2E_THROTTLE_EMAIL);
-      await page.getByLabel("Password").fill("wrong-password");
+      await page.getByLabel("Password", { exact: true }).fill("wrong-password");
       await page.getByRole("button", { name: "Sign in" }).click();
       await expect(page.getByText("That email and password don't match.")).toBeVisible();
     }
 
     await page.getByLabel("Email").fill(E2E_THROTTLE_EMAIL);
-    await page.getByLabel("Password").fill(E2E_THROTTLE_PASSWORD);
+    await page.getByLabel("Password", { exact: true }).fill(E2E_THROTTLE_PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
 
     await expect(page.getByText("Too many failed attempts. Try again in a few minutes.")).toBeVisible();

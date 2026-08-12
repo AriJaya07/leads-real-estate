@@ -52,6 +52,22 @@ shapes from training data — see [docs/coding-standards.md](docs/coding-standar
   `canonicalLeadId`, missing upstream datasets are flagged `status = "missing"`, nothing
   in the ingestion path does a hard delete. If a task seems to call for deleting data,
   ask first.
+- **Never let a `/platform/*` (Super Admin) query `SELECT` from `leads`/`lead_appearances`/
+  `raw_records`.** Usage/health/billing metadata only — a cross-company view of actual
+  lead data defeats the tenant isolation the whole platform is built on. Never add a
+  third Super Admin write capability without a new `superAdminActionEnum` value and a
+  `super_admin_actions` log entry — see [docs/multi-tenant-apify-isolation-plan.md](docs/multi-tenant-apify-isolation-plan.md)
+  §3.
+- **Never make `isPlatformAdmin` grantable from any in-app UI or server action.**
+  Direct database edit only — same reasoning as not letting a company mint its own
+  owner from a public form. If a task seems to need an in-app way to grant it, ask
+  first.
+- **Never route the `email` notifier channel through anything but `emailNotifier`
+  (direct Resend).** It's shared with password-reset and team-invite sends
+  (`application/auth/password-reset.actions.ts`, `application/auth/invite.actions.ts`),
+  which must not depend on an external automation tool being reachable. `whatsapp`/
+  `slack` relay through n8n; `email` does not — see
+  [infrastructure/notifiers/registry.ts](infrastructure/notifiers/registry.ts).
 
 ## Defaults / preferred approach
 
@@ -73,11 +89,21 @@ shapes from training data — see [docs/coding-standards.md](docs/coding-standar
 - Prefer extending the existing predicate language (`domain/alerting/predicate.ts`) over
   adding a new bespoke condition type for alert rules — it's deliberately small and
   closed (no arbitrary expressions) as a security property, not an oversight.
-- When a change touches scoring weights, mapping synonyms, or the intent lexicon, treat
-  it as tuning a live production signal, not a code refactor — check
-  `domain/scoring/lexicon.ts`'s existing weight scale (roughly 10–45) and keep new
-  entries consistent with it, and prefer adding a test that pins the before/after
-  classification of a representative real-world phrase.
+- When a change touches scoring weights, mapping synonyms, or an intent lexicon, treat
+  it as tuning a live production signal, not a code refactor — check the relevant
+  lexicon file's existing weight scale (roughly 10–45 across `domain/scoring/lexicon.ts`
+  (real estate, the default) and `domain/scoring/lexicons/{travel,courses}.ts`) and
+  keep new entries consistent with it, and prefer adding a test that pins the
+  before/after classification of a representative real-world phrase.
+- Adding a new company category (beyond real estate/travel/courses/other) touches, in
+  order: `domain/verticals/catalog.ts` (the `CompanyCategory` union + `VERTICALS`
+  entry), `infrastructure/db/schema/enums.ts::companyCategoryEnum` (duplicate the same
+  literal values — same split as `Role`/`userRoleEnum`), a migration, a new
+  `domain/scoring/lexicons/<category>.ts` + a case in
+  `domain/scoring/lexicon-registry.ts`, and every `z.enum([...])` literal duplicating
+  the category list in a server action's input schema (`application/auth/signup.actions.ts`,
+  `application/collection/actor-templates.actions.ts`). Grep for `"real_estate"` to find
+  every place the list is duplicated before adding a fifth.
 - Match the existing comment style: comments explain *why*, often citing a specific
   past bug or production incident, never restate *what* the code does. See
   [docs/coding-standards.md](docs/coding-standards.md).
@@ -113,5 +139,9 @@ shapes from training data — see [docs/coding-standards.md](docs/coding-standar
 - [docs/environment.md](docs/environment.md) — env vars, setup, third-party services
 - [docs/n8n-integration-plan.md](docs/n8n-integration-plan.md) — why the n8n workflows in
   `n8n/workflows/` are shaped the way they are
+- [docs/multi-tenant-apify-isolation-plan.md](docs/multi-tenant-apify-isolation-plan.md) —
+  tenant isolation design, the Super Admin portal, and what it's never allowed to touch
+- [docs/lead-source-scaling-plan.md](docs/lead-source-scaling-plan.md) — why `recordKind`
+  exists and what breaks if you skip it when adding a new content shape
 - [ai-prompts/](ai-prompts/) — task-shaped prompt templates (feature work, bug fixes,
   reviews, refactoring, tests, docs)

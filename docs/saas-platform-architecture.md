@@ -76,6 +76,16 @@ never against `averonai_dev` — applying this to real data still needs
   distinct from the admin-issued temporary-password reset, which still exists
   unchanged. Proven by `e2e/team-invite.spec.ts` and integration tests for both new
   query helpers.
+- **Company category + Super Admin portal** (later pass, on top of the above): every
+  company picks a business vertical (`real_estate | travel | courses | other`) as
+  step one of `/signup`, immutable afterward — `companies.category`,
+  `domain/verticals/catalog.ts` — driving classifier lexicon selection, field
+  labels, and actor-template recommendations (`docs/domain.md`, `docs/architecture.md`).
+  Separately, `users.isPlatformAdmin` is a cross-company flag orthogonal to the role
+  hierarchy above, unlocking a read-only `/platform/*` portal (five pages) plus two
+  logged, reversible tenant-support actions — never a tenant's own role, never grantable
+  from any in-app UI. Full design: `docs/multi-tenant-apify-isolation-plan.md` §3.
+  Proven by `e2e/platform-admin.spec.ts`.
 
 ## Original design (for what's not built yet)
 

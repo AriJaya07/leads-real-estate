@@ -52,11 +52,13 @@ async function DatasetSwitcherSlot({
   role,
   companyId,
   navExtras,
+  isPlatformAdmin,
 }: {
   userEmail: string;
   role: Role;
   companyId: string;
   navExtras: NavExtras;
+  isPlatformAdmin: boolean;
 }) {
   const queryClient = getQueryClient();
   await queryClient.prefetchQuery({
@@ -66,7 +68,7 @@ async function DatasetSwitcherSlot({
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
-      <AppTopbar userEmail={userEmail} role={role} navExtras={navExtras} />
+      <AppTopbar userEmail={userEmail} role={role} navExtras={navExtras} isPlatformAdmin={isPlatformAdmin} />
     </HydrationBoundary>
   );
 }
@@ -100,6 +102,7 @@ async function AuthedShell({ children }: { children: React.ReactNode }) {
             role={user.role}
             companyId={user.companyId}
             navExtras={navExtras}
+            isPlatformAdmin={user.isPlatformAdmin}
           />
         </Suspense>
         <main id="main-content" className="min-w-0 flex-1">

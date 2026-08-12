@@ -4,7 +4,7 @@ import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD, E2E_THROTTLE_EMAIL, E2E_THROTTLE_P
 async function login(page: import("@playwright/test").Page, email: string, password: string) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 

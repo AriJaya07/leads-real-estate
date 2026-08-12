@@ -185,6 +185,19 @@ signals that produced its score. Agents act on "82 because it says 'looking to b
 states a budget," not on a naked number. The person-level `aiExplanation` synthesizes
 across a lead's appearances the same way, for the same reason.
 
+**The phrase lexicon is swappable per company category; the scoring algorithm is
+not.** `classifyWithRules` takes a `LexiconBundle` (buyer/seller/agent/investor/broker
+phrase sets) as a parameter, defaulting to the original real-estate lexicon —
+`domain/scoring/lexicon-registry.ts::getLexiconForCategory` selects the bundle
+matching a company's `category` (real estate, travel, courses, or other; see
+`docs/domain.md`). What does *not* vary by category: `sumWeights`'s
+diminishing-returns math, the recruitment/spam irrelevance gate, and
+`looksLikeListing()`'s bed/bath structured-listing heuristic — that last one is
+real-estate-shaped by construction and simply never fires for other categories
+(known limit, not a bug — see that function's own comment) rather than
+misfiring. A vertical whose own "structured listing" concept isn't bed/bath-shaped
+needs its own detector, not a phrase-list swap.
+
 **Ranking is not scoring.** `priorityScore`
 ([domain/lead/ranking.ts](../domain/lead/ranking.ts)) folds a recency half-life (18h) and
 an already-worked penalty on top of a person's `buyerScore`/`confidenceScore` — a person
@@ -256,6 +269,19 @@ route. See the comment on `requireUser()` and on `AuthedShell` in
 protected page, give it its own `requireUser()`/`requireManager()`/`requireAdmin()` call
 (manager+ for "manage projects and data" pages like datasets/sync, admin+ for "manage
 users and settings" pages like team) — don't assume the layout covers it.
+
+**Super Admin is a flag, not a role, and not a bigger version of `owner`.**
+`users.isPlatformAdmin` is orthogonal to the `owner > admin > manager > member`
+hierarchy above — a company `owner` does not pass `requirePlatformAdmin()`, and
+a platform admin's own tenant membership (they still belong to exactly one
+company, like anyone) grants them no special access to *other* tenants' lead
+data. It unlocks `/platform/*` — `application/platform/*.queries.ts` for the
+reads (usage/health/billing metadata only, the same "never a row out of
+`leads`" boundary the rest of the multi-tenant design enforces), and
+`application/platform/tenant-actions.ts` for the only two writes allowed
+(`platformActionClient`-gated, each logged to `super_admin_actions`). Not
+grantable from any in-app UI — see `docs/multi-tenant-apify-isolation-plan.md`
+§3 for the full design and why that's deliberate.
 
 ## Cache invalidation
 

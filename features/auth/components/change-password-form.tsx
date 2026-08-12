@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/common/spinner";
 import { changePassword } from "@/application/auth/login.actions";
@@ -58,10 +58,9 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="currentPassword">Current password</Label>
-        <Input
+        <PasswordInput
           id="currentPassword"
           name="currentPassword"
-          type="password"
           required
           autoComplete="current-password"
           autoFocus
@@ -70,10 +69,9 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="newPassword">New password</Label>
-        <Input
+        <PasswordInput
           id="newPassword"
           name="newPassword"
-          type="password"
           required
           autoComplete="new-password"
           placeholder="At least 10 characters"
