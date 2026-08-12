@@ -3,17 +3,6 @@ import { pgEnum } from "drizzle-orm/pg-core";
 export const sourceKindEnum = pgEnum("source_kind", ["apify", "n8n", "webform", "manual"]);
 
 /**
- * Business vertical, chosen once at signup — see `domain/verticals/catalog.ts`
- * for the canonical `CompanyCategory` type this duplicates (domain can't
- * import this file; this file duplicates domain's literal list, same
- * `Role`/`userRoleEnum` split). Drives which intent lexicon scores a lead
- * (`domain/scoring/lexicon-registry.ts`) and which field labels/actor
- * templates get surfaced first — not a new enum per feature, one column
- * read in a few places.
- */
-export const companyCategoryEnum = pgEnum("company_category", ["real_estate", "travel", "courses", "other"]);
-
-/**
  * What *shape* a record is, independent of `sourceKindEnum` (which models
  * transport — apify/n8n/webform — not content). A "Post Likers" scrape produces
  * a person, not a post: no body text, no phrases to classify, a different dedup
@@ -197,6 +186,34 @@ export const leadPotentialEnum = pgEnum("lead_potential", [
  * away from a new capability.
  */
 export const superAdminActionEnum = pgEnum("super_admin_action", ["extend_trial", "resend_invite"]);
+
+/**
+ * A category's visibility, not its existence — `active` shows at `/signup`'s
+ * category picker, `beta` hides it from signup but leaves it usable (manually
+ * created test tenants), `disabled` hides it from new signups without
+ * touching any existing tenant already on it (`companies.categoryId` is
+ * immutable post-signup — see `docs/domain.md`). See
+ * `infrastructure/db/schema/categories.ts` for the table this belongs to.
+ */
+export const categoryConfigStatusEnum = pgEnum("category_config_status", ["active", "beta", "disabled"]);
+
+/**
+ * The closed set of writes a Super Admin may perform against platform
+ * category configuration — the config-layer counterpart to
+ * `superAdminActionEnum`, which covers writes against a specific *tenant*
+ * instead. Kept as a separate enum/table (`platform_category_actions`)
+ * rather than folded into `super_admin_actions` because these writes are
+ * never company-scoped. `create_category`/`update_config` touch
+ * `categories`; `update_lexicon` touches `category_lexicon_phrases` — split
+ * out as its own action because it's the one write that directly changes
+ * live scoring behavior, worth its own audit trail entry. See
+ * `docs/platform-super-admin-flow.md` §0.
+ */
+export const platformCategoryActionEnum = pgEnum("platform_category_action", [
+  "create_category",
+  "update_config",
+  "update_lexicon",
+]);
 
 export const leadEventTypeEnum = pgEnum("lead_event_type", [
   "created",

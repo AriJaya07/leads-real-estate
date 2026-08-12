@@ -106,11 +106,22 @@ const LOCATION_ALIASES = [
   ["badung, bali", "badung"],
 ];
 
+// Fixed ids for the four categories the categories migration backfilled —
+// see domain/verticals/seed-ids.ts. Duplicated here (not imported, this is a
+// plain .mjs script) so seeding a fresh company works even before
+// backfill-categories.mjs has run against this DB.
+const SEED_CATEGORY_IDS = {
+  real_estate: "1daeab11-44b1-51b5-b13d-e40f02d76a3f",
+  travel: "2c5f00d3-6824-5f39-902e-46da29869ee5",
+  courses: "d10de773-4b91-5ee4-845e-2a130a96396c",
+  other: "a92c5632-8cd4-5c4c-be0a-1a7169f875a9",
+};
+
 try {
   const [company] = await sql`
-    INSERT INTO companies (name, slug, category, status)
-    VALUES (${companyName}, ${companySlug}, 'real_estate', 'active')
-    ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, category = EXCLUDED.category
+    INSERT INTO companies (name, slug, category_id, status)
+    VALUES (${companyName}, ${companySlug}, ${SEED_CATEGORY_IDS.real_estate}, 'active')
+    ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, category_id = EXCLUDED.category_id
     RETURNING id, name
   `;
   console.log(`company: ${company.name} (${company.id})`);
@@ -302,7 +313,7 @@ try {
     {
       name: "Facebook Groups Scraper",
       platform: "facebook",
-      category: null,
+      categoryId: null,
       requirementKind: "group_posts",
       description: "Posts from a public Facebook Group — the general-purpose social-listening source for any category.",
       actorId: "apify/facebook-groups-scraper",
@@ -313,7 +324,7 @@ try {
     {
       name: "Property Portal Listings (example)",
       platform: "other",
-      category: "real_estate",
+      categoryId: SEED_CATEGORY_IDS.real_estate,
       requirementKind: "listing_search",
       description: "Example placeholder — replace actorId with a real Apify Store property-portal scraper before use.",
       actorId: "REPLACE_WITH_REAL_ACTOR_ID",
@@ -324,7 +335,7 @@ try {
     {
       name: "Travel Forum/OTA Listings (example)",
       platform: "other",
-      category: "travel",
+      categoryId: SEED_CATEGORY_IDS.travel,
       requirementKind: "listing_search",
       description: "Example placeholder — replace actorId with a real Apify Store travel/OTA scraper before use.",
       actorId: "REPLACE_WITH_REAL_ACTOR_ID",
@@ -335,7 +346,7 @@ try {
     {
       name: "Course Provider Listings (example)",
       platform: "other",
-      category: "courses",
+      categoryId: SEED_CATEGORY_IDS.courses,
       requirementKind: "listing_search",
       description: "Example placeholder — replace actorId with a real Apify Store course-provider scraper before use.",
       actorId: "REPLACE_WITH_REAL_ACTOR_ID",
@@ -347,9 +358,9 @@ try {
 
   for (const t of actorTemplates) {
     await sql`
-      INSERT INTO actor_templates (name, platform, category, requirement_kind, description, actor_id, default_input, required_params, cost_note)
-      VALUES (${t.name}, ${t.platform}, ${t.category}, ${t.requirementKind}, ${t.description}, ${t.actorId}, ${sql.json(t.defaultInput)}, ${t.requiredParams}, ${t.costNote})
-      ON CONFLICT (name) DO UPDATE SET category = EXCLUDED.category, description = EXCLUDED.description
+      INSERT INTO actor_templates (name, platform, category_id, requirement_kind, description, actor_id, default_input, required_params, cost_note)
+      VALUES (${t.name}, ${t.platform}, ${t.categoryId}, ${t.requirementKind}, ${t.description}, ${t.actorId}, ${sql.json(t.defaultInput)}, ${t.requiredParams}, ${t.costNote})
+      ON CONFLICT (name) DO UPDATE SET category_id = EXCLUDED.category_id, description = EXCLUDED.description
     `;
   }
   console.log(`actor templates: ${actorTemplates.length} seeded`);

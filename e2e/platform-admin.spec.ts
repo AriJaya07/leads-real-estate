@@ -55,7 +55,7 @@ test.describe("platform admin boundary", () => {
     await loginAs(page, E2E_PLATFORM_ADMIN_EMAIL, E2E_PLATFORM_ADMIN_PASSWORD);
 
     for (const [path, heading] of [
-      ["/platform/category-templates", "Category Templates"],
+      ["/platform/categories", "Categories"],
       ["/platform/analytics", "Platform Analytics"],
       ["/platform/connectors", "Connector Health"],
       ["/platform/billing", "Platform Billing"],
@@ -78,5 +78,41 @@ test.describe("platform admin boundary", () => {
     // also rejects a non-trialing company server-side (tenant-actions.ts), this
     // just confirms the UI doesn't dangle a button that would only error.
     await expect(page.getByRole("button", { name: /Extend trial/ })).toHaveCount(0);
+  });
+
+  test("a platform admin can edit a category's config and it's logged", async ({ page }) => {
+    await loginAs(page, E2E_PLATFORM_ADMIN_EMAIL, E2E_PLATFORM_ADMIN_PASSWORD);
+    await page.goto("/platform/categories");
+    await page.getByRole("link", { name: "Real Estate" }).click();
+
+    await expect(page).toHaveURL(/\/platform\/categories\/real_estate$/);
+    await page.getByLabel(/Filter suggestions — category field/).fill("Villa, Land, Apartment");
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    await expect(page.getByText(/Saved Real Estate config/)).toBeVisible();
+    await expect(page.getByText("Updated config")).toBeVisible();
+  });
+
+  test("a platform admin can create a category instantly, and it starts hidden from signup until active", async ({
+    page,
+  }) => {
+    await loginAs(page, E2E_PLATFORM_ADMIN_EMAIL, E2E_PLATFORM_ADMIN_PASSWORD);
+    await page.goto("/platform/categories");
+
+    await page.getByRole("button", { name: "New category" }).click();
+    await page.getByLabel("Label").fill("Automotive");
+    await page.getByLabel(/Slug/).fill("automotive_e2e");
+    await page.getByLabel(/Description/).fill("Cars and dealers.");
+    await page.getByLabel("Category field", { exact: true }).fill("Vehicle types");
+    await page.getByLabel("Wants", { exact: true }).fill("Vehicle interests");
+    await page.getByLabel("Company name placeholder").fill("Bali Motors Group");
+    await page.getByRole("button", { name: "Create category" }).click();
+
+    // No code/migration/request queue — the row exists immediately, created
+    // as "beta" so it's not yet offered to new signups.
+    await expect(page).toHaveURL(/\/platform\/categories\/automotive_e2e$/);
+    await expect(page.getByText("Created category")).toBeVisible();
+    await page.goto("/signup");
+    await expect(page.getByText("Automotive")).toHaveCount(0);
   });
 });

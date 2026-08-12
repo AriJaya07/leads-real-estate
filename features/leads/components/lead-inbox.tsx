@@ -44,7 +44,7 @@ import { useListKeyboardNav } from "@/hooks/use-list-keyboard-nav";
 import { useLeadFacetsQuery, useLeadsQuery, useSavedViewsQuery } from "@/features/leads/queries";
 import { parseLeadFilters, type LeadFilters } from "@/application/leads/filters.schema";
 import { FieldLabelsProvider, useFieldLabels } from "@/features/leads/vertical-context";
-import type { CompanyCategory } from "@/domain/verticals/catalog";
+import type { VerticalFieldLabels } from "@/domain/verticals/catalog";
 import { LEAD_STATUSES, leadStatusLabel } from "@/application/leads/lead-status";
 import type { LeadListItem, LeadPage } from "@/application/leads/lead-queries";
 import type { FacetDescriptor } from "@/application/leads/facets";
@@ -880,15 +880,15 @@ function LeadResultsView({
 export function LeadInbox({
   canCollectData = false,
   currentUserId,
-  companyCategory,
+  companyFieldLabels,
   canManageSharedSearches = false,
   hasAiAssist = false,
   teamMembers = [],
 }: {
   canCollectData?: boolean;
   currentUserId: string;
-  /** Drives category-aware field labels ("Wants"/"Property types" etc) via `FieldLabelsProvider` — see `features/leads/vertical-context.tsx`. */
-  companyCategory: CompanyCategory;
+  /** Category-aware field labels ("Wants"/"Property types" etc), joined from `categories.field_labels` — see `features/leads/vertical-context.tsx`. */
+  companyFieldLabels: VerticalFieldLabels;
   canManageSharedSearches?: boolean;
   /** `aiAssistant` plan feature — gates the summary/message-draft buttons in the detail sheet. */
   hasAiAssist?: boolean;
@@ -962,7 +962,7 @@ export function LeadInbox({
   );
 
   return (
-    <FieldLabelsProvider category={companyCategory}>
+    <FieldLabelsProvider fieldLabels={companyFieldLabels}>
     <div className="flex flex-col gap-4">
       <SavedSearchesBar
         views={savedViews}

@@ -1,7 +1,8 @@
 import { index, jsonb, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 import { companies } from "./company";
 import { users } from "./auth";
-import { superAdminActionEnum } from "./enums";
+import { categories } from "./categories";
+import { platformCategoryActionEnum, superAdminActionEnum } from "./enums";
 
 /**
  * Append-only audit log for every write a Super Admin makes against a
@@ -36,3 +37,24 @@ export const superAdminActions = pgTable(
 );
 
 export type SuperAdminActionRow = typeof superAdminActions.$inferSelect;
+
+/**
+ * Append-only audit log for `categories`/`category_lexicon_phrases` writes —
+ * the config-layer counterpart to `superAdminActions` above, kept as a
+ * separate table because these writes are never company-scoped. See
+ * `docs/platform-super-admin-flow.md` §0 and `infrastructure/db/schema/categories.ts`.
+ */
+export const platformCategoryActions = pgTable(
+  "platform_category_actions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    platformAdminUserId: uuid("platform_admin_user_id").references(() => users.id, { onDelete: "set null" }),
+    action: platformCategoryActionEnum("action").notNull(),
+    categoryId: uuid("category_id").references(() => categories.id, { onDelete: "set null" }),
+    details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("platform_category_actions_category_idx").on(t.categoryId, t.createdAt)],
+);
+
+export type PlatformCategoryActionRow = typeof platformCategoryActions.$inferSelect;

@@ -13,7 +13,6 @@ import { requestScrape } from "@/application/collection/scrape-requests.actions"
 import { useServerAction } from "@/hooks/use-server-action";
 import { cn } from "@/lib/utils";
 import { formatCount } from "@/shared/format";
-import type { CompanyCategory } from "@/domain/verticals/catalog";
 import type { ActorTemplateRow } from "@/infrastructure/db/schema/collection";
 
 /**
@@ -33,12 +32,12 @@ import type { ActorTemplateRow } from "@/infrastructure/db/schema/collection";
  */
 export function RequestScrapeForm({
   templates,
-  companyCategory,
+  companyCategoryId,
   quota = null,
 }: {
   templates: ActorTemplateRow[];
   /** Drives the "Recommended" badge below — templates already arrive pre-sorted by category match (see app/(app)/admin/collection/page.tsx). */
-  companyCategory: CompanyCategory;
+  companyCategoryId: string;
   /** This company's current Apify-request budget for the month, `null` when there's no subscription row (see `getUsageSummary`). */
   quota?: { used: number; limit: number } | null;
 }) {
@@ -149,14 +148,14 @@ export function RequestScrapeForm({
         >
           {templatesForPlatform.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.category === companyCategory ? "★ " : ""}
+              {t.categoryId === companyCategoryId ? "★ " : ""}
               {t.requirementKind} — {t.name}
             </option>
           ))}
         </select>
       </div>
 
-      {template && template.category === companyCategory && (
+      {template && template.categoryId === companyCategoryId && (
         <p className="text-brand text-xs font-medium">★ Recommended for your category</p>
       )}
       {template?.description && <p className="text-muted-foreground text-sm">{template.description}</p>}

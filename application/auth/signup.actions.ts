@@ -9,9 +9,6 @@ import { ActionError, actionClient } from "@/application/safe-action";
 import { TRIAL_DAYS, TRIAL_STARTER_PLAN_NAME } from "@/shared/constants";
 import { startSession } from "./login.actions";
 
-/** Same literal-duplication convention as `roleSchema` in team.actions.ts/invite.actions.ts — see domain/verticals/catalog.ts::CompanyCategory for the canonical type. */
-const categorySchema = z.enum(["real_estate", "travel", "courses", "other"]);
-
 /** Postgres SQLSTATE for a unique-constraint violation. */
 const UNIQUE_VIOLATION = "23505";
 
@@ -49,7 +46,7 @@ function slugify(name: string): string {
 
 const signUpSchema = z.object({
   companyName: z.string().trim().min(1, "Enter a company name").max(200),
-  category: categorySchema,
+  categoryId: z.string().uuid(),
   email: z.string().email().transform((value) => value.trim().toLowerCase()),
   password: z.string().min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters`),
 });
@@ -65,11 +62,23 @@ const signUpSchema = z.object({
  * allowlist-of-addresses shape, one level up.
  */
 export const signUp = actionClient.inputSchema(signUpSchema).action(async ({ parsedInput }) => {
-  const { companyName, category, email, password } = parsedInput;
+  const { companyName, categoryId, email, password } = parsedInput;
 
   const allowed = allowedEmails();
   if (allowed.length > 0 && !allowed.includes(email)) {
     throw new ActionError("That address is not allowed to create a company. Check AUTH_ALLOWED_EMAILS.");
+  }
+
+  // Re-validated server-side, not trusted from the client's earlier fetch —
+  // a category can flip to beta/disabled between the picker rendering and
+  // this submit.
+  const [category] = await db()
+    .select({ id: schema.categories.id, status: schema.categories.status })
+    .from(schema.categories)
+    .where(eq(schema.categories.id, categoryId))
+    .limit(1);
+  if (!category || category.status === "disabled") {
+    throw new ActionError("That category isn't available right now. Pick another.");
   }
 
   const baseSlug = slugify(companyName) || "company";
@@ -84,7 +93,7 @@ export const signUp = actionClient.inputSchema(signUpSchema).action(async ({ par
 
         const [company] = await tx
           .insert(schema.companies)
-          .values({ name: companyName, slug, category, status: "trialing", trialEndsAt })
+          .values({ name: companyName, slug, categoryId, status: "trialing", trialEndsAt })
           .returning();
 
         const [user] = await tx

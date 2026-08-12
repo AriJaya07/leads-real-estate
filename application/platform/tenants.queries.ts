@@ -1,8 +1,7 @@
 import "server-only";
-import { desc, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
 import { currentMonthBounds } from "@/application/billing/usage";
-import type { CompanyCategory } from "@/domain/verticals/catalog";
 
 export interface TenantOverviewStats {
   activeTenants: number;
@@ -14,7 +13,7 @@ export interface TenantRow {
   id: string;
   name: string;
   slug: string;
-  category: CompanyCategory;
+  categoryLabel: string;
   status: string;
   apifyRequestsThisMonth: number;
   leadsThisMonth: number;
@@ -46,7 +45,7 @@ export async function getTenantOverview(): Promise<{ stats: TenantOverviewStats;
       id: schema.companies.id,
       name: schema.companies.name,
       slug: schema.companies.slug,
-      category: schema.companies.category,
+      categoryLabel: schema.categories.label,
       status: schema.companies.status,
       trialEndsAt: schema.companies.trialEndsAt,
       apifyRequestsThisMonth: sql<number>`coalesce((
@@ -74,6 +73,7 @@ export async function getTenantOverview(): Promise<{ stats: TenantOverviewStats;
       )`,
     })
     .from(schema.companies)
+    .innerJoin(schema.categories, eq(schema.categories.id, schema.companies.categoryId))
     .orderBy(
       desc(sql`coalesce((
         SELECT value FROM ${schema.usageCounters}
@@ -87,7 +87,7 @@ export async function getTenantOverview(): Promise<{ stats: TenantOverviewStats;
     id: row.id,
     name: row.name,
     slug: row.slug,
-    category: row.category,
+    categoryLabel: row.categoryLabel,
     status: row.status,
     apifyRequestsThisMonth: row.apifyRequestsThisMonth,
     leadsThisMonth: row.leadsThisMonth,

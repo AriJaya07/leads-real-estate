@@ -1,26 +1,36 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import { VERTICALS, fieldLabelsFor, type CompanyCategory, type VerticalFieldLabels } from "@/domain/verticals/catalog";
+import type { VerticalFieldLabels } from "@/domain/verticals/catalog";
+
+const DEFAULT_FIELD_LABELS: VerticalFieldLabels = {
+  categoryField: "Categories",
+  wants: "Interests",
+  budget: "Budget",
+  locations: "Locations",
+  companyName: "Company name",
+  companyNamePlaceholder: "Your company",
+};
 
 /**
- * Avoids threading a `fieldLabels`/`companyCategory` prop through every
- * memoized component between `LeadInbox` and wherever a label is actually
- * rendered (`LeadCard`, `LeadRow`, `LeadDetailSheet` — a separate,
- * dynamically-imported file). Set once at `LeadInbox`'s root from the
- * server-provided `companyCategory`; consumed directly by whichever leaf
- * component needs a category-aware label.
+ * Avoids threading a `fieldLabels` prop through every memoized component
+ * between `LeadInbox` and wherever a label is actually rendered (`LeadCard`,
+ * `LeadRow`, `LeadDetailSheet` — a separate, dynamically-imported file). Set
+ * once at `LeadInbox`'s root from the server-fetched `companyFieldLabels`
+ * (`CurrentUser.companyFieldLabels`, joined from `categories.field_labels`)
+ * — consumed directly by whichever leaf component needs a category-aware
+ * label.
  */
-const FieldLabelsContext = createContext<VerticalFieldLabels>(VERTICALS.other.fieldLabels);
+const FieldLabelsContext = createContext<VerticalFieldLabels>(DEFAULT_FIELD_LABELS);
 
 export function FieldLabelsProvider({
-  category,
+  fieldLabels,
   children,
 }: {
-  category: CompanyCategory;
+  fieldLabels: VerticalFieldLabels;
   children: React.ReactNode;
 }) {
-  return <FieldLabelsContext.Provider value={fieldLabelsFor(category)}>{children}</FieldLabelsContext.Provider>;
+  return <FieldLabelsContext.Provider value={fieldLabels}>{children}</FieldLabelsContext.Provider>;
 }
 
 export function useFieldLabels(): VerticalFieldLabels {

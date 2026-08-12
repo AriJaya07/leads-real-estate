@@ -13,7 +13,7 @@ import { RequestScrapeForm } from "@/features/collection/components/request-scra
 import { ScrapeRequestTable } from "@/features/collection/components/scrape-request-table";
 import { ActorTemplateManager } from "@/features/collection/components/actor-template-manager";
 import { formatCount } from "@/shared/format";
-import type { CompanyCategory } from "@/domain/verticals/catalog";
+import { listAllCategoriesBasic, type CategoryOption } from "@/application/categories/categories.queries";
 
 export const metadata: Metadata = { title: "Collect data" };
 
@@ -38,20 +38,20 @@ async function Overview({ companyId }: { companyId: string }) {
   );
 }
 
-async function RequestSection({ companyId, category }: { companyId: string; category: CompanyCategory }) {
+async function RequestSection({ companyId, categoryId }: { companyId: string; categoryId: string }) {
   const [templates, usage] = await Promise.all([listActorTemplates(), getUsageSummary(companyId)]);
   // Category-matching templates (and category-agnostic ones) first — never
   // hidden, just prioritized, same "don't hide data, prioritize it" posture
   // as lead ranking elsewhere in this app.
   const sorted = [...templates.filter((t) => t.enabled)].sort((a, b) => {
-    const aMatch = a.category === null || a.category === category ? 0 : 1;
-    const bMatch = b.category === null || b.category === category ? 0 : 1;
+    const aMatch = a.categoryId === null || a.categoryId === categoryId ? 0 : 1;
+    const bMatch = b.categoryId === null || b.categoryId === categoryId ? 0 : 1;
     return aMatch - bMatch;
   });
   return (
     <RequestScrapeForm
       templates={sorted}
-      companyCategory={category}
+      companyCategoryId={categoryId}
       quota={usage?.apifyRequestsThisMonth ?? null}
     />
   );
@@ -62,13 +62,14 @@ async function HistorySection({ companyId }: { companyId: string }) {
   return <ScrapeRequestTable requests={requests} />;
 }
 
-async function AdminSection() {
+async function AdminSection({ categories }: { categories: CategoryOption[] }) {
   const templates = await listActorTemplates();
-  return <ActorTemplateManager templates={templates} />;
+  return <ActorTemplateManager templates={templates} categories={categories} />;
 }
 
 export default async function AdminCollectionPage() {
   const user = await requireManager();
+  const categories = await listAllCategoriesBasic();
 
   return (
     <div className="flex flex-col gap-6 p-4 sm:p-6">
@@ -84,7 +85,7 @@ export default async function AdminCollectionPage() {
       <section className="border-border flex flex-col gap-3 rounded-xl border p-4 sm:p-6">
         <h2 className="text-sm font-semibold">Request a scrape</h2>
         <Suspense fallback={<TableSkeleton />}>
-          <RequestSection companyId={user.companyId} category={user.companyCategory} />
+          <RequestSection companyId={user.companyId} categoryId={user.companyCategoryId} />
         </Suspense>
       </section>
 
@@ -99,7 +100,7 @@ export default async function AdminCollectionPage() {
         <section className="flex flex-col gap-3">
           <h2 className="text-sm font-semibold">Actor templates</h2>
           <Suspense fallback={<TableSkeleton />}>
-            <AdminSection />
+            <AdminSection categories={categories} />
           </Suspense>
         </section>
       )}

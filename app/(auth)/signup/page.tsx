@@ -1,9 +1,29 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SignupForm } from "@/features/auth/components/signup-form";
 import { AuthCard } from "@/components/auth/auth-card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { listActiveCategories } from "@/application/categories/categories.queries";
 
 export const metadata: Metadata = { title: "Create your workspace" };
+
+/** Uncached (`listActiveCategories()` is a live read) — needs its own Suspense boundary so /signup can still prerender its static shell around it. */
+async function SignupFormSection() {
+  const categories = await listActiveCategories();
+  return <SignupForm categories={categories} />;
+}
+
+function SignupFormSkeleton() {
+  return (
+    <div className="flex flex-col gap-2">
+      <Skeleton className="h-16 w-full rounded-lg" />
+      <Skeleton className="h-16 w-full rounded-lg" />
+      <Skeleton className="h-16 w-full rounded-lg" />
+      <Skeleton className="h-16 w-full rounded-lg" />
+    </div>
+  );
+}
 
 export default function SignupPage() {
   return (
@@ -14,7 +34,9 @@ export default function SignupPage() {
           14 days free. No card. You&apos;ll be the owner.
         </p>
 
-        <SignupForm />
+        <Suspense fallback={<SignupFormSkeleton />}>
+          <SignupFormSection />
+        </Suspense>
 
         <p className="text-muted-foreground mt-5 text-center text-xs leading-relaxed">
           By continuing you agree to the{" "}

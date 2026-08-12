@@ -164,12 +164,12 @@ function classifyEngagement(input: ClassifierInput): Classification {
  *
  * `lexicon` defaults to the original real-estate phrase set — every existing
  * caller that doesn't pass one (including this file's own tests) gets
- * identical behavior to before per-vertical lexicons existed. A different
- * bundle (`domain/scoring/lexicon-registry.ts::getLexiconForCategory`) only
- * swaps which phrases count as buyer/seller/agent/investor/broker signal —
- * the scoring algorithm itself, and the `looksLikeListing`/bed-bath/budget
- * extractors below, stay the same across every category (see that file's
- * own comment for why that's a known, deliberate limit for now).
+ * identical behavior to before per-category lexicons existed. A different
+ * bundle (`application/categories/lexicon.queries.ts::getLexiconBundleForCategory`,
+ * built from the `category_lexicon_phrases` table) only swaps which phrases
+ * count as buyer/seller/agent/investor/broker signal — the scoring algorithm
+ * itself, and the `looksLikeListing`/bed-bath/budget extractors below, stay
+ * the same across every category (a known, deliberate limit for now).
  */
 export function classifyWithRules(input: ClassifierInput, lexicon: LexiconBundle = REAL_ESTATE_LEXICON): Classification {
   if (input.recordKind === "engagement_like" || input.recordKind === "engagement_comment") {

@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/application/auth/current-user";
 import { getTenantOverview } from "@/application/platform/tenants.queries";
-import { VERTICALS } from "@/domain/verticals/catalog";
 import { PageHeader } from "@/components/common/page-header";
 import { StatTile } from "@/components/common/stat-tile";
 import { StatRowSkeleton } from "@/components/common/stat-row-skeleton";
@@ -70,7 +69,7 @@ async function TenantsContent() {
                   </Link>
                   <div className="text-muted-foreground font-mono text-xs">{tenant.slug}</div>
                 </td>
-                <td className="px-3 py-3 text-sm">{VERTICALS[tenant.category].label}</td>
+                <td className="px-3 py-3 text-sm">{tenant.categoryLabel}</td>
                 <td className="px-3 py-3">
                   <Badge variant="secondary">{STATUS_LABEL[tenant.status] ?? tenant.status}</Badge>
                 </td>

@@ -2,13 +2,12 @@ import "server-only";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
 import { currentMonthBounds } from "@/application/billing/usage";
-import type { CompanyCategory } from "@/domain/verticals/catalog";
 
 export interface TenantDetail {
   id: string;
   name: string;
   slug: string;
-  category: CompanyCategory;
+  categoryLabel: string;
   status: string;
   trialEndsAt: Date | null;
   createdAt: Date;
@@ -51,12 +50,13 @@ export async function getTenantDetail(companyId: string): Promise<TenantDetail |
       id: schema.companies.id,
       name: schema.companies.name,
       slug: schema.companies.slug,
-      category: schema.companies.category,
+      categoryLabel: schema.categories.label,
       status: schema.companies.status,
       trialEndsAt: schema.companies.trialEndsAt,
       createdAt: schema.companies.createdAt,
     })
     .from(schema.companies)
+    .innerJoin(schema.categories, eq(schema.categories.id, schema.companies.categoryId))
     .where(eq(schema.companies.id, companyId))
     .limit(1);
   if (!company) return null;
@@ -108,7 +108,7 @@ export async function getTenantDetail(companyId: string): Promise<TenantDetail |
     id: company.id,
     name: company.name,
     slug: company.slug,
-    category: company.category,
+    categoryLabel: company.categoryLabel,
     status: company.status,
     trialEndsAt: company.trialEndsAt,
     createdAt: company.createdAt,

@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   date,
   index,
   integer,
@@ -9,8 +10,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { companyCategoryEnum, companyStatusEnum, subscriptionStatusEnum, usageMetricEnum } from "./enums";
+import { companyStatusEnum, subscriptionStatusEnum, usageMetricEnum } from "./enums";
+import { categories } from "./categories";
 import { NO_PLAN_FEATURES, type PlanFeatures } from "@/domain/billing/plan-features";
+import { SEED_CATEGORY_IDS } from "@/domain/verticals/seed-ids";
 
 /**
  * A tenant. Every business-data table in the schema carries a `companyId`
@@ -26,12 +29,17 @@ export const companies = pgTable(
     slug: text("slug").notNull(),
     /**
      * Business vertical, chosen once at signup (`features/auth/components/signup-form.tsx`)
-     * and not editable from any in-app UI today — changing it would silently
-     * change which classifier lexicon scores existing leads without
-     * reprocessing them. `default("other")` exists only for pre-migration
-     * rows; every new signup sets it explicitly. See `domain/verticals/catalog.ts`.
+     * from whatever `categories` rows are currently `status: "active"`, and
+     * not editable from any in-app UI after that — changing it would
+     * silently change which lexicon scores existing leads without
+     * reprocessing them. `default(SEED_CATEGORY_IDS.other)` exists only for
+     * rows that don't set it explicitly; every real signup does. See
+     * `infrastructure/db/schema/categories.ts`.
      */
-    category: companyCategoryEnum("category").notNull().default("other"),
+    categoryId: uuid("category_id")
+      .notNull()
+      .default(SEED_CATEGORY_IDS.other)
+      .references((): AnyPgColumn => categories.id, { onDelete: "restrict" }),
     status: companyStatusEnum("status").notNull().default("trialing"),
     trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

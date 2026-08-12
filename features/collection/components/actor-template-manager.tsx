@@ -18,17 +18,25 @@ import {
 } from "@/application/collection/actor-templates.actions";
 import { useServerAction } from "@/hooks/use-server-action";
 import { SCRAPE_PLATFORMS } from "@/shared/constants";
-import { COMPANY_CATEGORIES, VERTICALS, type CompanyCategory } from "@/domain/verticals/catalog";
+import type { CategoryOption } from "@/application/categories/categories.queries";
 import type { ActorTemplateRow } from "@/infrastructure/db/schema/collection";
 
 /**
  * "Which Apify actor scrapes what" is a database row, not a deploy — this is the
  * admin surface for that row. Every real actor id an operator has subscribed to
  * on Apify gets registered here once; requesting a scrape (`RequestScrapeForm`)
- * only ever picks from what's registered.
+ * only ever picks from what's registered. `categories` comes from the DB now
+ * (`application/categories/categories.queries.ts`), not a static list.
  */
-export function ActorTemplateManager({ templates }: { templates: ActorTemplateRow[] }) {
+export function ActorTemplateManager({
+  templates,
+  categories,
+}: {
+  templates: ActorTemplateRow[];
+  categories: CategoryOption[];
+}) {
   const [showForm, setShowForm] = useState(templates.length === 0);
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
 
   return (
     <div className="flex flex-col gap-3">
@@ -38,11 +46,11 @@ export function ActorTemplateManager({ templates }: { templates: ActorTemplateRo
           description="Register an Apify actor (its id, default input and required params) to start collecting data."
         />
       ) : (
-        <TemplateTable templates={templates} />
+        <TemplateTable templates={templates} categoryById={categoryById} />
       )}
 
       {showForm ? (
-        <NewTemplateForm onDone={() => setShowForm(false)} />
+        <NewTemplateForm categories={categories} onDone={() => setShowForm(false)} />
       ) : (
         <Button variant="outline" size="sm" onClick={() => setShowForm(true)} className="self-start">
           <Plus className="size-3.5" aria-hidden />
@@ -53,7 +61,13 @@ export function ActorTemplateManager({ templates }: { templates: ActorTemplateRo
   );
 }
 
-function TemplateTable({ templates }: { templates: ActorTemplateRow[] }) {
+function TemplateTable({
+  templates,
+  categoryById,
+}: {
+  templates: ActorTemplateRow[];
+  categoryById: Map<string, CategoryOption>;
+}) {
   const router = useRouter();
   const { busyId, run } = useServerAction();
 
@@ -85,7 +99,13 @@ function TemplateTable({ templates }: { templates: ActorTemplateRow[] }) {
       </DataTableHead>
       <tbody>
         {templates.map((template) => (
-          <TemplateRow key={template.id} template={template} busy={busyId === template.id} toggle={toggle} />
+          <TemplateRow
+            key={template.id}
+            template={template}
+            categoryById={categoryById}
+            busy={busyId === template.id}
+            toggle={toggle}
+          />
         ))}
       </tbody>
     </DataTable>
@@ -100,10 +120,12 @@ function TemplateTable({ templates }: { templates: ActorTemplateRow[] }) {
  */
 const TemplateRow = memo(function TemplateRow({
   template,
+  categoryById,
   busy,
   toggle,
 }: {
   template: ActorTemplateRow;
+  categoryById: Map<string, CategoryOption>;
   busy: boolean;
   toggle: (template: ActorTemplateRow) => void;
 }) {
@@ -115,7 +137,9 @@ const TemplateRow = memo(function TemplateRow({
       </td>
       <td className="px-3 py-2.5 text-sm capitalize">{template.platform}</td>
       <td className="px-3 py-2.5 text-sm">
-        {template.category ? VERTICALS[template.category as CompanyCategory].label : (
+        {template.categoryId ? (
+          (categoryById.get(template.categoryId)?.label ?? "Unknown")
+        ) : (
           <span className="text-muted-foreground">All</span>
         )}
       </td>
@@ -135,12 +159,12 @@ const TemplateRow = memo(function TemplateRow({
   );
 });
 
-function NewTemplateForm({ onDone }: { onDone: () => void }) {
+function NewTemplateForm({ categories, onDone }: { categories: CategoryOption[]; onDone: () => void }) {
   const router = useRouter();
   const { busyId, run } = useServerAction();
   const [name, setName] = useState("");
   const [platform, setPlatform] = useState<string>(SCRAPE_PLATFORMS[0]);
-  const [category, setCategory] = useState<CompanyCategory | "">("");
+  const [categoryId, setCategoryId] = useState<string>("");
   const [requirementKind, setRequirementKind] = useState("");
   const [actorId, setActorId] = useState("");
   const [description, setDescription] = useState("");
@@ -173,7 +197,7 @@ function NewTemplateForm({ onDone }: { onDone: () => void }) {
         createActorTemplate({
           name,
           platform,
-          category: category || null,
+          categoryId: categoryId || null,
           requirementKind,
           actorId,
           description: description || undefined,
@@ -224,14 +248,14 @@ function NewTemplateForm({ onDone }: { onDone: () => void }) {
           <Label htmlFor="template-category">Category</Label>
           <select
             id="template-category"
-            value={category}
-            onChange={(event) => setCategory(event.target.value as CompanyCategory | "")}
+            value={categoryId}
+            onChange={(event) => setCategoryId(event.target.value)}
             className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
           >
             <option value="">All categories</option>
-            {COMPANY_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {VERTICALS[c].label}
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
               </option>
             ))}
           </select>

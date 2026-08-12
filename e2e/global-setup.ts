@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import * as schema from "../infrastructure/db/schema";
+import { SEED_CATEGORY_IDS } from "../domain/verticals/seed-ids";
 
 /**
  * Seeds two companies directly via SQL before the e2e suite runs, entirely
@@ -97,6 +98,75 @@ export default async function globalSetup(): Promise<void> {
       location_aliases, fx_rates, login_attempts, users, subscriptions, plans,
       companies
       RESTART IDENTITY CASCADE`;
+
+    // `categories` cascade-truncates along with `users` (it has an FK to
+    // users.id via created_by_user_id/updated_by_user_id) even though it
+    // isn't listed above — reseed the same four base categories
+    // infrastructure/db/backfill-categories.mjs seeds in real environments so
+    // companies.category_id's FK is satisfiable below. Field labels copied
+    // from that script — real_estate's "Agency name" specifically is what
+    // signup.spec.ts's "Agency name" field-label assertion depends on.
+    await db
+      .insert(schema.categories)
+      .values([
+        {
+          id: SEED_CATEGORY_IDS.real_estate,
+          slug: "real_estate",
+          label: "Real Estate",
+          description: "Villas, land, and property — buyers, sellers, agents, and investors.",
+          fieldLabels: {
+            categoryField: "Property types",
+            wants: "Property types",
+            budget: "Budget",
+            locations: "Locations",
+            companyName: "Agency name",
+            companyNamePlaceholder: "Bukit Villa Partners",
+          },
+        },
+        {
+          id: SEED_CATEGORY_IDS.travel,
+          slug: "travel",
+          label: "Travel",
+          description: "Trips, tours, and stays — travelers, operators, and agents.",
+          fieldLabels: {
+            categoryField: "Trip types",
+            wants: "Trip interests",
+            budget: "Budget",
+            locations: "Destinations",
+            companyName: "Company name",
+            companyNamePlaceholder: "Nomad Journeys Co",
+          },
+        },
+        {
+          id: SEED_CATEGORY_IDS.courses,
+          slug: "courses",
+          label: "Courses",
+          description: "Classes, certifications, and workshops — students, providers, and referrers.",
+          fieldLabels: {
+            categoryField: "Course types",
+            wants: "Course interests",
+            budget: "Budget",
+            locations: "Locations",
+            companyName: "Provider name",
+            companyNamePlaceholder: "Bali Yoga Academy",
+          },
+        },
+        {
+          id: SEED_CATEGORY_IDS.other,
+          slug: "other",
+          label: "Other",
+          description: "A different kind of business — generic labels and classifier by default.",
+          fieldLabels: {
+            categoryField: "Categories",
+            wants: "Interests",
+            budget: "Budget",
+            locations: "Locations",
+            companyName: "Company name",
+            companyNamePlaceholder: "Your company",
+          },
+        },
+      ])
+      .onConflictDoNothing({ target: schema.categories.id });
 
     // `signup.spec.ts` exercises the real /signup flow, which now requires a
     // "Starter" plan to exist (`application/auth/signup.actions.ts`) — every

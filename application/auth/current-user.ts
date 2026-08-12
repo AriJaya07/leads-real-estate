@@ -6,7 +6,7 @@ import { db, schema } from "@/infrastructure/db/client";
 import { getSession } from "@/infrastructure/auth/session";
 import { isSessionRevoked } from "@/domain/auth/session-version";
 import { type Role, roleAtLeast } from "@/domain/auth/permissions";
-import type { CompanyCategory } from "@/domain/verticals/catalog";
+import type { VerticalFieldLabels } from "@/domain/verticals/catalog";
 
 export interface CurrentUser {
   userId: string;
@@ -16,8 +16,10 @@ export interface CurrentUser {
   mustChangePassword: boolean;
   /** The tenant this user belongs to — every application/ query scopes by this. */
   companyId: string;
-  /** This tenant's business vertical, chosen at signup — see domain/verticals/catalog.ts. */
-  companyCategory: CompanyCategory;
+  /** This tenant's business vertical, chosen at signup — see `infrastructure/db/schema/categories.ts`. */
+  companyCategoryId: string;
+  /** Joined from `categories.field_labels` — "Property types" vs. "Trip interests" etc. */
+  companyFieldLabels: VerticalFieldLabels;
   /** Cross-company usage visibility — deliberately separate from `role`, which is scoped to one company. See requirePlatformAdmin(). */
   isPlatformAdmin: boolean;
 }
@@ -46,11 +48,13 @@ export const currentUser = cache(async (): Promise<CurrentUser | null> => {
       mustChangePassword: schema.users.mustChangePassword,
       sessionVersion: schema.users.sessionVersion,
       companyId: schema.users.companyId,
-      companyCategory: schema.companies.category,
+      companyCategoryId: schema.companies.categoryId,
+      companyFieldLabels: schema.categories.fieldLabels,
       isPlatformAdmin: schema.users.isPlatformAdmin,
     })
     .from(schema.users)
     .innerJoin(schema.companies, eq(schema.companies.id, schema.users.companyId))
+    .innerJoin(schema.categories, eq(schema.categories.id, schema.companies.categoryId))
     .where(eq(schema.users.id, session.userId))
     .limit(1);
 
@@ -63,7 +67,8 @@ export const currentUser = cache(async (): Promise<CurrentUser | null> => {
     role: row.role,
     mustChangePassword: row.mustChangePassword,
     companyId: row.companyId,
-    companyCategory: row.companyCategory,
+    companyCategoryId: row.companyCategoryId,
+    companyFieldLabels: row.companyFieldLabels,
     isPlatformAdmin: row.isPlatformAdmin,
   };
 });

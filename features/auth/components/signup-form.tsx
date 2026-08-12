@@ -10,25 +10,27 @@ import { Spinner } from "@/components/common/spinner";
 import { FormError } from "@/features/auth/components/form-error";
 import { PasswordStrengthMeter } from "@/features/auth/components/password-strength-meter";
 import { signUp } from "@/application/auth/signup.actions";
-import { COMPANY_CATEGORIES, VERTICALS, type CompanyCategory } from "@/domain/verticals/catalog";
+import type { CategoryOption } from "@/application/categories/categories.queries";
 import { cn } from "@/lib/utils";
 
 /**
  * Category is step 1, not a field alongside the rest — it's the one choice
- * that can't be changed later from any in-app UI (see `companies.category`'s
- * column comment: it silently picks the classifier lexicon that scores every
- * lead this company ever ingests), so it gets its own deliberate screen
- * instead of living at the bottom of a form someone tabs past.
+ * that can't be changed later from any in-app UI (see `companies.categoryId`'s
+ * column comment: it silently picks the lexicon that scores every lead this
+ * company ever ingests), so it gets its own deliberate screen instead of
+ * living at the bottom of a form someone tabs past. `categories` is fetched
+ * server-side (`app/(auth)/signup/page.tsx`) — the picker is fully dynamic,
+ * a Super Admin can add a category without a code change.
  */
-export function SignupForm() {
+export function SignupForm({ categories }: { categories: CategoryOption[] }) {
   const router = useRouter();
   const [step, setStep] = useState<"category" | "details">("category");
-  const [category, setCategory] = useState<CompanyCategory | null>(null);
+  const [category, setCategory] = useState<CategoryOption | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [password, setPassword] = useState("");
 
-  function chooseCategory(next: CompanyCategory) {
+  function chooseCategory(next: CategoryOption) {
     setCategory(next);
     setStep("details");
   }
@@ -45,7 +47,7 @@ export function SignupForm() {
     const form = new FormData(event.currentTarget);
     const result = await signUp({
       companyName: String(form.get("companyName") ?? ""),
-      category,
+      categoryId: category.id,
       email: String(form.get("email") ?? ""),
       password: String(form.get("password") ?? ""),
     });
@@ -76,28 +78,26 @@ export function SignupForm() {
           </p>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {COMPANY_CATEGORIES.map((id) => {
-            const vertical = VERTICALS[id];
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => chooseCategory(id)}
-                className={cn(
-                  "border-border hover:bg-accent/40 flex flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left transition-colors",
-                )}
-              >
-                <span className="text-sm font-medium">{vertical.label}</span>
-                <span className="text-muted-foreground text-xs">{vertical.description}</span>
-              </button>
-            );
-          })}
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => chooseCategory(c)}
+              className={cn(
+                "border-border hover:bg-accent/40 flex flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left transition-colors",
+              )}
+            >
+              <span className="text-sm font-medium">{c.label}</span>
+              <span className="text-muted-foreground text-xs">{c.description}</span>
+            </button>
+          ))}
         </div>
       </div>
     );
   }
 
-  const labels = VERTICALS[category ?? "other"].fieldLabels;
+  const labels = category?.fieldLabels;
+  if (!labels) return null;
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
@@ -105,7 +105,7 @@ export function SignupForm() {
 
       <div className="flex items-center justify-between">
         <p className="text-muted-foreground text-xs">
-          Category: <span className="text-foreground font-medium">{category ? VERTICALS[category].label : ""}</span>
+          Category: <span className="text-foreground font-medium">{category.label}</span>
         </p>
         <button
           type="button"

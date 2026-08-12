@@ -6,7 +6,8 @@ import { inferSchema } from "@/domain/dataset/schema-inference";
 import { proposeMapping } from "@/domain/dataset/mapping-proposal";
 import { applyMapping } from "@/domain/dataset/mapping";
 import { classifyWithRules } from "@/domain/scoring/rules-classifier";
-import { getLexiconForCategory } from "@/domain/scoring/lexicon-registry";
+import { REAL_ESTATE_LEXICON } from "@/domain/scoring/lexicon-registry";
+import { getLexiconBundleForCategory } from "@/application/categories/lexicon.queries";
 import type { LeadIntent } from "@/domain/scoring/types";
 
 export interface SourcePreviewItem {
@@ -42,11 +43,11 @@ export async function previewSource(companyId: string, datasetId: string, sample
   if (!dataset) throw new Error("Dataset not found.");
 
   const [company] = await db()
-    .select({ category: schema.companies.category })
+    .select({ categoryId: schema.companies.categoryId })
     .from(schema.companies)
     .where(eq(schema.companies.id, companyId))
     .limit(1);
-  const lexicon = getLexiconForCategory(company?.category ?? "other");
+  const lexicon = company ? await getLexiconBundleForCategory(company.categoryId) : REAL_ESTATE_LEXICON;
 
   const [source] = await db()
     .select({ kind: schema.sources.kind })

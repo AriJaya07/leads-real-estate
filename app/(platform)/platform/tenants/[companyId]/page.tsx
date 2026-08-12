@@ -8,7 +8,6 @@ import {
   listPendingInvites,
   listSuperAdminActionsForCompany,
 } from "@/application/platform/tenant-detail.queries";
-import { VERTICALS } from "@/domain/verticals/catalog";
 import { PageHeader } from "@/components/common/page-header";
 import { StatTile } from "@/components/common/stat-tile";
 import { StatRowSkeleton } from "@/components/common/stat-row-skeleton";
@@ -52,7 +51,7 @@ async function TenantDetailContent({ params }: { params: Promise<{ companyId: st
 
         <PageHeader
           title={tenant.name}
-          description={`${tenant.slug} · ${VERTICALS[tenant.category].label} · ${tenant.planName ?? "no subscription"} · created ${new Date(tenant.createdAt).toLocaleDateString()}`}
+          description={`${tenant.slug} · ${tenant.categoryLabel} · ${tenant.planName ?? "no subscription"} · created ${new Date(tenant.createdAt).toLocaleDateString()}`}
           actions={<ExtendTrialButton companyId={tenant.id} canExtend={tenant.status === "trialing"} />}
         />
 

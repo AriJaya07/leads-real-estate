@@ -95,15 +95,23 @@ shapes from training data — see [docs/coding-standards.md](docs/coding-standar
   (real estate, the default) and `domain/scoring/lexicons/{travel,courses}.ts`) and
   keep new entries consistent with it, and prefer adding a test that pins the
   before/after classification of a representative real-world phrase.
-- Adding a new company category (beyond real estate/travel/courses/other) touches, in
-  order: `domain/verticals/catalog.ts` (the `CompanyCategory` union + `VERTICALS`
-  entry), `infrastructure/db/schema/enums.ts::companyCategoryEnum` (duplicate the same
-  literal values — same split as `Role`/`userRoleEnum`), a migration, a new
-  `domain/scoring/lexicons/<category>.ts` + a case in
-  `domain/scoring/lexicon-registry.ts`, and every `z.enum([...])` literal duplicating
-  the category list in a server action's input schema (`application/auth/signup.actions.ts`,
-  `application/collection/actor-templates.actions.ts`). Grep for `"real_estate"` to find
-  every place the list is duplicated before adding a fifth.
+- Company category is fully dynamic now — a `categories` DB table
+  (`infrastructure/db/schema/categories.ts`), not a fixed TypeScript union or
+  Postgres enum. A Super Admin creates one instantly at `/platform/categories`
+  (label, slug, field labels, filter presets) via `createCategory`
+  (`application/categories/categories.actions.ts`) — no code change, no
+  migration. `domain/verticals/catalog.ts` only owns the `VerticalFieldLabels`
+  *shape* now, not the category list. Never reintroduce a hardcoded
+  `CompanyCategory` union or `z.enum(["real_estate", ...])` literal — read the
+  category list from `application/categories/categories.queries.ts` instead.
+  The intent lexicon is DB-driven too (`category_lexicon_phrases`, edited on
+  a category's own `/platform/categories/[slug]` page,
+  `application/categories/lexicon.queries.ts::getLexiconBundleForCategory`
+  reads it) — this is a deliberate tradeoff: no code-review gate on scoring
+  weights anymore (bounded 5-50 at the action layer instead), only guardrail
+  left after the codebase's earlier two-layer design was intentionally
+  reopened. See [docs/platform-super-admin-flow.md](docs/platform-super-admin-flow.md)
+  §3 for the reasoning.
 - Match the existing comment style: comments explain *why*, often citing a specific
   past bug or production incident, never restate *what* the code does. See
   [docs/coding-standards.md](docs/coding-standards.md).
@@ -141,6 +149,8 @@ shapes from training data — see [docs/coding-standards.md](docs/coding-standar
   `n8n/workflows/` are shaped the way they are
 - [docs/multi-tenant-apify-isolation-plan.md](docs/multi-tenant-apify-isolation-plan.md) —
   tenant isolation design, the Super Admin portal, and what it's never allowed to touch
+- [docs/platform-super-admin-flow.md](docs/platform-super-admin-flow.md) — every
+  `/platform/*` page's flow/actions, and the category config-vs-type split
 - [docs/lead-source-scaling-plan.md](docs/lead-source-scaling-plan.md) — why `recordKind`
   exists and what breaks if you skip it when adding a new content shape
 - [ai-prompts/](ai-prompts/) — task-shaped prompt templates (feature work, bug fixes,

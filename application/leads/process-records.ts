@@ -3,7 +3,8 @@ import { and, eq, gte, ne, sql } from "drizzle-orm";
 import { db, schema } from "@/infrastructure/db/client";
 import { applyMapping } from "@/domain/dataset/mapping";
 import { classifyWithRules } from "@/domain/scoring/rules-classifier";
-import { getLexiconForCategory } from "@/domain/scoring/lexicon-registry";
+import { REAL_ESTATE_LEXICON } from "@/domain/scoring/lexicon-registry";
+import { getLexiconBundleForCategory } from "@/application/categories/lexicon.queries";
 import { canonicalLocation } from "@/domain/scoring/extractors";
 import type { MappingRules } from "@/domain/dataset/types";
 import { NEAR_DUPLICATE_SIMILARITY, NEAR_DUPLICATE_WINDOW_HOURS } from "@/shared/constants";
@@ -174,11 +175,11 @@ export async function processRawRecords(
   // change mid-sync, and this keeps the classifier's hot loop free of a
   // per-record query.
   const [company] = await db()
-    .select({ category: schema.companies.category })
+    .select({ categoryId: schema.companies.categoryId })
     .from(schema.companies)
     .where(eq(schema.companies.id, options.companyId))
     .limit(1);
-  const lexicon = getLexiconForCategory(company?.category ?? "other");
+  const lexicon = company ? await getLexiconBundleForCategory(company.categoryId) : REAL_ESTATE_LEXICON;
   const result: ProcessResult = {
     created: 0,
     updated: 0,
