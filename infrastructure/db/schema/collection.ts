@@ -15,6 +15,7 @@ import { users } from "./auth";
 import { sources, datasets } from "./catalog";
 import { categories } from "./categories";
 import { scrapeRequestStatusEnum } from "./enums";
+import type { ActorParamField } from "@/domain/collection/actor-request";
 
 /**
  * "Which Apify actor scrapes X" — admin-registered, never hardcoded. Same
@@ -47,6 +48,14 @@ export const actorTemplates = pgTable(
     defaultInput: jsonb("default_input").$type<Record<string, unknown>>().notNull().default({}),
     /** Param keys a requester must supply before a run is even started. */
     requiredParams: text("required_params").array().notNull().default([]),
+    /**
+     * Structured filter fields for the "Configure filters" step —
+     * `RequestScrapeForm` renders these generically instead of a raw JSON
+     * textarea. Empty array means "no schema yet," which falls back to a raw
+     * JSON textarea keyed by `requiredParams` — see
+     * `domain/collection/actor-request.ts::buildActorInput`.
+     */
+    paramSchema: jsonb("param_schema").$type<ActorParamField[]>().notNull().default([]),
     /** Informational only — shown in the trigger form, never enforced. */
     costNote: text("cost_note"),
     enabled: boolean("enabled").notNull().default(true),

@@ -1,0 +1,1 @@
+ALTER TABLE "actor_templates" ADD COLUMN "param_schema" jsonb DEFAULT '[]'::jsonb NOT NULL;

@@ -15,6 +15,16 @@ import { actorTemplatesTag } from "@/application/cache-tags";
  * (managerActionClient) for that reason.
  */
 
+const paramFieldInput = z.object({
+  key: z.string().trim().min(1).max(80),
+  label: z.string().trim().min(1).max(120),
+  type: z.enum(["text", "textarea", "url", "number", "select", "multiselect"]),
+  required: z.boolean().default(false),
+  placeholder: z.string().trim().max(200).optional(),
+  helpText: z.string().trim().max(300).optional(),
+  options: z.array(z.object({ label: z.string().trim().min(1).max(80), value: z.string().trim().min(1).max(80) })).optional(),
+});
+
 const templateInput = z.object({
   name: z.string().trim().min(1).max(120),
   platform: z.string().trim().min(1).max(40),
@@ -25,6 +35,8 @@ const templateInput = z.object({
   actorId: z.string().trim().min(1).max(200),
   defaultInput: z.record(z.string(), z.unknown()).default({}),
   requiredParams: z.array(z.string().trim().min(1)).default([]),
+  /** Structured filter fields for the owner-facing "Configure filters" step — see domain/collection/actor-request.ts. */
+  paramSchema: z.array(paramFieldInput).default([]),
   costNote: z.string().trim().max(500).optional(),
 });
 

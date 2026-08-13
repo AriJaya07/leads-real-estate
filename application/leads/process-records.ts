@@ -254,19 +254,20 @@ export async function processRawRecords(
         )
         .limit(1);
 
-      const leadId =
-        existingAppearance?.leadId ??
-        (await resolveIdentity(options.companyId, {
-          facebookId: platform === "facebook" ? normalized.authorExternalId : null,
-          instagramId: platform === "instagram" ? normalized.authorExternalId : null,
-          profileUrl: normalized.authorUrl,
-          username: normalized.authorUsername,
-          name: normalized.authorName,
-          avatarUrl: normalized.authorAvatarUrl,
-          location: normalized.authorLocation,
-          bio: normalized.authorBio,
-          contact: classification.contact,
-        }));
+      const identity = existingAppearance
+        ? null
+        : await resolveIdentity(options.companyId, {
+            facebookId: platform === "facebook" ? normalized.authorExternalId : null,
+            instagramId: platform === "instagram" ? normalized.authorExternalId : null,
+            profileUrl: normalized.authorUrl,
+            username: normalized.authorUsername,
+            name: normalized.authorName,
+            avatarUrl: normalized.authorAvatarUrl,
+            location: normalized.authorLocation,
+            bio: normalized.authorBio,
+            contact: classification.contact,
+          });
+      const leadId = existingAppearance?.leadId ?? identity!.leadId;
 
       const values = {
         companyId: options.companyId,
@@ -336,6 +337,30 @@ export async function processRawRecords(
       if (isNew) result.created += 1;
       else result.updated += 1;
       if (classification.isSpam) result.spam += 1;
+
+      // Audit trail for "why did this appearance end up as this person" —
+      // tech-debt.md flagged `merged` as defined on the enum since before the
+      // person-centric refactor but never written; this is that write path,
+      // one row per appearance that resolves to an existing person (not on
+      // create). Carries `appearanceId` so `application/leads/split-lead.ts`
+      // can undo this specific merge later. Best-effort: a logging failure
+      // here must never block ingest.
+      if (identity?.merged) {
+        try {
+          await db().insert(schema.leadEvents).values({
+            companyId: options.companyId,
+            leadId,
+            type: "merged",
+            payload: {
+              matchedField: identity.matchedField,
+              appearanceAuthorName: normalized.authorName,
+              appearanceId: appearance.id,
+            },
+          });
+        } catch (error) {
+          log.warn("failed to record identity-merge event", { leadId, error });
+        }
+      }
 
       const canonicalId = isEngagement
         ? await findEngagementDuplicate(

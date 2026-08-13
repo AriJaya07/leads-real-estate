@@ -319,6 +319,12 @@ try {
       actorId: "apify/facebook-groups-scraper",
       defaultInput: { resultsLimit: 100 },
       requiredParams: ["startUrls"],
+      // Left without a structured paramSchema on purpose: this is a real, already-
+      // relied-on actor, and `startUrls`'s exact expected shape (a bare URL list vs.
+      // `[{ url }]` objects) needs confirming against the current Apify Store listing
+      // before a form can safely replace the raw-JSON textarea for it — see
+      // domain/collection/actor-request.ts's paramSchema fallback.
+      paramSchema: [],
       costNote: "~$2 per 1,000 posts",
     },
     {
@@ -330,6 +336,7 @@ try {
       actorId: "REPLACE_WITH_REAL_ACTOR_ID",
       defaultInput: {},
       requiredParams: ["searchUrl"],
+      paramSchema: [],
       costNote: null,
     },
     {
@@ -341,6 +348,7 @@ try {
       actorId: "REPLACE_WITH_REAL_ACTOR_ID",
       defaultInput: {},
       requiredParams: ["searchUrl"],
+      paramSchema: [],
       costNote: null,
     },
     {
@@ -352,15 +360,92 @@ try {
       actorId: "REPLACE_WITH_REAL_ACTOR_ID",
       defaultInput: {},
       requiredParams: ["searchUrl"],
+      paramSchema: [],
       costNote: null,
+    },
+    // Google Maps and LinkedIn below follow the exact same "example, verify
+    // actorId before use" posture as the three placeholders above — only the
+    // Facebook Groups Scraper is a confirmed-real actor id. `paramSchema` is
+    // still worth seeding on a placeholder: it's what lets `RequestScrapeForm`
+    // show a real filter form instead of raw JSON the moment an admin swaps in
+    // a verified actorId, without any app code change.
+    {
+      name: "Google Maps — Local Business Search (example)",
+      platform: "google_maps",
+      categoryId: null,
+      requirementKind: "places_search",
+      description:
+        "Example placeholder — replace actorId with a real Apify Store Google Maps scraper before use. Finds businesses/listings near a location matching a search term (e.g. potential customers or competitors).",
+      actorId: "REPLACE_WITH_REAL_ACTOR_ID",
+      defaultInput: { language: "en" },
+      requiredParams: ["searchQuery", "location"],
+      paramSchema: [
+        { key: "searchQuery", label: "What to search for", type: "text", required: true, placeholder: "villas for sale, real estate agency" },
+        { key: "location", label: "Location / area", type: "text", required: true, placeholder: "Canggu, Bali, Indonesia" },
+        { key: "radiusKm", label: "Search radius (km)", type: "number", required: false, placeholder: "5" },
+        { key: "maxResults", label: "Max results", type: "number", required: false, placeholder: "100" },
+        {
+          key: "category",
+          label: "Business category",
+          type: "select",
+          required: false,
+          options: [
+            { label: "Real estate agency", value: "real_estate_agency" },
+            { label: "Hotel", value: "hotel" },
+            { label: "Travel agency", value: "travel_agency" },
+            { label: "School / course provider", value: "school" },
+          ],
+        },
+      ],
+      costNote: "Pricing varies by actor — check the Apify Store listing.",
+    },
+    {
+      name: "LinkedIn — Profile Lookup (example)",
+      platform: "linkedin",
+      categoryId: null,
+      requirementKind: "profile_lookup",
+      description:
+        "Example placeholder — replace actorId with a real Apify Store LinkedIn scraper before use. Validates and collects data for specific LinkedIn profiles or posts you already know about.",
+      actorId: "REPLACE_WITH_REAL_ACTOR_ID",
+      defaultInput: {},
+      requiredParams: ["profileUrls"],
+      paramSchema: [
+        {
+          key: "profileUrls",
+          label: "LinkedIn profile or post URLs",
+          type: "textarea",
+          required: true,
+          placeholder: "https://www.linkedin.com/in/…",
+          helpText: "One URL per line.",
+        },
+      ],
+      costNote: "Pricing varies by actor — check the Apify Store listing.",
+    },
+    {
+      name: "LinkedIn — Search Criteria (example)",
+      platform: "linkedin",
+      categoryId: null,
+      requirementKind: "search_criteria",
+      description:
+        "Example placeholder — replace actorId with a real Apify Store LinkedIn scraper before use. Finds profiles/posts matching search criteria rather than a known URL list.",
+      actorId: "REPLACE_WITH_REAL_ACTOR_ID",
+      defaultInput: {},
+      requiredParams: ["keywords"],
+      paramSchema: [
+        { key: "keywords", label: "Keywords", type: "text", required: true, placeholder: "villa sales, property investor" },
+        { key: "jobTitle", label: "Job title", type: "text", required: false, placeholder: "Real Estate Agent" },
+        { key: "location", label: "Location", type: "text", required: false, placeholder: "Bali, Indonesia" },
+        { key: "industry", label: "Industry", type: "text", required: false, placeholder: "Real Estate" },
+      ],
+      costNote: "Pricing varies by actor — check the Apify Store listing.",
     },
   ];
 
   for (const t of actorTemplates) {
     await sql`
-      INSERT INTO actor_templates (name, platform, category_id, requirement_kind, description, actor_id, default_input, required_params, cost_note)
-      VALUES (${t.name}, ${t.platform}, ${t.categoryId}, ${t.requirementKind}, ${t.description}, ${t.actorId}, ${sql.json(t.defaultInput)}, ${t.requiredParams}, ${t.costNote})
-      ON CONFLICT (name) DO UPDATE SET category_id = EXCLUDED.category_id, description = EXCLUDED.description
+      INSERT INTO actor_templates (name, platform, category_id, requirement_kind, description, actor_id, default_input, required_params, param_schema, cost_note)
+      VALUES (${t.name}, ${t.platform}, ${t.categoryId}, ${t.requirementKind}, ${t.description}, ${t.actorId}, ${sql.json(t.defaultInput)}, ${t.requiredParams}, ${sql.json(t.paramSchema ?? [])}, ${t.costNote})
+      ON CONFLICT (name) DO UPDATE SET category_id = EXCLUDED.category_id, description = EXCLUDED.description, param_schema = EXCLUDED.param_schema
     `;
   }
   console.log(`actor templates: ${actorTemplates.length} seeded`);

@@ -38,6 +38,64 @@ describe("buildActorInput", () => {
   });
 });
 
+describe("buildActorInput with paramSchema", () => {
+  const schemaTemplate = {
+    actorId: "REPLACE_WITH_REAL_ACTOR_ID",
+    defaultInput: { language: "en" },
+    requiredParams: ["searchQuery", "location"],
+    paramSchema: [
+      { key: "searchQuery", label: "What to search for", type: "text" as const, required: true },
+      { key: "location", label: "Location", type: "text" as const, required: true },
+      { key: "radiusKm", label: "Radius", type: "number" as const, required: false },
+      { key: "categories", label: "Categories", type: "multiselect" as const, required: false },
+    ],
+  };
+
+  it("validates required fields from the schema, not just requiredParams presence", () => {
+    const result = buildActorInput(schemaTemplate, { searchQuery: "villas" });
+    expect(result.ok).toBe(false);
+    expect(result.missing).toEqual(["location"]);
+  });
+
+  it("coerces a number field from a string input", () => {
+    const result = buildActorInput(schemaTemplate, { searchQuery: "villas", location: "Bali", radiusKm: "5" });
+    expect(result.ok).toBe(true);
+    expect(result.input.radiusKm).toBe(5);
+  });
+
+  it("treats a non-numeric value for a required number field as missing", () => {
+    const numericRequired = {
+      ...schemaTemplate,
+      paramSchema: schemaTemplate.paramSchema.map((f) => (f.key === "radiusKm" ? { ...f, required: true } : f)),
+    };
+    const result = buildActorInput(numericRequired, { searchQuery: "villas", location: "Bali", radiusKm: "not-a-number" });
+    expect(result.ok).toBe(false);
+    expect(result.missing).toContain("radiusKm");
+  });
+
+  it("wraps a bare multiselect value into an array", () => {
+    const result = buildActorInput(schemaTemplate, { searchQuery: "villas", location: "Bali", categories: "hotel" });
+    expect(result.input.categories).toEqual(["hotel"]);
+  });
+
+  it("treats an empty array for an optional multiselect as absent, not an error", () => {
+    const result = buildActorInput(schemaTemplate, { searchQuery: "villas", location: "Bali", categories: [] });
+    expect(result.ok).toBe(true);
+    expect(result.input.categories).toBeUndefined();
+  });
+
+  it("merges coerced params under defaultInput", () => {
+    const result = buildActorInput(schemaTemplate, { searchQuery: "villas", location: "Bali" });
+    expect(result.input.language).toBe("en");
+  });
+
+  it("falls back to requiredParams-only validation when paramSchema is empty", () => {
+    const legacy = { actorId: "x", defaultInput: {}, requiredParams: ["startUrls"], paramSchema: [] };
+    expect(buildActorInput(legacy, {}).missing).toEqual(["startUrls"]);
+    expect(buildActorInput(legacy, { startUrls: "https://x" }).ok).toBe(true);
+  });
+});
+
 describe("paramsFingerprint", () => {
   it("is stable regardless of key order", () => {
     expect(paramsFingerprint({ a: 1, b: 2 })).toBe(paramsFingerprint({ b: 2, a: 1 }));

@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,29 @@ import { useServerAction } from "@/hooks/use-server-action";
 import { SCRAPE_PLATFORMS } from "@/shared/constants";
 import type { CategoryOption } from "@/application/categories/categories.queries";
 import type { ActorTemplateRow } from "@/infrastructure/db/schema/collection";
+import type { ActorParamField, ActorParamFieldType } from "@/domain/collection/actor-request";
+
+const PARAM_FIELD_TYPES: ActorParamFieldType[] = ["text", "textarea", "url", "number", "select", "multiselect"];
+
+/** Editing-only shape: `options` is edited as a comma-separated list (label = value, the common case) and parsed back into `ActorParamField.options` on submit. */
+type EditableParamField = Omit<ActorParamField, "options"> & { optionsText: string };
+
+function emptyParamField(): EditableParamField {
+  return { key: "", label: "", type: "text", required: false, optionsText: "" };
+}
+
+function toActorParamField(field: EditableParamField): ActorParamField {
+  const { optionsText, ...rest } = field;
+  const options =
+    (field.type === "select" || field.type === "multiselect") && optionsText.trim()
+      ? optionsText
+          .split(",")
+          .map((v) => v.trim())
+          .filter(Boolean)
+          .map((v) => ({ label: v, value: v }))
+      : undefined;
+  return { ...rest, options };
+}
 
 /**
  * "Which Apify actor scrapes what" is a database row, not a deploy — this is the
@@ -171,8 +194,16 @@ function NewTemplateForm({ categories, onDone }: { categories: CategoryOption[];
   const [defaultInputText, setDefaultInputText] = useState("{}");
   const [requiredParamsText, setRequiredParamsText] = useState("");
   const [costNote, setCostNote] = useState("");
+  const [paramSchema, setParamSchema] = useState<EditableParamField[]>([]);
   const [error, setError] = useState<string | null>(null);
   const busy = busyId === "new-actor-template";
+
+  function updateField(index: number, patch: Partial<EditableParamField>) {
+    setParamSchema((prev) => prev.map((f, i) => (i === index ? { ...f, ...patch } : f)));
+  }
+  function removeField(index: number) {
+    setParamSchema((prev) => prev.filter((_, i) => i !== index));
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -191,6 +222,14 @@ function NewTemplateForm({ categories, onDone }: { categories: CategoryOption[];
       .map((key) => key.trim())
       .filter(Boolean);
 
+    const cleanedParamSchema = paramSchema
+      .filter((f) => f.key.trim() && f.label.trim())
+      .map(toActorParamField);
+    if (paramSchema.length > 0 && cleanedParamSchema.length !== paramSchema.length) {
+      setError("Every filter field needs a key and a label, or remove it.");
+      return;
+    }
+
     await run(
       "new-actor-template",
       () =>
@@ -203,6 +242,7 @@ function NewTemplateForm({ categories, onDone }: { categories: CategoryOption[];
           description: description || undefined,
           defaultInput,
           requiredParams,
+          paramSchema: cleanedParamSchema,
           costNote: costNote || undefined,
         }),
       {
@@ -300,6 +340,84 @@ function NewTemplateForm({ categories, onDone }: { categories: CategoryOption[];
           onChange={(event) => setRequiredParamsText(event.target.value)}
           placeholder="directUrls, resultsLimit"
         />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <Label>Filter fields (owner-facing &quot;Configure filters&quot; form)</Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setParamSchema((prev) => [...prev, emptyParamField()])}
+          >
+            <Plus className="size-3.5" aria-hidden />
+            Add field
+          </Button>
+        </div>
+        {paramSchema.length === 0 ? (
+          <p className="text-muted-foreground text-xs">
+            No filter fields yet — requesters will edit requirements as raw JSON. Add fields to give them a proper
+            form instead (e.g. &quot;Search location&quot;, &quot;Groups to scrape&quot;).
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {paramSchema.map((field, index) => (
+              <div key={index} className="border-border grid gap-2 rounded-lg border p-2.5 sm:grid-cols-[1fr_1fr_auto_auto_auto]">
+                <Input
+                  value={field.key}
+                  onChange={(event) => updateField(index, { key: event.target.value })}
+                  placeholder="key (e.g. searchQuery)"
+                  aria-label="Field key"
+                />
+                <Input
+                  value={field.label}
+                  onChange={(event) => updateField(index, { label: event.target.value })}
+                  placeholder="Label shown to the requester"
+                  aria-label="Field label"
+                />
+                <select
+                  value={field.type}
+                  onChange={(event) => updateField(index, { type: event.target.value as ActorParamFieldType })}
+                  className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
+                  aria-label="Field type"
+                >
+                  {PARAM_FIELD_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                <label className="flex items-center gap-1.5 px-1 text-xs whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={field.required}
+                    onChange={(event) => updateField(index, { required: event.target.checked })}
+                  />
+                  Required
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Remove field"
+                  onClick={() => removeField(index)}
+                >
+                  <X className="size-3.5" aria-hidden />
+                </Button>
+                {(field.type === "select" || field.type === "multiselect") && (
+                  <Input
+                    value={field.optionsText}
+                    onChange={(event) => updateField(index, { optionsText: event.target.value })}
+                    placeholder="Options, comma-separated (e.g. restaurant, hotel, villa)"
+                    className="sm:col-span-5"
+                    aria-label="Field options"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">

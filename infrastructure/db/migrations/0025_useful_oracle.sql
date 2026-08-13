@@ -1,0 +1,1 @@
+ALTER TYPE "public"."lead_event_type" ADD VALUE 'split';

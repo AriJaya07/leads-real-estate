@@ -224,4 +224,6 @@ export const leadEventTypeEnum = pgEnum("lead_event_type", [
   "alerted",
   "reclassified",
   "merged",
+  /** The escape hatch for a `merged` event — see `application/leads/split-lead.ts`. Logged on both leads a split touches, `payload.direction` tells which side. */
+  "split",
 ]);

@@ -5,6 +5,17 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { ExternalLink, MessageCircle, Star, X } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,6 +35,7 @@ import {
   setDealValue,
   setLeadStatus,
   setLeadTags,
+  splitMerge,
   toggleBookmark,
 } from "@/application/leads/lead.actions";
 import { generateLeadSummaryAction, generateMessageDraftAction } from "@/application/leads/ai-assist.actions";
@@ -915,6 +927,12 @@ const EVENT_META: Record<string, EventMeta> = {
       typeof payload?.matchedField === "string" ? `by ${payload.matchedField}` : "identity match",
     category: () => "IDENTITY",
   },
+  split: {
+    label: "Merge split",
+    describe: (payload) =>
+      payload?.direction === "split_off" ? "one appearance moved to a new lead" : "split out from another lead",
+    category: () => "IDENTITY",
+  },
 };
 
 /**
@@ -939,27 +957,76 @@ function ActivityTimeline({ leadId }: { leadId: string }) {
             const meta = EVENT_META[event.type] ?? { label: leadStatusLabel(event.type), describe: () => null };
             const detail = meta.describe(event.payload);
             const category = meta.category?.(event.payload);
+            const splittableAppearanceId =
+              event.type === "merged" && typeof event.payload?.appearanceId === "string"
+                ? event.payload.appearanceId
+                : null;
             return (
-              <li key={event.id} className="flex items-start justify-between gap-2 text-sm">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                  {category && (
-                    <Badge variant="secondary" className="h-4 shrink-0 px-1.5 text-[9px] font-semibold tracking-wide">
-                      {category}
-                    </Badge>
-                  )}
-                  <span className="font-medium">{meta.label}</span>
-                  {detail && <span className="text-muted-foreground">{detail}</span>}
-                  {event.actorName && <span className="text-muted-foreground">· {event.actorName}</span>}
+              <li key={event.id} className="flex flex-col gap-1 text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                    {category && (
+                      <Badge variant="secondary" className="h-4 shrink-0 px-1.5 text-[9px] font-semibold tracking-wide">
+                        {category}
+                      </Badge>
+                    )}
+                    <span className="font-medium">{meta.label}</span>
+                    {detail && <span className="text-muted-foreground">{detail}</span>}
+                    {event.actorName && <span className="text-muted-foreground">· {event.actorName}</span>}
+                  </div>
+                  <span className="text-muted-foreground shrink-0 text-xs">
+                    {format(new Date(event.at), "d MMM, HH:mm")}
+                  </span>
                 </div>
-                <span className="text-muted-foreground shrink-0 text-xs">
-                  {format(new Date(event.at), "d MMM, HH:mm")}
-                </span>
+                {splittableAppearanceId && <SplitMergeAction appearanceId={splittableAppearanceId} />}
               </li>
             );
           })}
         </ol>
       )}
     </section>
+  );
+}
+
+/**
+ * The one action a `merged` event carries — separates the appearance that
+ * triggered this specific merge back into its own lead. Never touches any
+ * other appearance this person has. See `application/leads/split-lead.ts`.
+ */
+function SplitMergeAction({ appearanceId }: { appearanceId: string }) {
+  const { busyId, run } = useServerAction();
+  const busy = busyId === appearanceId;
+
+  async function split() {
+    await run(appearanceId, () => splitMerge({ appearanceId }), {
+      errorFallback: "Could not split this merge",
+      invalidateKeys: [["leads"]],
+      onSuccess: () => toast.success("Split into a new lead"),
+    });
+  }
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger render={<button type="button" className="text-brand w-fit text-xs font-medium hover:underline" />}>
+        Split this merge
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Split this merge?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Separates this one appearance into its own lead. The rest of this person&apos;s appearances stay where
+            they are. This doesn&apos;t delete anything, and both leads keep their full activity history.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction disabled={busy} onClick={() => void split()}>
+            {busy && <Spinner className="size-3.5" />}
+            Split
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

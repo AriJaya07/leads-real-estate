@@ -176,6 +176,20 @@
       "when": 1786520399400,
       "tag": "0024_flat_thunderbird",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786606976892,
+      "tag": "0025_useful_oracle",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1786608495891,
+      "tag": "0026_hard_gravity",
+      "breakpoints": true
     }
   ]
 }

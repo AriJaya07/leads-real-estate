@@ -91,12 +91,24 @@ function toPersonalInfo(row: {
   };
 }
 
+export interface IdentityResolution {
+  leadId: string;
+  /** True when this candidate matched an *existing* person rather than creating a new one — see `application/leads/split-lead.ts` for the undo path. */
+  merged: boolean;
+  matchedField: "facebookId" | "instagramId" | "profileUrl" | null;
+}
+
 /**
  * Finds an existing person by exact identity match — `facebookId`, then
  * `instagramId`, then normalized `profileUrl`, in that precedence order — or
  * creates a new one. An existing match gets any identity/personal-info fields
  * it was missing filled in (never overwritten — see
  * `domain/lead/identity.ts::mergePersonalInfo`).
+ *
+ * Doesn't log the `merged` lead event itself — the caller
+ * (`process-records.ts`) does, once the appearance row that triggered this
+ * call actually has an id, since the split-undo path needs that id in the
+ * event payload and it doesn't exist yet at this point in the pipeline.
  *
  * Race-safe: two concurrent ingests resolving the same new identity both miss
  * the initial SELECT, one wins the INSERT, the other catches the unique
@@ -106,7 +118,7 @@ function toPersonalInfo(row: {
 export async function resolveIdentity(
   companyId: string,
   candidate: AppearanceIdentitySnapshot,
-): Promise<string> {
+): Promise<IdentityResolution> {
   const keys = identityKeys(candidate);
 
   if (keys.length > 0) {
@@ -147,26 +159,7 @@ export async function resolveIdentity(
           .where(eq(schema.leads.id, existing.id));
       }
 
-      // Audit trail for "why did this appearance end up as this person" —
-      // tech-debt.md flagged `merged` as defined on the enum since before the
-      // person-centric refactor but never written; this is that write path,
-      // one row per appearance that resolves to an existing person (not on
-      // create). Best-effort: a logging failure here must never block ingest.
-      try {
-        await db().insert(schema.leadEvents).values({
-          companyId,
-          leadId: existing.id,
-          type: "merged",
-          payload: {
-            matchedField: matchedIdentityField(toPersonalInfo(existing), candidate),
-            appearanceAuthorName: candidate.name,
-          },
-        });
-      } catch (error) {
-        log.warn("failed to record identity-merge event", { leadId: existing.id, error });
-      }
-
-      return existing.id;
+      return { leadId: existing.id, merged: true, matchedField: matchedIdentityField(toPersonalInfo(existing), candidate) };
     }
 
     try {
@@ -186,15 +179,17 @@ export async function resolveIdentity(
         })
         .returning({ id: schema.leads.id });
       await incrementMonthlyLeadUsage(companyId);
-      return created.id;
+      return { leadId: created.id, merged: false, matchedField: null };
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
       const [winner] = await db()
-        .select({ id: schema.leads.id })
+        .select()
         .from(schema.leads)
         .where(or(...keys.map((key) => matchCondition(companyId, key))))
         .limit(1);
-      if (winner) return winner.id;
+      if (winner) {
+        return { leadId: winner.id, merged: true, matchedField: matchedIdentityField(toPersonalInfo(winner), candidate) };
+      }
       throw error;
     }
   }
@@ -216,7 +211,7 @@ export async function resolveIdentity(
     })
     .returning({ id: schema.leads.id });
   await incrementMonthlyLeadUsage(companyId);
-  return created.id;
+  return { leadId: created.id, merged: false, matchedField: null };
 }
 
 /**

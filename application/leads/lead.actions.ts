@@ -9,6 +9,7 @@ import { authActionClient, ActionError } from "@/application/safe-action";
 import { leadTag, leadsTag } from "@/application/cache-tags";
 import { dispatchWebhooksForLeads } from "@/application/automation/webhook-dispatch";
 import { LEAD_STATUSES } from "./lead-status";
+import { splitAppearanceIntoNewLead, SplitLeadError } from "./split-lead";
 
 /**
  * Verifies the lead belongs to the caller's company before touching it, then
@@ -391,4 +392,32 @@ export const bulkAddTag = authActionClient
 
     invalidateMany(parsedInput.leadIds);
     return { ok: true, count: parsedInput.leadIds.length };
+  });
+
+/**
+ * The "escape hatch for automated decisions" the lead-detail sheet's activity
+ * timeline exposes on a `merged` event — undoes one identity merge by
+ * splitting the single appearance that triggered it back into its own lead.
+ * See `application/leads/split-lead.ts` for why the new lead can't carry the
+ * shared identity key forward, and why this is a distinct `split` event, not
+ * a rewrite of the original `merged` one (the merge genuinely happened;
+ * this records that a human later decided it was wrong).
+ */
+export const splitMerge = authActionClient
+  .inputSchema(z.object({ appearanceId: z.string().uuid() }))
+  .action(async ({ parsedInput, ctx }) => {
+    try {
+      const { newLeadId, oldLeadId } = await splitAppearanceIntoNewLead(
+        ctx.user.companyId,
+        parsedInput.appearanceId,
+        ctx.user.userId,
+      );
+      updateTag(leadTag(oldLeadId));
+      updateTag(leadTag(newLeadId));
+      updateTag(leadsTag());
+      return { newLeadId };
+    } catch (error) {
+      if (error instanceof SplitLeadError) throw new ActionError(error.message);
+      throw error;
+    }
   });
