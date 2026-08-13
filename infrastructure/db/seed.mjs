@@ -304,13 +304,14 @@ try {
   // Starter actor templates, one per category — demonstrates the
   // category-tagging mechanism (features/collection/components/request-scrape-form.tsx's
   // "Recommended for your category" sort) with real rows instead of an empty
-  // admin screen. `category: null` (the Facebook Groups one) means "useful
-  // for every category" — the same actor a travel or courses tenant would
-  // also point at a relevant Facebook group. The travel/courses actor ids
-  // below are placeholders — replace with real Apify Store actors before
-  // relying on them.
+  // admin screen. Every `actorId` below (except the three explicit "(example)"
+  // rows, which have no verified public-Actor equivalent for the niche they
+  // name and stay disabled) was confirmed against the current Apify Store
+  // listing/input schema before being seeded — see the per-actor notes.
   const actorTemplates = [
     {
+      // Verified: apify.com/apify/facebook-groups-scraper — official Apify
+      // actor, $2.60/1,000 posts, `startUrls` is the only required field.
       name: "Facebook Groups Scraper",
       platform: "facebook",
       categoryId: null,
@@ -319,23 +320,101 @@ try {
       actorId: "apify/facebook-groups-scraper",
       defaultInput: { resultsLimit: 100 },
       requiredParams: ["startUrls"],
-      // Left without a structured paramSchema on purpose: this is a real, already-
-      // relied-on actor, and `startUrls`'s exact expected shape (a bare URL list vs.
-      // `[{ url }]` objects) needs confirming against the current Apify Store listing
-      // before a form can safely replace the raw-JSON textarea for it — see
-      // domain/collection/actor-request.ts's paramSchema fallback.
-      paramSchema: [],
-      costNote: "~$2 per 1,000 posts",
+      enabled: true,
+      paramSchema: [
+        {
+          key: "startUrls",
+          label: "Facebook group URLs",
+          type: "tags",
+          required: true,
+          placeholder: "https://www.facebook.com/groups/…",
+          helpText: "One group URL per line, or comma-separated. Public groups only.",
+        },
+        { key: "resultsLimit", label: "Max posts", type: "number", required: false, placeholder: "100" },
+        { key: "searchGroupKeyword", label: "Filter posts by keyword", type: "text", required: false, placeholder: "villa for sale" },
+        { key: "onlyPostsNewerThan", label: "Only posts newer than", type: "text", required: false, placeholder: "2026-07-01 or \"7 days\"" },
+      ],
+      costNote: "~$2.60 per 1,000 posts",
     },
+    {
+      // Verified: apify.com/compass/crawler-google-places/input-schema —
+      // `searchStringsArray` + `locationQuery` are the two fields that drive
+      // a plain keyword+area search; no radius field exists on this actor
+      // (it offers `customGeolocation`/city/state instead — out of scope for
+      // this simple form, use the raw-JSON fallback for that case).
+      name: "Google Maps — Local Business Search",
+      platform: "google_maps",
+      categoryId: null,
+      requirementKind: "places_search",
+      description:
+        "Finds businesses/listings near a location matching a search term (e.g. villas for sale in Canggu) — potential customers, competitors, or listing agents.",
+      actorId: "compass/crawler-google-places",
+      defaultInput: { language: "en" },
+      requiredParams: ["searchStringsArray", "locationQuery"],
+      enabled: true,
+      paramSchema: [
+        {
+          key: "searchStringsArray",
+          label: "What to search for",
+          type: "tags",
+          required: true,
+          placeholder: "villa for sale, real estate agency",
+          helpText: "One search term per line, or comma-separated.",
+        },
+        { key: "locationQuery", label: "Location / area", type: "text", required: true, placeholder: "Canggu, Bali, Indonesia" },
+        { key: "maxCrawledPlacesPerSearch", label: "Max results per search term", type: "number", required: false, placeholder: "100" },
+      ],
+      costNote: "Pay-per-result — check the Apify Store listing for current pricing.",
+    },
+    {
+      // Verified: apify.com/curious_coder/linkedin-post-search-scraper/input-schema —
+      // `urls` accepts a LinkedIn post/profile URL *or* a LinkedIn search-results
+      // page URL; keyword/date/industry filters are encoded in that URL by
+      // LinkedIn's own search UI, not as separate Actor input fields, so this
+      // form intentionally asks for the URL rather than inventing a keyword
+      // input the Actor doesn't accept.
+      name: "LinkedIn — Post/Profile/Search URLs",
+      platform: "linkedin",
+      categoryId: null,
+      requirementKind: "url_scrape",
+      description:
+        "Collects post/profile data from LinkedIn URLs you provide — a profile, a specific post, or a LinkedIn search-results page (build the search on linkedin.com first, then paste its URL here).",
+      actorId: "curious_coder/linkedin-post-search-scraper",
+      defaultInput: {},
+      requiredParams: ["urls"],
+      enabled: true,
+      paramSchema: [
+        {
+          key: "urls",
+          label: "LinkedIn URLs",
+          type: "tags",
+          required: true,
+          placeholder: "https://www.linkedin.com/in/… or a search-results URL",
+          helpText: "One URL per line, or comma-separated. Profile, post, or search-results URLs.",
+        },
+        { key: "limitPerSource", label: "Max results per URL", type: "number", required: false, placeholder: "50" },
+        { key: "scrapeUntilDate", label: "Stop at date", type: "text", required: false, placeholder: "2026-01-01" },
+      ],
+      costNote: "Pricing varies by actor — check the Apify Store listing.",
+    },
+    // The three below have no verified single canonical public Actor for the
+    // niche they name (property-portal / travel-OTA / course-provider
+    // listings vary too much per target site to guess one). Seeded disabled
+    // on purpose — DO NOT enable until `actorId` is replaced with a real,
+    // verified Apify Store actor; enabling a `REPLACE_WITH_REAL_ACTOR_ID` row
+    // lets a manager trigger a request that always fails at the Apify API
+    // call (`startScrapeRequest` catches it and marks the request `failed`,
+    // but it's still a bad, avoidable UX and a wasted budget-check cycle).
     {
       name: "Property Portal Listings (example)",
       platform: "other",
       categoryId: SEED_CATEGORY_IDS.real_estate,
       requirementKind: "listing_search",
-      description: "Example placeholder — replace actorId with a real Apify Store property-portal scraper before use.",
+      description: "Example placeholder — replace actorId with a real, verified Apify Store property-portal scraper before enabling.",
       actorId: "REPLACE_WITH_REAL_ACTOR_ID",
       defaultInput: {},
       requiredParams: ["searchUrl"],
+      enabled: false,
       paramSchema: [],
       costNote: null,
     },
@@ -344,10 +423,11 @@ try {
       platform: "other",
       categoryId: SEED_CATEGORY_IDS.travel,
       requirementKind: "listing_search",
-      description: "Example placeholder — replace actorId with a real Apify Store travel/OTA scraper before use.",
+      description: "Example placeholder — replace actorId with a real, verified Apify Store travel/OTA scraper before enabling.",
       actorId: "REPLACE_WITH_REAL_ACTOR_ID",
       defaultInput: {},
       requiredParams: ["searchUrl"],
+      enabled: false,
       paramSchema: [],
       costNote: null,
     },
@@ -356,99 +436,46 @@ try {
       platform: "other",
       categoryId: SEED_CATEGORY_IDS.courses,
       requirementKind: "listing_search",
-      description: "Example placeholder — replace actorId with a real Apify Store course-provider scraper before use.",
+      description: "Example placeholder — replace actorId with a real, verified Apify Store course-provider scraper before enabling.",
       actorId: "REPLACE_WITH_REAL_ACTOR_ID",
       defaultInput: {},
       requiredParams: ["searchUrl"],
+      enabled: false,
       paramSchema: [],
       costNote: null,
-    },
-    // Google Maps and LinkedIn below follow the exact same "example, verify
-    // actorId before use" posture as the three placeholders above — only the
-    // Facebook Groups Scraper is a confirmed-real actor id. `paramSchema` is
-    // still worth seeding on a placeholder: it's what lets `RequestScrapeForm`
-    // show a real filter form instead of raw JSON the moment an admin swaps in
-    // a verified actorId, without any app code change.
-    {
-      name: "Google Maps — Local Business Search (example)",
-      platform: "google_maps",
-      categoryId: null,
-      requirementKind: "places_search",
-      description:
-        "Example placeholder — replace actorId with a real Apify Store Google Maps scraper before use. Finds businesses/listings near a location matching a search term (e.g. potential customers or competitors).",
-      actorId: "REPLACE_WITH_REAL_ACTOR_ID",
-      defaultInput: { language: "en" },
-      requiredParams: ["searchQuery", "location"],
-      paramSchema: [
-        { key: "searchQuery", label: "What to search for", type: "text", required: true, placeholder: "villas for sale, real estate agency" },
-        { key: "location", label: "Location / area", type: "text", required: true, placeholder: "Canggu, Bali, Indonesia" },
-        { key: "radiusKm", label: "Search radius (km)", type: "number", required: false, placeholder: "5" },
-        { key: "maxResults", label: "Max results", type: "number", required: false, placeholder: "100" },
-        {
-          key: "category",
-          label: "Business category",
-          type: "select",
-          required: false,
-          options: [
-            { label: "Real estate agency", value: "real_estate_agency" },
-            { label: "Hotel", value: "hotel" },
-            { label: "Travel agency", value: "travel_agency" },
-            { label: "School / course provider", value: "school" },
-          ],
-        },
-      ],
-      costNote: "Pricing varies by actor — check the Apify Store listing.",
-    },
-    {
-      name: "LinkedIn — Profile Lookup (example)",
-      platform: "linkedin",
-      categoryId: null,
-      requirementKind: "profile_lookup",
-      description:
-        "Example placeholder — replace actorId with a real Apify Store LinkedIn scraper before use. Validates and collects data for specific LinkedIn profiles or posts you already know about.",
-      actorId: "REPLACE_WITH_REAL_ACTOR_ID",
-      defaultInput: {},
-      requiredParams: ["profileUrls"],
-      paramSchema: [
-        {
-          key: "profileUrls",
-          label: "LinkedIn profile or post URLs",
-          type: "textarea",
-          required: true,
-          placeholder: "https://www.linkedin.com/in/…",
-          helpText: "One URL per line.",
-        },
-      ],
-      costNote: "Pricing varies by actor — check the Apify Store listing.",
-    },
-    {
-      name: "LinkedIn — Search Criteria (example)",
-      platform: "linkedin",
-      categoryId: null,
-      requirementKind: "search_criteria",
-      description:
-        "Example placeholder — replace actorId with a real Apify Store LinkedIn scraper before use. Finds profiles/posts matching search criteria rather than a known URL list.",
-      actorId: "REPLACE_WITH_REAL_ACTOR_ID",
-      defaultInput: {},
-      requiredParams: ["keywords"],
-      paramSchema: [
-        { key: "keywords", label: "Keywords", type: "text", required: true, placeholder: "villa sales, property investor" },
-        { key: "jobTitle", label: "Job title", type: "text", required: false, placeholder: "Real Estate Agent" },
-        { key: "location", label: "Location", type: "text", required: false, placeholder: "Bali, Indonesia" },
-        { key: "industry", label: "Industry", type: "text", required: false, placeholder: "Real Estate" },
-      ],
-      costNote: "Pricing varies by actor — check the Apify Store listing.",
     },
   ];
 
   for (const t of actorTemplates) {
     await sql`
-      INSERT INTO actor_templates (name, platform, category_id, requirement_kind, description, actor_id, default_input, required_params, param_schema, cost_note)
-      VALUES (${t.name}, ${t.platform}, ${t.categoryId}, ${t.requirementKind}, ${t.description}, ${t.actorId}, ${sql.json(t.defaultInput)}, ${t.requiredParams}, ${sql.json(t.paramSchema ?? [])}, ${t.costNote})
-      ON CONFLICT (name) DO UPDATE SET category_id = EXCLUDED.category_id, description = EXCLUDED.description, param_schema = EXCLUDED.param_schema
+      INSERT INTO actor_templates (name, platform, category_id, requirement_kind, description, actor_id, default_input, required_params, param_schema, cost_note, enabled)
+      VALUES (${t.name}, ${t.platform}, ${t.categoryId}, ${t.requirementKind}, ${t.description}, ${t.actorId}, ${sql.json(t.defaultInput)}, ${t.requiredParams}, ${sql.json(t.paramSchema ?? [])}, ${t.costNote}, ${t.enabled})
+      ON CONFLICT (name) DO UPDATE SET
+        platform = EXCLUDED.platform,
+        category_id = EXCLUDED.category_id,
+        requirement_kind = EXCLUDED.requirement_kind,
+        description = EXCLUDED.description,
+        actor_id = EXCLUDED.actor_id,
+        default_input = EXCLUDED.default_input,
+        required_params = EXCLUDED.required_params,
+        param_schema = EXCLUDED.param_schema,
+        cost_note = EXCLUDED.cost_note,
+        enabled = EXCLUDED.enabled,
+        updated_at = now()
     `;
   }
   console.log(`actor templates: ${actorTemplates.length} seeded`);
+
+  // The two stale placeholder rows from a previous seed shape that the
+  // upsert above can't reach (different `name`, so `ON CONFLICT (name)`
+  // creates new rows instead of fixing these) — remove them outright rather
+  // than leaving a broken, enabled, `REPLACE_WITH_REAL_ACTOR_ID` LinkedIn
+  // template sitting in the picker next to the real one.
+  await sql`
+    DELETE FROM actor_templates
+    WHERE actor_id = 'REPLACE_WITH_REAL_ACTOR_ID'
+      AND name IN ('LinkedIn — Profile Lookup (example)', 'LinkedIn — Search Criteria (example)', 'Google Maps — Local Business Search (example)')
+  `;
 
   const recipients = (process.env.AUTH_ALLOWED_EMAILS ?? "")
     .split(",")

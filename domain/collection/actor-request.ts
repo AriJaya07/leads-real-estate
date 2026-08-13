@@ -35,7 +35,7 @@ export interface ActorTemplateDef {
   requiredParams: string[];
 }
 
-export type ActorParamFieldType = "text" | "textarea" | "url" | "number" | "select" | "multiselect";
+export type ActorParamFieldType = "text" | "textarea" | "url" | "number" | "select" | "multiselect" | "tags";
 
 /**
  * One admin-authored filter field for a template's "Configure filters" step —
@@ -120,6 +120,18 @@ export function buildActorInput(
       coerced[field.key] = num;
     } else if (field.type === "multiselect") {
       coerced[field.key] = Array.isArray(raw) ? raw : [raw];
+    } else if (field.type === "tags") {
+      // Free-form array input (e.g. Apify's `searchStringsArray`/`startUrls`) —
+      // `multiselect` can't cover this, it's a fixed-option toggle group.
+      const list = Array.isArray(raw)
+        ? (raw as unknown[]).map(String)
+        : String(raw).split(/[\n,]+/);
+      const cleaned = list.map((v) => v.trim()).filter(Boolean);
+      if (cleaned.length === 0) {
+        if (field.required) missing.push(field.key);
+        continue;
+      }
+      coerced[field.key] = cleaned;
     } else {
       coerced[field.key] = raw;
     }

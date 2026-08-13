@@ -22,7 +22,7 @@ import type { CategoryOption } from "@/application/categories/categories.queries
 import type { ActorTemplateRow } from "@/infrastructure/db/schema/collection";
 import type { ActorParamField, ActorParamFieldType } from "@/domain/collection/actor-request";
 
-const PARAM_FIELD_TYPES: ActorParamFieldType[] = ["text", "textarea", "url", "number", "select", "multiselect"];
+const PARAM_FIELD_TYPES: ActorParamFieldType[] = ["text", "textarea", "url", "number", "select", "multiselect", "tags"];
 
 /** Editing-only shape: `options` is edited as a comma-separated list (label = value, the common case) and parsed back into `ActorParamField.options` on submit. */
 type EditableParamField = Omit<ActorParamField, "options"> & { optionsText: string };

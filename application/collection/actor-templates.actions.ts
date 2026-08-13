@@ -18,7 +18,7 @@ import { actorTemplatesTag } from "@/application/cache-tags";
 const paramFieldInput = z.object({
   key: z.string().trim().min(1).max(80),
   label: z.string().trim().min(1).max(120),
-  type: z.enum(["text", "textarea", "url", "number", "select", "multiselect"]),
+  type: z.enum(["text", "textarea", "url", "number", "select", "multiselect", "tags"]),
   required: z.boolean().default(false),
   placeholder: z.string().trim().max(200).optional(),
   helpText: z.string().trim().max(300).optional(),

@@ -122,12 +122,34 @@ async function ensureDatasetForScrapeRequest(
 }
 
 /**
+ * Wires a succeeded run's output dataset into the ordinary sync pipeline
+ * (discover → ingest → normalize → classify → score → store) and updates the
+ * request row's `sourceId`/`datasetId`/`itemCount` accordingly. Shared by both
+ * ways a request can be observed to have succeeded — the Apify completion
+ * webhook (`completeScrapeRequest`) and the manual "check now" poll
+ * (`refreshScrapeStatus`, for when the webhook never fires — e.g. `APP_URL`
+ * pointing at a non-public host, where `startScrapeRequest` skips webhook
+ * registration entirely). Idempotent: safe to call again for a request that's
+ * already wired, same posture `ensureDatasetForScrapeRequest`'s
+ * `onConflictDoNothing` already relies on.
+ */
+export async function finalizeSucceededScrapeRequest(
+  request: ScrapeRequestRow,
+  apifyDatasetId: string,
+): Promise<{ sourceId: string; datasetId: string; itemCount: number }> {
+  const linked = await ensureDatasetForScrapeRequest(request, apifyDatasetId);
+  const outcome = await syncDataset(linked.datasetId, "webhook", { force: true });
+  await db()
+    .update(schema.scrapeRequests)
+    .set({ sourceId: linked.sourceId, datasetId: linked.datasetId, itemCount: outcome.itemsSeen })
+    .where(eq(schema.scrapeRequests.id, request.id));
+  return { ...linked, itemCount: outcome.itemsSeen };
+}
+
+/**
  * Called from the Apify webhook route for every run-status event. Looks up the
  * `scrape_requests` row by `apifyRunId` — a run this system triggered, as opposed
- * to the legacy n8n-pushed-dataset traffic the webhook also still handles. On
- * success, wires the run's output dataset into the ordinary sync pipeline
- * (discover → ingest → normalize → classify → score → store) rather than
- * reimplementing any of that here.
+ * to the legacy n8n-pushed-dataset traffic the webhook also still handles.
  */
 export async function completeScrapeRequest(payload: ScrapeRunWebhookPayload): Promise<CompleteScrapeRequestResult> {
   const [request] = await db()
@@ -140,39 +162,24 @@ export async function completeScrapeRequest(payload: ScrapeRunWebhookPayload): P
   const status = payload.status ? toScrapeRequestStatus(payload.status) : request.status;
   const apifyDatasetId = payload.defaultDatasetId ?? request.apifyDatasetId;
 
-  let sourceId = request.sourceId;
-  let datasetId = request.datasetId;
-
-  if (status === "succeeded" && apifyDatasetId) {
-    try {
-      const linked = await ensureDatasetForScrapeRequest(request, apifyDatasetId);
-      sourceId = linked.sourceId;
-      datasetId = linked.datasetId;
-    } catch (error) {
-      log.error("failed to wire scrape result into sync pipeline", { error, requestId: request.id });
-    }
-  }
-
   await db()
     .update(schema.scrapeRequests)
     .set({
       status,
       apifyDatasetId,
       usageUsd: payload.usageTotalUsd ?? request.usageUsd,
-      sourceId,
-      datasetId,
       finishedAt: payload.finishedAt ? new Date(payload.finishedAt) : request.finishedAt,
     })
     .where(eq(schema.scrapeRequests.id, request.id));
 
-  if (status === "succeeded" && datasetId) {
-    const outcome = await syncDataset(datasetId, "webhook", { force: true });
-    await db()
-      .update(schema.scrapeRequests)
-      .set({ itemCount: outcome.itemsSeen })
-      .where(eq(schema.scrapeRequests.id, request.id));
-    return { handled: true, datasetId };
+  if (status === "succeeded" && apifyDatasetId) {
+    try {
+      const linked = await finalizeSucceededScrapeRequest(request, apifyDatasetId);
+      return { handled: true, datasetId: linked.datasetId };
+    } catch (error) {
+      log.error("failed to wire scrape result into sync pipeline", { error, requestId: request.id });
+    }
   }
 
-  return { handled: true, datasetId: datasetId ?? undefined };
+  return { handled: true, datasetId: request.datasetId ?? undefined };
 }

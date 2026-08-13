@@ -128,6 +128,17 @@ function FieldInput({
         </div>
       );
     }
+    case "tags":
+      return (
+        <Textarea
+          id={id}
+          value={typeof value === "string" ? value : ""}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={field.placeholder ?? "One per line, or comma-separated"}
+          rows={3}
+          required={field.required}
+        />
+      );
     case "text":
     default:
       return (

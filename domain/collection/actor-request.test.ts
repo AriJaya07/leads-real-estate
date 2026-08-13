@@ -84,6 +84,29 @@ describe("buildActorInput with paramSchema", () => {
     expect(result.input.categories).toBeUndefined();
   });
 
+  it("splits a tags field's comma/newline text into a trimmed array", () => {
+    const tagsTemplate = {
+      ...schemaTemplate,
+      paramSchema: [...schemaTemplate.paramSchema, { key: "keywords", label: "Keywords", type: "tags" as const, required: false }],
+    };
+    const result = buildActorInput(tagsTemplate, {
+      searchQuery: "villas",
+      location: "Bali",
+      keywords: "villa, land\nvilla for sale ,  \n",
+    });
+    expect(result.input.keywords).toEqual(["villa", "land", "villa for sale"]);
+  });
+
+  it("treats a required tags field with no non-empty entries as missing", () => {
+    const tagsTemplate = {
+      ...schemaTemplate,
+      paramSchema: [...schemaTemplate.paramSchema, { key: "keywords", label: "Keywords", type: "tags" as const, required: true }],
+    };
+    const result = buildActorInput(tagsTemplate, { searchQuery: "villas", location: "Bali", keywords: " , \n " });
+    expect(result.ok).toBe(false);
+    expect(result.missing).toContain("keywords");
+  });
+
   it("merges coerced params under defaultInput", () => {
     const result = buildActorInput(schemaTemplate, { searchQuery: "villas", location: "Bali" });
     expect(result.input.language).toBe("en");

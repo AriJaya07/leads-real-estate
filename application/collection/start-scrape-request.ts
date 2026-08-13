@@ -11,6 +11,24 @@ import type { ScrapeRequestRow } from "@/infrastructure/db/schema/collection";
 
 const IN_FLIGHT_STATUSES = ["queued", "running", "succeeded"] as const;
 
+/**
+ * Apify's Run Actor API hard-rejects a webhook `requestUrl` that isn't a
+ * publicly resolvable URL (`schema-validation` 400, confirmed against the
+ * live API — not a silent delivery failure, the run never starts at all).
+ * `APP_URL` defaults to `http://localhost:3000` for local dev, so registering
+ * a webhook there would make every scrape request fail before it starts.
+ * Falls back to no webhook instead — the run still starts, status just needs
+ * `refreshScrapeStatus`'s manual poll instead of the completion push.
+ */
+function isPubliclyReachableUrl(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "0.0.0.0" && hostname !== "::1";
+  } catch {
+    return false;
+  }
+}
+
 export interface StartScrapeRequestInput {
   companyId: string;
   requestedByUserId: string;
@@ -102,12 +120,14 @@ export async function startScrapeRequest(
     return inserted;
   });
 
+  const candidateWebhookUrl = `${serverEnv().APP_URL}/api/webhooks/apify`;
+
   try {
     const run = await getActorRunner("apify").startRun(
       {
         actorId: template.actorId,
         input: built.input,
-        webhookUrl: `${serverEnv().APP_URL}/api/webhooks/apify`,
+        webhookUrl: isPubliclyReachableUrl(candidateWebhookUrl) ? candidateWebhookUrl : undefined,
       },
       { companyId: input.companyId },
     );
