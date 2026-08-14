@@ -93,10 +93,10 @@ async function AuthedShell({ children }: { children: React.ReactNode }) {
   const navExtras = await getNavExtras(user.companyId);
 
   return (
-    <div className="bg-background flex min-h-dvh">
+    <div className="bg-background flex h-dvh">
       <AppSidebar role={user.role} navExtras={navExtras} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Suspense fallback={<div className="border-border h-14 border-b" />}>
+        <Suspense fallback={<div className="border-border h-14 shrink-0 border-b" />}>
           <DatasetSwitcherSlot
             userEmail={user.email}
             role={user.role}
@@ -105,7 +105,7 @@ async function AuthedShell({ children }: { children: React.ReactNode }) {
             isPlatformAdmin={user.isPlatformAdmin}
           />
         </Suspense>
-        <main id="main-content" className="min-w-0 flex-1">
+        <main id="main-content" className="min-w-0 flex-1 overflow-y-auto">
           {children}
         </main>
       </div>
@@ -115,10 +115,10 @@ async function AuthedShell({ children }: { children: React.ReactNode }) {
 
 function ShellSkeleton() {
   return (
-    <div className="bg-background flex min-h-dvh">
+    <div className="bg-background flex h-dvh">
       <div className="bg-sidebar border-sidebar-border hidden w-56 shrink-0 border-r md:block" />
-      <div className="flex-1">
-        <div className="border-border h-14 border-b" />
+      <div className="flex flex-1 flex-col">
+        <div className="border-border h-14 shrink-0 border-b" />
       </div>
     </div>
   );

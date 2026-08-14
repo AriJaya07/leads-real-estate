@@ -8,7 +8,7 @@ export function AppSidebar({ role, navExtras }: { role: Role; navExtras: NavExtr
   return (
     <aside
       aria-label="Main navigation"
-      className="bg-sidebar border-sidebar-border hidden w-56 shrink-0 flex-col border-r md:flex"
+      className="bg-sidebar border-sidebar-border hidden w-56 shrink-0 flex-col overflow-y-auto border-r md:flex"
     >
       <div className="flex h-14 items-center gap-2 px-4">
         <BrandMark className="size-6" />

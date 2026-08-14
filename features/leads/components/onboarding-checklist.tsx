@@ -47,38 +47,38 @@ export function OnboardingChecklist({
   }
 
   return (
-    <div className="border-border bg-card flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-3">
+    <div className="border-border bg-card flex flex-col gap-3 rounded-xl border p-4">
+      <div className="flex items-start justify-between gap-3">
         <span className="text-muted-foreground font-mono text-xs tabular-nums">
           {doneCount}/{steps.length}
         </span>
-        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4">
-          {steps.map((step) => (
-            <div key={step.label} className="flex items-center gap-2 text-sm">
-              <span
-                className={cn(
-                  "flex size-4 shrink-0 items-center justify-center rounded-full",
-                  step.done ? "bg-[var(--health-ok-bg)] text-[var(--health-ok-fg)]" : "bg-muted text-muted-foreground",
-                )}
-              >
-                {step.done && <Check className="size-3" aria-hidden />}
-              </span>
-              {step.done ? (
-                <span className="text-muted-foreground line-through">{step.label}</span>
-              ) : step.label === "Source connected" ? (
-                <SourceOnboardingWizard />
-              ) : (
-                <Button size="sm" variant="outline" render={<Link href={step.href} />}>
-                  {step.cta}
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
+        <Button size="icon-sm" variant="ghost" aria-label="Dismiss setup checklist" onClick={dismiss}>
+          <X className="size-3.5" aria-hidden />
+        </Button>
       </div>
-      <Button size="icon-sm" variant="ghost" aria-label="Dismiss setup checklist" onClick={dismiss}>
-        <X className="size-3.5" aria-hidden />
-      </Button>
+      <div className="flex flex-col gap-2">
+        {steps.map((step) => (
+          <div key={step.label} className="flex min-w-0 items-center gap-2 text-sm">
+            <span
+              className={cn(
+                "flex size-4 shrink-0 items-center justify-center rounded-full",
+                step.done ? "bg-[var(--health-ok-bg)] text-[var(--health-ok-fg)]" : "bg-muted text-muted-foreground",
+              )}
+            >
+              {step.done && <Check className="size-3" aria-hidden />}
+            </span>
+            {step.done ? (
+              <span className="text-muted-foreground truncate line-through">{step.label}</span>
+            ) : step.label === "Source connected" ? (
+              <SourceOnboardingWizard />
+            ) : (
+              <Button size="sm" variant="outline" className="min-w-0" render={<Link href={step.href} />}>
+                <span className="truncate">{step.cta}</span>
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

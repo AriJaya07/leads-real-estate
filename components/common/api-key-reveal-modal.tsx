@@ -45,20 +45,20 @@ export function ApiKeyRevealModal({
         if (!next) return; // block outside-click/escape close — only "Done" below closes it
       }}
     >
-      <AlertDialogContent>
+      <AlertDialogContent className="max-w-lg">
         <AlertDialogHeader>
-          <AlertDialogTitle>{label}</AlertDialogTitle>
+          <AlertDialogTitle className="text-xl font-semibold">{label}</AlertDialogTitle>
           <AlertDialogDescription>
             This is the only time the full value will be shown. We store a hash — we cannot show it again, and we
             will never email it.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        <div className="flex items-center gap-2">
-          <code className="bg-muted border-border flex-1 truncate rounded-md border px-3 py-2 font-mono text-sm">
+        <div className="flex items-start gap-2">
+          <code className="bg-muted border-border min-w-0 flex-1 rounded-md border px-3 py-2 font-mono text-sm break-all">
             {secret}
           </code>
-          <Button size="sm" variant="outline" onClick={() => void copy()}>
+          <Button size="sm" variant="outline" className="shrink-0" onClick={() => void copy()}>
             <Copy className="size-3.5" aria-hidden />
             Copy
           </Button>
