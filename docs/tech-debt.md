@@ -276,15 +276,17 @@ inbox. Revisit if this turns out to be more than a cosmetic nuisance at real vol
 the fix would be a computed "has any non-spam appearance" flag or facet, not a new
 per-appearance concept.
 
-## `lead_events`'s `merged` type isn't written yet
+## ~~`lead_events`'s `merged` type isn't written yet~~ — fixed
 
 `leadEventTypeEnum` has included `merged` since before this table was person-centric,
 intended for an audit trail of identity-resolution merges ("appearance from post X
-merged into existing person Y because facebookId matched"). `resolveIdentity`
-(`application/leads/identity-resolution.ts`) doesn't write one yet — there's no way to
-answer "why did these two appearances end up as the same lead" from the UI today beyond
-inspecting `facebookId`/`instagramId`/`profileUrl` directly. Worth adding once someone
-actually needs to debug a merge decision.
+merged into existing person Y because facebookId matched"). `process-records.ts` now
+writes one (best-effort, never blocks ingest) whenever `resolveIdentity`
+(`application/leads/identity-resolution.ts`) matches an existing person, carrying
+`matchedField` and the triggering `appearanceId`. The lead detail sheet's activity feed
+renders it under an `IDENTITY` category with a "Split this merge" action
+(`application/leads/split-lead.ts` — undoable, separates that appearance back into its
+own lead).
 
 ## ~~No coverage/CI gate~~ — fixed
 

@@ -6,39 +6,16 @@ import { updateTag } from "next/cache";
 import { db, schema } from "@/infrastructure/db/client";
 import { adminActionClient, ActionError } from "@/application/safe-action";
 import { actorTemplatesTag } from "@/application/cache-tags";
+import { actorTemplateInput as templateInput } from "@/application/collection/actor-template-input.schema";
 
 /**
  * Registering "which Apify actor scrapes what" is what replaces a hardcoded
  * `APIFY_ACTOR_ID`/platform branch in code — see domain/collection/actor-request.ts.
  * Admin-only: this directly controls which external actor gets money spent on it
  * every time a manager triggers a scrape, one tier above `runSync`/`runDiscovery`
- * (managerActionClient) for that reason.
+ * (managerActionClient) for that reason. `application/platform/sources.actions.ts`
+ * is the Super Admin counterpart to this same table, audited separately.
  */
-
-const paramFieldInput = z.object({
-  key: z.string().trim().min(1).max(80),
-  label: z.string().trim().min(1).max(120),
-  type: z.enum(["text", "textarea", "url", "number", "select", "multiselect", "tags"]),
-  required: z.boolean().default(false),
-  placeholder: z.string().trim().max(200).optional(),
-  helpText: z.string().trim().max(300).optional(),
-  options: z.array(z.object({ label: z.string().trim().min(1).max(80), value: z.string().trim().min(1).max(80) })).optional(),
-});
-
-const templateInput = z.object({
-  name: z.string().trim().min(1).max(120),
-  platform: z.string().trim().min(1).max(40),
-  /** Null = useful for every category (e.g. a generic Facebook Groups scraper). */
-  categoryId: z.string().uuid().nullable().default(null),
-  requirementKind: z.string().trim().min(1).max(60),
-  description: z.string().trim().max(2000).optional(),
-  actorId: z.string().trim().min(1).max(200),
-  defaultInput: z.record(z.string(), z.unknown()).default({}),
-  requiredParams: z.array(z.string().trim().min(1)).default([]),
-  /** Structured filter fields for the owner-facing "Configure filters" step — see domain/collection/actor-request.ts. */
-  paramSchema: z.array(paramFieldInput).default([]),
-  costNote: z.string().trim().max(500).optional(),
-});
 
 export const createActorTemplate = adminActionClient
   .inputSchema(templateInput)

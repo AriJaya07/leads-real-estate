@@ -215,6 +215,22 @@ export const platformCategoryActionEnum = pgEnum("platform_category_action", [
   "update_lexicon",
 ]);
 
+/**
+ * The closed set of writes a Super Admin may perform against the global
+ * source/actor-template catalog — same split rationale as
+ * `platformCategoryActionEnum` (never company-scoped, so it doesn't belong in
+ * `super_admin_actions`). Backs `/platform/sources`, the Super Admin
+ * counterpart to a tenant admin's `/admin/collection` actor-template
+ * management (`application/collection/actor-templates.actions.ts`) — both
+ * write the same `actor_templates` table, this enum/table is what makes the
+ * platform-level writes separately auditable.
+ */
+export const platformSourceActionEnum = pgEnum("platform_source_action", [
+  "register_actor",
+  "update_actor",
+  "set_enabled",
+]);
+
 export const leadEventTypeEnum = pgEnum("lead_event_type", [
   "created",
   "status_changed",

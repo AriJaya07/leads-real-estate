@@ -190,6 +190,13 @@
       "when": 1786608495891,
       "tag": "0026_hard_gravity",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1786621823599,
+      "tag": "0027_nervous_nightmare",
+      "breakpoints": true
     }
   ]
 }

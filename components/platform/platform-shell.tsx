@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { id: "tenants", label: "Tenants", href: "/platform/tenants" },
   { id: "categories", label: "Categories", href: "/platform/categories" },
+  { id: "sources", label: "Source Registry", href: "/platform/sources" },
   { id: "analytics", label: "Platform Analytics", href: "/platform/analytics" },
   { id: "connectors", label: "Connector Health", href: "/platform/connectors" },
   { id: "billing", label: "Platform Billing", href: "/platform/billing" },

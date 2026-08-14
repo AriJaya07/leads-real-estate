@@ -77,7 +77,7 @@ export const LOGIN_ATTEMPTS_RETENTION_DAYS = 7;
 export const SCRAPE_REQUEST_DEDUP_WINDOW_MINUTES = 15;
 
 /** Curated defaults for the platform picker — the field itself stays free text, see collection.ts. */
-export const SCRAPE_PLATFORMS = ["instagram", "facebook", "linkedin", "google_maps", "other"] as const;
+export const SCRAPE_PLATFORMS = ["instagram", "facebook", "linkedin", "google_maps", "tiktok", "other"] as const;
 
 /**
  * Monthly cap on AI-assist calls (lead summaries + message drafts) per
