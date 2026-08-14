@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, KeyRound, Mail, Trash2, UserPlus, X } from "lucide-react";
+import { Check, Copy, KeyRound, Mail, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import {
 } from "@/application/auth/team.actions";
 import { inviteTeamMember, revokeInvite } from "@/application/auth/invite.actions";
 import { useServerAction } from "@/hooks/use-server-action";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 
 const ASSIGNABLE_ROLES: { value: Role; label: string }[] = [
@@ -84,25 +85,21 @@ function CredentialNotice({
   credential: string;
   onDismiss: () => void;
 }) {
+  const { copied, copy } = useCopyToClipboard();
+
   return (
     <div className="border-border bg-muted/40 flex flex-col gap-2 rounded-xl border p-4">
       <p className="text-sm font-medium">{title}</p>
-      <div className="flex items-center gap-2">
-        <code className="bg-background border-border flex-1 truncate rounded-md border px-3 py-2 font-mono text-sm">
+      <div className="flex flex-wrap items-start gap-2">
+        <code className="bg-background border-border min-w-0 flex-1 rounded-md border px-3 py-2 font-mono text-sm break-all">
           {credential}
         </code>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            void navigator.clipboard.writeText(credential);
-            toast.success("Copied");
-          }}
-        >
-          <Copy className="size-3.5" aria-hidden />
-          Copy
+        {/* Fixed width so "Copy" → "Copied" never reflows the Done button next to it. */}
+        <Button variant="outline" className="w-24 shrink-0 justify-center" onClick={() => void copy(credential)}>
+          {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+          {copied ? "Copied" : "Copy"}
         </Button>
-        <Button size="sm" variant="ghost" onClick={onDismiss}>
+        <Button variant="ghost" className="shrink-0" onClick={onDismiss}>
           Done
         </Button>
       </div>

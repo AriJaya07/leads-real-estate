@@ -254,7 +254,7 @@ function ConditionRowEditor({
   }
 
   return (
-    <div className="border-border grid grid-cols-1 items-start gap-2 rounded-lg border p-2 sm:grid-cols-[minmax(0,9rem)_minmax(0,8rem)_minmax(0,1fr)_auto]">
+    <div className="border-border grid grid-cols-1 items-start gap-2 rounded-lg border p-2">
       <select
         aria-label="Condition field"
         value={row.field}

@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy } from "lucide-react";
-import { toast } from "sonner";
+import { Check, Copy } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -12,6 +11,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 
 /**
  * One-time secret reveal — the standard, non-negotiable API-key UX pattern:
@@ -32,11 +32,7 @@ export function ApiKeyRevealModal({
   onDone: () => void;
 }) {
   const [confirmed, setConfirmed] = useState(false);
-
-  async function copy() {
-    await navigator.clipboard.writeText(secret ?? "");
-    toast.success("Copied");
-  }
+  const { copied, copy } = useCopyToClipboard();
 
   return (
     <AlertDialog
@@ -58,9 +54,10 @@ export function ApiKeyRevealModal({
           <code className="bg-muted border-border min-w-0 flex-1 rounded-md border px-3 py-2 font-mono text-sm break-all">
             {secret}
           </code>
-          <Button size="sm" variant="outline" className="shrink-0" onClick={() => void copy()}>
-            <Copy className="size-3.5" aria-hidden />
-            Copy
+          {/* Fixed width so "Copy" → "Copied" never reflows the code block next to it. */}
+          <Button variant="outline" className="w-24 shrink-0 justify-center" onClick={() => void copy(secret ?? "")}>
+            {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+            {copied ? "Copied" : "Copy"}
           </Button>
         </div>
 

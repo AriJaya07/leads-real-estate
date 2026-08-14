@@ -73,7 +73,7 @@ export function AppTopbar({
             </Button>
           }
         />
-        <DropdownMenuContent align="start" className="w-80">
+        <DropdownMenuContent align="start" className="w-80 max-w-[calc(100vw-1.5rem)]">
           {/* Base UI requires GroupLabel to be inside a Group — a bare Label
               throws at open time (Base UI error #31), not at build time. */}
           <DropdownMenuGroup>

@@ -167,7 +167,7 @@ const ContactActions = memo(function ContactActions({
           variant="outline"
           aria-label="Copy phone number"
           onClick={() => {
-            void navigator.clipboard.writeText(lead.contact.phone!);
+            void navigator.clipboard.writeText(lead.contact.phone!).then(() => toast.success("Copied"));
             void onContact(lead, "phone");
           }}
         >

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { ExternalLink, MessageCircle, Star, X } from "lucide-react";
+import { Check, Copy, ExternalLink, MessageCircle, Star, X } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   AlertDialog,
@@ -27,6 +27,7 @@ import { Spinner } from "@/components/common/spinner";
 import { RelativeTime } from "@/components/common/relative-time";
 import { cn } from "@/lib/utils";
 import { useServerAction } from "@/hooks/use-server-action";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useFieldLabels } from "@/features/leads/vertical-context";
 import {
   assignLead,
@@ -525,18 +526,13 @@ function MessageAssistant({ lead }: { lead: LeadListItem }) {
   const drafting = busyId === "draft";
   const sending = busyId === "send";
   const mode = lead.firstContactedAt ? "follow-up" : "first message";
+  const { copied, copy } = useCopyToClipboard();
 
   async function generate() {
     await run("draft", () => generateMessageDraftAction({ leadId: lead.id }), {
       errorFallback: "Could not draft a message",
       onSuccess: (result) => setDraft(result.message),
     });
-  }
-
-  async function copy() {
-    if (!draft) return;
-    await navigator.clipboard.writeText(draft);
-    toast.success("Copied");
   }
 
   async function sendViaWhatsapp() {
@@ -566,12 +562,14 @@ function MessageAssistant({ lead }: { lead: LeadListItem }) {
             from AveronAi automatically.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => void copy()}>
-              Copy
+            {/* Fixed width so "Copy" → "Copied" never reflows the Send button next to it. */}
+            <Button variant="outline" className="w-24 justify-center" onClick={() => draft && void copy(draft)}>
+              {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+              {copied ? "Copied" : "Copy"}
             </Button>
-            <Button size="sm" disabled={!lead.contact.whatsapp || sending} onClick={() => void sendViaWhatsapp()}>
-              {sending && <Spinner className="size-3.5" />}
-              <MessageCircle className="size-3.5" aria-hidden />
+            <Button disabled={!lead.contact.whatsapp || sending} onClick={() => void sendViaWhatsapp()}>
+              {sending && <Spinner className="size-4" />}
+              <MessageCircle aria-hidden />
               Send via WhatsApp
             </Button>
           </div>
@@ -1032,7 +1030,7 @@ function SplitMergeAction({ appearanceId }: { appearanceId: string }) {
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-muted-foreground text-xs">{label}</dt>
       <dd className="truncate">{value}</dd>
     </div>

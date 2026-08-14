@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Copy, RefreshCw } from "lucide-react";
+import { Check, Copy, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/common/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useServerAction } from "@/hooks/use-server-action";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { regenerateWebhookSecret, updateAutomationSettings } from "@/application/automation/automation-settings.actions";
 import type { AutomationSettingsRow } from "@/infrastructure/db/schema/automation";
 
@@ -32,6 +33,7 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
   const [webhookEnabled, setWebhookEnabled] = useState(settings.webhookEnabled);
   const [webhookUrl, setWebhookUrl] = useState(settings.webhookUrl ?? "");
   const [webhookSecret, setWebhookSecret] = useState(settings.webhookSecret);
+  const { copied, copy } = useCopyToClipboard();
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -67,8 +69,7 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
 
   async function copySecret() {
     if (!webhookSecret) return;
-    await navigator.clipboard.writeText(webhookSecret);
-    toast.success("Copied");
+    await copy(webhookSecret);
   }
 
   return (
@@ -177,27 +178,27 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
               <div className="flex flex-wrap items-center gap-2">
                 <code
                   data-testid="webhook-secret"
-                  className="bg-muted border-border max-w-md flex-1 truncate rounded-md border px-3 py-1.5 font-mono text-xs"
+                  className="bg-muted border-border max-w-md min-w-0 flex-1 rounded-md border px-3 py-1.5 font-mono text-xs break-all"
                 >
                   {webhookSecret ?? "Not generated yet"}
                 </code>
                 {webhookSecret && (
-                  <Button type="button" size="sm" variant="outline" onClick={() => void copySecret()}>
-                    <Copy className="size-3.5" aria-hidden />
-                    Copy
+                  // Fixed width so "Copy" → "Copied" never reflows the Regenerate button next to it.
+                  <Button type="button" variant="outline" className="w-24 justify-center" onClick={() => void copySecret()}>
+                    {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+                    {copied ? "Copied" : "Copy"}
                   </Button>
                 )}
                 <Button
                   type="button"
-                  size="sm"
                   variant="outline"
                   disabled={busyId === "secret"}
                   onClick={() => void regenerateSecret()}
                 >
                   {busyId === "secret" ? (
-                    <Spinner className="size-3.5" />
+                    <Spinner className="size-4" />
                   ) : (
-                    <RefreshCw className="size-3.5" aria-hidden />
+                    <RefreshCw aria-hidden />
                   )}
                   {webhookSecret ? "Regenerate" : "Generate"}
                 </Button>
