@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/common/spinner";
@@ -63,18 +64,13 @@ export function CategoryConfigForm({ detail }: { detail: CategoryDetail }) {
     <form onSubmit={submit} className="border-border flex flex-col gap-4 rounded-xl border p-4">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="category-status">Status</Label>
-        <select
-          id="category-status"
-          value={status}
-          onChange={(event) => setStatus(event.target.value as typeof status)}
-          className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
-        >
+        <Select id="category-status" value={status} onChange={(event) => setStatus(event.target.value as typeof status)}>
           {STATUS_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">

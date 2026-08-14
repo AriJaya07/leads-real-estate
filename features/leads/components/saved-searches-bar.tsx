@@ -106,7 +106,7 @@ export function SavedSearchesBar({
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="Name this search"
-            className="h-7 w-40 text-xs"
+            className="h-8 w-44 text-sm"
             autoFocus
             required
           />

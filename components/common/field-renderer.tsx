@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { ActorParamField } from "@/domain/collection/actor-request";
@@ -87,12 +88,11 @@ function FieldInput({
       );
     case "select":
       return (
-        <select
+        <Select
           id={id}
           value={typeof value === "string" ? value : ""}
           onChange={(event) => onChange(event.target.value)}
           required={field.required}
-          className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
         >
           <option value="">Select…</option>
           {field.options?.map((option) => (
@@ -100,7 +100,7 @@ function FieldInput({
               {option.label}
             </option>
           ))}
-        </select>
+        </Select>
       );
     case "multiselect": {
       const selected = Array.isArray(value) ? (value as string[]) : [];

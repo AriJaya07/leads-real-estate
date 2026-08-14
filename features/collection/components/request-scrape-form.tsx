@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/common/spinner";
 import { EmptyState } from "@/components/common/empty-state";
@@ -188,11 +189,10 @@ export function RequestScrapeForm({
 
           <div className="flex flex-col gap-1.5 sm:max-w-xs">
             <Label htmlFor="scrape-requirement">Requirement</Label>
-            <select
+            <Select
               id="scrape-requirement"
               value={template.id}
               onChange={(event) => selectTemplate(templatesForPlatform.find((t) => t.id === event.target.value))}
-              className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
             >
               {templatesForPlatform.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -200,7 +200,7 @@ export function RequestScrapeForm({
                   {t.requirementKind} — {t.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           {template.categoryId === companyCategoryId && (

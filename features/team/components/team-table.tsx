@@ -230,7 +230,7 @@ export function TeamTable({
                 value={member.role}
                 onChange={(event) => void changeRole(member, event.target.value as Role)}
                 title={member.id === currentUserId ? "You cannot change your own role" : "Change role"}
-                className="border-input bg-background h-8 shrink-0 rounded-lg border px-2 text-xs capitalize disabled:opacity-60"
+                className="border-input bg-background h-8 shrink-0 rounded-lg border px-2.5 text-sm capitalize disabled:opacity-60"
               >
                 {ASSIGNABLE_ROLES.filter(
                   (r) => r.value === member.role || r.value !== "owner" || viewerRole === "owner",

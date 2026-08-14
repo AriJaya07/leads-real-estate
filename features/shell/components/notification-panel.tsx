@@ -59,7 +59,7 @@ export function NotificationPanel() {
       <PopoverContent className="w-80 max-w-[calc(100vw-1.5rem)] p-0">
         <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
           <span className="text-sm font-semibold">Notifications</span>
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={markAllRead} disabled={unreadCount === 0}>
+          <Button variant="ghost" size="sm" onClick={markAllRead} disabled={unreadCount === 0}>
             Mark all read
           </Button>
         </div>

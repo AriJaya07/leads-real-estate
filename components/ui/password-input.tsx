@@ -20,15 +20,15 @@ export function PasswordInput({
 
   return (
     <div className="relative">
-      <Input type={visible ? "text" : "password"} className={cn("pr-8", className)} {...props} />
+      <Input type={visible ? "text" : "password"} className={cn("pr-9", className)} {...props} />
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
         tabIndex={-1}
         aria-label={visible ? "Hide password" : "Show password"}
-        className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-0 flex w-8 items-center justify-center"
+        className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-0 flex w-9 items-center justify-center"
       >
-        {visible ? <EyeOff className="size-3.5" aria-hidden /> : <Eye className="size-3.5" aria-hidden />}
+        {visible ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
       </button>
     </div>
   );

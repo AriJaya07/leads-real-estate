@@ -6,6 +6,7 @@ import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -265,26 +266,25 @@ export function ActorTemplateForm({
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="template-platform">Platform</Label>
-          <select
+          <Select
             id="template-platform"
             value={platform}
             onChange={(event) => setPlatform(event.target.value)}
-            className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm capitalize"
+            className="capitalize"
           >
             {SCRAPE_PLATFORMS.map((p) => (
               <option key={p} value={p} className="capitalize">
                 {p}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="template-category">Category</Label>
-          <select
+          <Select
             id="template-category"
             value={categoryId}
             onChange={(event) => setCategoryId(event.target.value)}
-            className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
           >
             <option value="">All categories</option>
             {categories.map((c) => (
@@ -292,7 +292,7 @@ export function ActorTemplateForm({
                 {c.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="template-requirement">Requirement kind</Label>
@@ -370,10 +370,9 @@ export function ActorTemplateForm({
                   placeholder="Label shown to the requester"
                   aria-label="Field label"
                 />
-                <select
+                <Select
                   value={field.type}
                   onChange={(event) => updateField(index, { type: event.target.value as ActorParamFieldType })}
-                  className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
                   aria-label="Field type"
                 >
                   {PARAM_FIELD_TYPES.map((t) => (
@@ -381,7 +380,7 @@ export function ActorTemplateForm({
                       {t}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <label className="flex items-center gap-1.5 px-1 text-xs whitespace-nowrap">
                   <input
                     type="checkbox"

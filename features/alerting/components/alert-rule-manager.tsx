@@ -6,6 +6,7 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -255,77 +256,72 @@ function ConditionRowEditor({
 
   return (
     <div className="border-border grid grid-cols-1 items-start gap-2 rounded-lg border p-2">
-      <select
+      <Select
         aria-label="Condition field"
         value={row.field}
         onChange={(event) => setField(event.target.value as ConditionField)}
-        className="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
       >
         {fieldOrder.map((m) => (
           <option key={m.field} value={m.field}>
             {m.label}
           </option>
         ))}
-      </select>
+      </Select>
 
       {meta.ops.length > 1 ? (
-        <select
+        <Select
           aria-label="Condition operator"
           value={row.op}
           onChange={(event) => onChange({ ...row, op: event.target.value as ComparisonOp })}
-          className="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
         >
           {meta.ops.map((op) => (
             <option key={op} value={op}>
               {OP_LABELS[op]}
             </option>
           ))}
-        </select>
+        </Select>
       ) : (
-        <span className="text-muted-foreground flex h-8 items-center px-1 text-xs">{OP_LABELS[meta.ops[0]]}</span>
+        <span className="text-muted-foreground flex h-10 items-center px-1 text-sm">{OP_LABELS[meta.ops[0]]}</span>
       )}
 
       <div className="flex w-full flex-col gap-1">
         {meta.kind === "enum" && (
-          <select
+          <Select
             aria-label="Condition value"
             value={row.value}
             onChange={(event) => onChange({ ...row, value: event.target.value })}
-            className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
           >
             {(meta.options ?? []).map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         )}
 
         {meta.kind === "duration" && (
-          <select
+          <Select
             aria-label="Condition value"
             value={row.value}
             onChange={(event) => onChange({ ...row, value: event.target.value })}
-            className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
           >
             {DURATION_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         )}
 
         {meta.kind === "boolean" && (
-          <select
+          <Select
             aria-label="Condition value"
             value={row.value}
             onChange={(event) => onChange({ ...row, value: event.target.value })}
-            className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
           >
             <option value="true">Yes</option>
             <option value="false">No</option>
-          </select>
+          </Select>
         )}
 
         {meta.kind === "number" && (

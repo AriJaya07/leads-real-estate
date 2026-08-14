@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/common/spinner";
@@ -105,18 +106,18 @@ export function LexiconPhraseEditor({ categoryId, phrases }: { categoryId: strin
       <form onSubmit={submit} className="grid gap-2 sm:grid-cols-[110px_1fr_80px_70px_auto] sm:items-end">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="phrase-intent">Intent</Label>
-          <select
+          <Select
             id="phrase-intent"
             value={intent}
             onChange={(e) => setIntent(e.target.value as typeof intent)}
-            className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm capitalize"
+            className="capitalize"
           >
             {INTENTS.map((i) => (
               <option key={i} value={i} className="capitalize">
                 {i}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="phrase-text">Phrase</Label>
@@ -128,15 +129,10 @@ export function LexiconPhraseEditor({ categoryId, phrases }: { categoryId: strin
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="phrase-lang">Lang</Label>
-          <select
-            id="phrase-lang"
-            value={lang}
-            onChange={(e) => setLang(e.target.value as typeof lang)}
-            className="border-input bg-background h-8 rounded-lg border px-2.5 text-sm"
-          >
+          <Select id="phrase-lang" value={lang} onChange={(e) => setLang(e.target.value as typeof lang)}>
             <option value="en">en</option>
             <option value="id">id</option>
-          </select>
+          </Select>
         </div>
         <Button type="submit" size="sm" disabled={busy}>
           {busy && <Spinner className="size-3.5" />}

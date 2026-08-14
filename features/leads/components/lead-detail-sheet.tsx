@@ -440,7 +440,7 @@ function LeadDetail({
                 onBlur={addTag}
                 disabled={saving}
                 placeholder="Add a tag…"
-                className="h-7 w-28 border-dashed text-xs"
+                className="h-8 w-32 border-dashed text-sm"
               />
             </div>
           </section>

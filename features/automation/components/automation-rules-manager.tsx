@@ -181,7 +181,7 @@ function AutomationRuleForm({
             }}
             onBlur={addLocation}
             placeholder="Add a location…"
-            className="h-7 w-32 border-dashed text-xs"
+            className="h-8 w-36 border-dashed text-sm"
           />
         </div>
         <p className="text-muted-foreground text-xs">Leave both empty conditions unset and this rule matches every lead — not allowed.</p>
